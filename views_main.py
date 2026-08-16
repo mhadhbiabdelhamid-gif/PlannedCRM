@@ -10,6 +10,10 @@ from db import execute, local_now, local_today, paginate, query, utc_day_bounds
 
 bp = Blueprint("main", __name__)
 
+@main.route('/')
+def index():
+    # This tells the server what to show when visiting the main web address
+    return render_template('index.html')
 
 @bp.route("/")
 @login_required
