@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Team members') }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">{{ t('Team') }}</div>
+    <h1 class="page-title">{{ t('Team members') }}</h1>
+  </div>
+  <div class="actions">
+    <form method="get" class="inline" style="gap:8px">
+      <select name="period" onchange="this.form.submit()" style="max-width:170px">
+        {% for key, label in ranges %}
+          <option value="{{ key }}" {{ 'selected' if period == key }}>{{ t(label) }}</option>
+        {% endfor %}
+      </select>
+    </form>
+    {% if user.role == 'admin' %}
+      <button class="btn btn-gold" onclick="openModal('user-modal')">{{ t('Add team member') }}</button>
+    {% endif %}
+  </div>
+</div>
+
+<div class="team-grid">
+  {% for row in rows %}
+    {% set u = row.user %}{% set s = row.stats %}
+    <div class="team-card">
+      <div class="who">
+        {{ avatar(u, 52) }}
+        <div style="min-width:0">
+          <a href="{{ url_for('admin.profile', uid=u.id) }}"><b>{{ u.name }}</b></a>
+          <div class="role">{{ u.job_title or (t('Admin') if u.role == 'admin' else t('Agent')) }}</div>
+          <div class="small faint">{{ u.department or '' }}</div>
+        </div>
+      </div>
+
+      <div class="inline" style="gap:6px">
+        <span class="tag tag-{{ 'sale' if u.role == 'admin' else 'plain' }}">
+          {{ t('Admin') if u.role == 'admin' else (t('Manager') if u.role == 'manager' else t('Agent')) }}</span>
+        {% if s.overdue %}<span class="tag tag-sold">{{ s.overdue }} {{ t('overdue') }}</span>{% endif %}
+        {% if s.due_today %}<span class="tag tag-reserved">{{ s.due_today }} {{ t('today') }}</span>{% endif %}
+      </div>
+
+      <div class="team-stats">
+        <div><b>{{ s.deals }}</b><span>{{ t('Deals') }}</span></div>
+        <div><b>{{ (s.commission / 1000) | round(1) }}k</b><span>{{ t('Commission') }}</span></div>
+        <div><b>{{ s.conversion if s.conversion is not none else '—' }}{% if s.conversion is not none %}%{% endif %}</b>
+          <span>{{ t('Converted') }}</span></div>
+        <div><b>{{ s.active_leads }}</b><span>{{ t('Leads') }}</span></div>
+        <div><b>{{ s.listings }}</b><span>{{ t('Listings') }}</span></div>
+        <div><b>{{ s.contacts }}</b><span>{{ t('Contacts') }}</span></div>
+      </div>
+
+      <div class="inline" style="gap:6px">
+        <a class="btn btn-sm" href="{{ url_for('admin.profile', uid=u.id) }}">{{ t('Open profile') }}</a>
+        {% if user.role == 'admin' and u.id != user.id %}
+          <form method="post" action="{{ url_for('admin.toggle_user', uid=u.id) }}"
+                data-confirm="{{ t('Switch off') }} {{ u.name }}?">
+            <button class="btn btn-sm btn-quiet" type="submit">
+              {{ t('Switch off') if u.is_active else t('Re-enable') }}</button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+  {% endfor %}
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div class="card-body small muted">
+    <b>{{ t('Admin') }}</b> {{ t('sees every listing, lead and report, manages the team and exports data.') }}
+    <b>{{ t('Agent') }}</b> {{ t('sees all listings plus their own leads and anything still in the shared pool.') }}
+    {{ t('Figures cover') }} <b>{{ t(dict(ranges)[period]) }}</b>{{ t(', except leads, listings and follow-ups, which show the position right now.') }}
+  </div>
+</div>
+
+{% if user.role == 'admin' %}
+<div class="modal-back" id="user-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>{{ t('Add team member') }}</h3>
+      <button class="btn btn-quiet btn-sm" onclick="closeModal('user-modal')">{{ t('Close') }}</button>
+    </div>
+    <form method="post" action="{{ url_for('admin.save_user') }}">
+      <div class="modal-body">
+        <input type="hidden" name="id">
+        <div class="form-grid">
+          <div class="field"><label>{{ t('Full name') }}</label><input type="text" name="name" required></div>
+          <div class="field"><label>{{ t('Work email') }}</label><input type="email" name="email" required></div>
+          <div class="field"><label>{{ t('Phone') }}</label><input type="tel" name="phone"></div>
+          <div class="field"><label>{{ t('Role') }}</label>
+            <select name="role">
+              <option value="agent">{{ t('Agent') }}</option>
+              <option value="manager">{{ t('Manager') }}</option>
+              <option value="admin">{{ t('Admin') }}</option>
+            </select></div>
+        </div>
+        <div class="field">
+          <label>{{ t('Password') }}</label>
+          <input type="password" name="password" autocomplete="new-password"
+                 placeholder="{{ t('At least 8 characters') }}">
+        </div>
+        <p class="small faint" style="margin:0">
+          {{ t('Photo, job title and the rest are added on their profile afterwards.') }}</p>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-quiet" type="button" onclick="closeModal('user-modal')">{{ t('Cancel') }}</button>
+        <button class="btn btn-gold" type="submit">{{ t('Save team member') }}</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

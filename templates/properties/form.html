@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Edit listing') if p else t('Add listing') }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">02 · {{ t('Listings') }}</div>
+    <h1 class="page-title">{{ t('Edit listing') if p else t('Add a listing') }}</h1>
+  </div>
+  <div class="actions">
+    <a class="btn btn-quiet" href="{{ url_for('properties.detail', pid=p.id) if p else url_for('properties.index') }}">{{ t('Cancel') }}</a>
+  </div>
+</div>
+
+<form method="post" enctype="multipart/form-data" class="card" style="max-width:900px">
+  <div class="card-body">
+    <div class="form-grid">
+      <div class="field span-2">
+        <label for="title">{{ t('Title') }}</label>
+        <input id="title" type="text" name="title" required value="{{ p.title if p else '' }}"
+               placeholder="e.g. 3-bedroom sea-view apartment, Porto Arabia">
+      </div>
+
+      <div class="field">
+        <label for="address">{{ t('Address') }}</label>
+        <input id="address" type="text" name="address" value="{{ p.address if p else '' }}">
+      </div>
+      <div class="field">
+        <label for="building_no">{{ t('Building number') }}</label>
+        <input id="building_no" type="text" name="building_no" list="building-list"
+               value="{{ p.building_no if p and p.building_no else '' }}"
+               placeholder="{{ t('e.g. Tower 12, Block C, Villa 44') }}" autocomplete="off">
+        <datalist id="building-list">
+          {% for b in buildings %}
+            <option value="{{ b.building_no }}">{{ b.area or '' }}{% if b.units %} — {{ b.units }} {{ t('listed') }}{% endif %}</option>
+          {% endfor %}
+        </datalist>
+        <span class="small faint">
+          {% if buildings %}{{ t('Start typing to pick a building already in use, or enter a new one.') }}
+          {% else %}{{ t('The first building you enter becomes a suggestion for next time.') }}{% endif %}
+        </span>
+      </div>
+      <div class="field">
+        <label for="unit_no">{{ t('Flat number') }}</label>
+        <input id="unit_no" type="text" name="unit_no"
+               value="{{ p.unit_no if p and p.unit_no else '' }}"
+               placeholder="{{ t('e.g. 402, 12B, Ground floor') }}" autocomplete="off">
+        <span class="small faint">{{ t('The unit inside that building.') }}</span>
+      </div>
+
+      <div class="field">
+        <label for="area">{{ t('Location / district') }}</label>
+        <input id="area" type="text" name="area" value="{{ p.area if p else '' }}"
+               list="area-list" autocomplete="off"
+               placeholder="e.g. The Pearl, Lusail, West Bay">
+        <datalist id="area-list">
+          {% for a in areas %}<option value="{{ a.area }}"></option>{% endfor %}
+        </datalist>
+      </div>
+
+      <div class="field">
+        <label for="prop_type">{{ t('Property type') }}</label>
+        <select id="prop_type" name="prop_type">
+          {% for tp in prop_types %}<option value="{{ tp }}" {{ 'selected' if p and p.prop_type == tp }}>{{ t(tp) }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="listing_type">{{ t('Sale or rent') }}</label>
+        <select id="listing_type" name="listing_type">
+          {% for tp in listing_types %}<option value="{{ tp }}" {{ 'selected' if p and p.listing_type == tp }}>{{ t(tp) }}</option>{% endfor %}
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="status">{{ t('Status') }}</label>
+        <select id="status" name="status">
+          {% for s in statuses %}<option value="{{ s }}" {{ 'selected' if p and p.status == s }}>{{ t(s) }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="price">{{ t('Price') }} ({{ currency }})</label>
+        <input id="price" type="number" name="price" step="any" min="0" inputmode="decimal" value="{{ p.price | round(2) if p else '' }}">
+      </div>
+
+      <div class="field">
+        <label for="size_sqm">{{ t('Size') }} (m²)</label>
+        <input id="size_sqm" type="number" name="size_sqm" step="any" min="0" inputmode="decimal" value="{{ p.size_sqm | round(2) if p and p.size_sqm else '' }}">
+      </div>
+      <div class="field">
+        <label for="bedrooms">{{ t('Bedrooms') }}</label>
+        <input id="bedrooms" type="number" name="bedrooms" min="0" value="{{ p.bedrooms if p and p.bedrooms else '' }}">
+      </div>
+
+      <div class="field">
+        <label for="bathrooms">{{ t('Bathrooms') }}</label>
+        <input id="bathrooms" type="number" name="bathrooms" min="0" value="{{ p.bathrooms if p and p.bathrooms else '' }}">
+      </div>
+      <div class="field">
+        <label for="owner_id">{{ t('Owner') }}</label>
+        <select id="owner_id" name="owner_id">
+          <option value="">{{ t('None') }}</option>
+          {% for o in owners %}
+            <option value="{{ o.id }}" {{ 'selected' if p and p.owner_id == o.id }}>{{ o.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="agent_id">{{ t('Agent in charge') }}</label>
+        <select id="agent_id" name="agent_id">
+          <option value="">{{ t('Unassigned') }}</option>
+          {% for a in agents %}
+            <option value="{{ a.id }}" {{ 'selected' if p and p.agent_id == a.id }}>{{ a.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="images">{{ t('Add photos') }}</label>
+        <input id="images" type="file" name="images" accept="image/*" multiple>
+      </div>
+
+      <div class="field span-2">
+        <label for="map_url">{{ t('Location on the map') }}</label>
+        <input id="map_url" type="text" name="map_url"
+               value="{{ p.map_url if p and p.map_url else '' }}"
+               placeholder="https://maps.app.goo.gl/…   {{ t('or') }}   25.3702, 51.5487">
+        <span class="small faint">
+          {{ t('In Google Maps, find the property, tap Share then Copy link, and paste it here. Coordinates work too.') }}
+        </span>
+        {% if p and p.map_url %}
+          <a class="btn btn-sm" style="margin-top:8px" target="_blank" rel="noopener"
+             href="{{ p.map_url }}">{{ t('Check the current link') }}</a>
+        {% endif %}
+      </div>
+
+      <div class="field span-2">
+        <label class="inline" style="gap:9px;text-transform:none;letter-spacing:0;font-size:14px">
+          <input type="checkbox" name="is_own" value="1" style="width:auto"
+                 {{ 'checked' if p and p.is_own }}>
+          {{ t('Owned by') }} {{ company }}
+        </label>
+        <span class="small faint">
+          {{ t('Tick this for your own stock. Exports keep these on a separate sheet from third-party listings.') }}
+        </span>
+      </div>
+
+      <div class="field span-2">
+        <label for="features">{{ t('Key features') }} <span class="faint">— separate with commas</span></label>
+        <input id="features" type="text" name="features" value="{{ p.features if p else '' }}"
+               placeholder="Sea view, Maid's room, Covered parking, Gym access">
+      </div>
+
+      <div class="field span-2">
+        <label for="description">{{ t('Description') }}</label>
+        <textarea id="description" name="description">{{ p.description if p else '' }}</textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-foot">
+    <a class="btn btn-quiet" href="{{ url_for('properties.detail', pid=p.id) if p else url_for('properties.index') }}">{{ t('Cancel') }}</a>
+    <button class="btn btn-gold" type="submit">{{ t('Save listing') if p else t('Add listing') }}</button>
+  </div>
+</form>
+{% endblock %}

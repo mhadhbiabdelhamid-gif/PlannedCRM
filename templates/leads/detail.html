@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+{% block title %}{{ l.full_name }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">{{ l.ref }} · · {{ t(l.source) }}</div>
+    <h1 class="page-title">{{ l.full_name }}</h1>
+    <div class="inline" style="margin-top:8px">
+      <span class="tag tag-plain">{{ t(l.status) }}</span>
+      <span class="muted">{{ l.agent_name or t('Unassigned') }}</span>
+      {% if l.budget %}<span class="mono muted">{{ t('Budget') }} {{ currency }} {{ l.budget | money }}</span>{% endif %}
+    </div>
+  </div>
+  <div class="actions">
+    <a class="btn btn-quiet" href="{{ url_for('leads.board') }}">{{ t('Back to board') }}</a>
+    {% if not l.agent_id %}
+      <form method="post" action="{{ url_for('leads.claim', lid=l.id) }}">
+        <button class="btn" type="submit">{{ t('Claim this lead') }}</button></form>
+    {% endif %}
+    {% if editable %}<a class="btn btn-gold" href="{{ url_for('leads.form', lid=l.id) }}">{{ t('Edit') }}</a>{% endif %}
+    <a class="btn btn-dark" href="{{ url_for('deals.form', lead=l.id) }}">{{ t('Record this deal') }}</a>
+    {% if user.role == 'admin' %}
+      <form method="post" action="{{ url_for('leads.delete', lid=l.id) }}"
+            data-confirm="Delete {{ l.full_name }} and their whole history?">
+        <button class="btn btn-danger" type="submit">{{ t('Delete') }}</button></form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="grid g-main">
+  <div class="grid">
+
+    <div class="card">
+      <div class="card-head">
+        <h3>{{ t('Follow-up') }}</h3>
+        {% if l.next_follow_up %}
+          {% if overdue %}<span class="tag tag-sold">{{ t('Overdue') }} · {{ l.next_follow_up | nice_date }}</span>
+          {% elif due_today %}<span class="tag tag-reserved">{{ t('Due today') }} · {{ l.next_follow_up | nice_time }}</span>
+          {% else %}<span class="tag tag-available">{{ l.next_follow_up | nice_time }}</span>{% endif %}
+        {% else %}<span class="tag tag-plain">{{ t('None set') }}</span>{% endif %}
+      </div>
+      <div class="card-body">
+        <form method="post" action="{{ url_for('leads.mark_contacted', lid=l.id) }}">
+          <div class="field">
+            <label>{{ t('Record a call, message or meeting') }}</label>
+            <textarea name="body" style="min-height:64px"
+              placeholder="{{ t('What was said? e.g. Called at 11:00, wants a 2-bed in Lusail under 9,000.') }}"></textarea>
+          </div>
+          <div class="inline" style="gap:8px;margin-bottom:10px">
+            <select name="kind" style="max-width:150px">
+              <option value="Call">{{ t('Call') }}</option>
+              <option value="WhatsApp">{{ t('WhatsApp') }}</option>
+              <option value="Meeting">{{ t('Meeting') }}</option>
+              <option value="Email">{{ t('Email') }}</option>
+              <option value="Note">{{ t('Note') }}</option>
+            </select>
+            <select name="next_in" style="max-width:210px">
+              <option value="1">{{ t('Follow up tomorrow') }}</option>
+              <option value="3" selected>{{ t('Follow up in 3 days') }}</option>
+              <option value="7">{{ t('Follow up in a week') }}</option>
+              <option value="14">{{ t('Follow up in 2 weeks') }}</option>
+              <option value="">{{ t('Leave the date as it is') }}</option>
+              <option value="done">{{ t('No follow-up needed') }}</option>
+            </select>
+            <button class="btn btn-gold" type="submit">{{ t('Save contact') }}</button>
+          </div>
+        </form>
+
+        <div class="hairline"></div>
+        <form method="post" action="{{ url_for('leads.set_followup', lid=l.id) }}"
+              class="inline" style="gap:8px">
+          <span class="eyebrow" style="margin:0">{{ t('Or set a date') }}</span>
+          <input type="datetime-local" name="when" style="max-width:220px"
+                 value="{{ l.next_follow_up | local_input }}">
+          <button class="btn btn-sm" type="submit">{{ t('Set') }}</button>
+          {% if l.next_follow_up %}
+            <button class="btn btn-sm btn-quiet" type="submit" name="in_days" value="clear">
+              {{ t('Clear') }}</button>
+          {% endif %}
+        </form>
+        {% if l.last_contact_at %}
+          <div class="small faint" style="margin-top:10px">
+            {{ t('Last contact') }}: {{ l.last_contact_at | nice_time }}
+            ({{ l.last_contact_at | ago }})
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>{{ t('Move through the pipeline') }}</h3></div>
+      <div class="card-body">
+        <div class="chip-row">
+          {% for s in stages %}
+            <form method="post" action="{{ url_for('leads.move_stage', lid=l.id) }}">
+              <input type="hidden" name="stage" value="{{ s }}">
+              <button class="chip {{ 'on' if l.status == s }}" type="submit"
+                      style="cursor:pointer;font-family:inherit">{{ t(s) }}</button>
+            </form>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="history">
+      <div class="card-head"><h3>{{ t('Interaction history') }}</h3><span class="mono faint">{{ comments|length }}</span></div>
+      <div class="card-body">
+        <form method="post" action="{{ url_for('leads.comment', lid=l.id) }}">
+          <div class="field">
+            <textarea name="body" required style="min-height:70px"
+              placeholder="What happened? e.g. Called at 11:00, wants a 2-bed in Lusail under 9,000/month."></textarea>
+          </div>
+          <button class="btn btn-dark btn-sm" type="submit">{{ t('Log interaction') }}</button>
+        </form>
+
+        <div style="margin-top:16px">
+          {% for c in comments %}
+            <div class="feed-item">
+              {{ avatar({"name": c.user_name, "photo": c.user_photo}, 28) }}
+              <div class="stack" style="flex:1">
+                <div class="between">
+                  <b>{{ c.user_name or 'Removed user' }}</b>
+                  <span class="mono faint">{{ c.created_at | ago }}</span>
+                </div>
+                <div style="white-space:pre-wrap">{{ c.body }}</div>
+              </div>
+            </div>
+          {% else %}
+            <p class="muted small">{{ t('Nothing logged yet. Every call and message should land here.') }}</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>{{ t('Viewings') }}</h3><span class="mono faint">{{ viewings|length }}</span></div>
+      <div class="card-body">
+        {% if viewings %}
+          <div class="table-scroll">
+          <table class="table">
+            <tbody>
+            {% for v in viewings %}
+              <tr>
+                <td class="mono nowrap">{{ v.scheduled_at | nice_time }}</td>
+                <td>{{ v.prop_title or '—' }}<div class="small muted">{{ v.notes or '' }}</div></td>
+                <td class="right">
+                  {% if v.done %}<span class="tag tag-available">{{ t('Done') }}</span>
+                  {% else %}
+                  <form method="post" action="{{ url_for('leads.viewing_done', vid=v.id) }}">
+                    <button class="btn btn-quiet btn-sm" type="submit">{{ t('Mark done') }}</button></form>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+          </div>
+        {% endif %}
+
+        <form method="post" action="{{ url_for('leads.add_viewing', lid=l.id) }}" style="margin-top:12px">
+          <div class="form-grid">
+            <div class="field">
+              <label>{{ t('Date and time') }}</label>
+              <input type="datetime-local" name="scheduled_at" required>
+            </div>
+            <div class="field">
+              <label>{{ t('Property') }}</label>
+              <select name="property_id">
+                <option value="">{{ l.prop_title or t('Pick a property') }}</option>
+                {% for p in props %}
+                  <option value="{{ p.id }}" {{ 'selected' if l.property_id == p.id }}>{{ p.ref }} — {{ p.title }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="field span-2">
+              <label>{{ t('Notes') }}</label>
+              <input type="text" name="notes" placeholder="Meeting point, access code, who's attending">
+            </div>
+          </div>
+          <button class="btn" type="submit">{{ t('Schedule viewing') }}</button>
+        </form>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="card-head"><h3>{{ t('Contact') }}</h3></div>
+      <div class="card-body">
+        <dl class="spec-list" style="grid-template-columns:1fr">
+          <div><dt>{{ t('Phone') }}</dt><dd class="mono">{{ l.phone or '—' }}</dd></div>
+          <div><dt>{{ t('Email') }}</dt><dd>{{ l.email or '—' }}</dd></div>
+          <div><dt>{{ t('Interested in') }}</dt><dd>
+            {% if l.property_id %}<a href="{{ url_for('properties.detail', pid=l.property_id) }}">{{ l.prop_title }}</a>
+            {% else %}—{% endif %}</dd></div>
+          <div><dt>{{ t('First contact') }}</dt><dd>{{ l.created_at | nice_date }}</dd></div>
+        </dl>
+
+        <div class="inline" style="margin-top:14px">
+          {% if l.phone %}<a class="btn btn-sm" href="tel:{{ l.phone }}">{{ t('Call') }}</a>{% endif %}
+          {% if l.email %}<a class="btn btn-sm" href="mailto:{{ l.email }}">{{ t('Email') }}</a>{% endif %}
+        </div>
+
+        {% if l.phone %}
+          <div class="hairline"></div>
+          <div class="eyebrow">{{ t('Send on WhatsApp') }}</div>
+          <div class="stack" style="margin-top:10px;gap:6px">
+            {% for key in ['wa_intro', 'wa_followup', 'wa_viewing'] %}
+              <a class="btn btn-sm" target="_blank" rel="noopener"
+                 href="{{ wa(l.phone, key, name=l.full_name, property=l.prop_title,
+                            price=(l.budget | money), date=(viewings[0].scheduled_at | nice_time if viewings else '')) }}">
+                {{ t(wa_labels[key]) }}</a>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        {% if l.notes %}
+          <div class="hairline"></div>
+          <div class="eyebrow">{{ t('Requirements') }}</div>
+          <p style="white-space:pre-wrap;margin:8px 0 0">{{ l.notes }}</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>{{ t('Audit trail') }}</h3></div>
+      <div class="card-body" style="padding-top:6px">
+        {% for a in trail %}
+          <div class="feed-item">
+            <span class="feed-dot"></span>
+            <div class="stack">
+              <div class="small"><b>{{ a.user_name or 'System' }}</b> — {{ a.action | lower }}</div>
+              {% if a.detail %}<div class="small muted">{{ a.detail }}</div>{% endif %}
+              <div class="mono faint">{{ a.created_at | ago }}</div>
+            </div>
+          </div>
+        {% else %}
+          <p class="muted small">{{ t('Nothing logged yet.') }}</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

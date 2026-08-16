@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Deals') }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">04 · {{ t('Money') }}</div>
+    <h1 class="page-title">{{ t('Deals') }}</h1>
+  </div>
+  <div class="actions">
+    {% if user.role == 'admin' %}
+      <a class="btn btn-dark" href="{{ url_for('admin.export_workbook') }}">{{ t('Export Excel') }}</a>
+      <a class="btn" href="{{ url_for('admin.export_deals') }}">{{ t('Export CSV') }}</a>
+    {% endif %}
+    <a class="btn btn-gold" href="{{ url_for('deals.form') }}">{{ t('Record a deal') }}</a>
+  </div>
+</div>
+
+<div class="metrics">
+  <div class="metric">
+    <div class="label">{{ t('Total value') }}</div>
+    <div class="value" style="font-size:34px">{{ currency }} {{ totals.value | money }}</div>
+  </div>
+  <div class="metric">
+    <div class="label">{{ t('Commission earned') }}</div>
+    <div class="value" style="font-size:34px">{{ currency }} {{ totals.earned | money }}</div>
+  </div>
+  <div class="metric">
+    <div class="label">{{ t('Commission collected') }}</div>
+    <div class="value" style="font-size:34px">{{ currency }} {{ totals.collected | money }}</div>
+  </div>
+  <div class="metric">
+    <div class="label">{{ t('Awaiting collection') }}</div>
+    <div class="value" style="font-size:34px">{{ currency }} {{ totals.pending | money }}</div>
+  </div>
+</div>
+
+<div class="chip-row" style="margin:16px 0">
+  <a class="chip {{ 'on' if not status }}" href="{{ url_for('deals.index') }}">{{ t('All') }}</a>
+  {% for s in deal_status %}
+    <a class="chip {{ 'on' if status == s }}" href="{{ url_for('deals.index', status=s) }}">{{ t(s) }}</a>
+  {% endfor %}
+</div>
+
+{% if rows %}
+<div class="card table-scroll">
+  <table class="table">
+    <thead><tr>
+      <th>{{ t('Deal') }}</th><th>{{ t('Property') }}</th><th>{{ t('Client') }}</th>
+      <th>{{ t('Agent') }}</th><th class="right">{{ t('Deal value') }}</th>
+      <th class="right">{{ t('Commission') }}</th><th>{{ t('Status') }}</th><th></th>
+    </tr></thead>
+    <tbody>
+    {% for d in rows %}
+      <tr>
+        <td class="mono faint">{{ d.ref }}<div class="small">{{ t(d.deal_type) }}</div></td>
+        <td>{% if d.property_id %}<a href="{{ url_for('properties.detail', pid=d.property_id) }}">{{ d.prop_title }}</a>
+            {% else %}—{% endif %}</td>
+        <td>{% if d.lead_id %}<a href="{{ url_for('leads.detail', lid=d.lead_id) }}">{{ d.lead_name }}</a>
+            {% else %}—{% endif %}</td>
+        <td class="small muted">{{ d.agent_name or t('Unassigned') }}</td>
+        <td class="right price">{{ currency }} {{ d.value | money }}</td>
+        <td class="right price">{{ currency }} {{ d.commission_amt | money }}
+          <div class="small faint mono">{{ d.commission_pct }}%</div></td>
+        <td><span class="tag tag-{{ 'available' if d.status == 'Collected' else ('sold' if d.status == 'Cancelled' else 'reserved') }}">{{ t(d.status) }}</span>
+          {% if d.closed_at %}<div class="small faint">{{ d.closed_at | nice_date }}</div>{% endif %}</td>
+        <td class="right nowrap">
+          <a class="btn btn-quiet btn-sm" href="{{ url_for('deals.form', did=d.id) }}">{{ t('Edit') }}</a>
+          {% if d.status in ('Agreed', 'Signed') %}
+          <form method="post" action="{{ url_for('deals.collect', did=d.id) }}" style="display:inline">
+            <button class="btn btn-quiet btn-sm" type="submit">{{ t('Mark collected') }}</button></form>
+          {% endif %}
+          {% if user.role == 'admin' %}
+          <form method="post" action="{{ url_for('deals.delete', did=d.id) }}" style="display:inline"
+                data-confirm="Delete deal {{ d.ref }}?">
+            <button class="btn btn-quiet btn-sm btn-danger" type="submit">{{ t('Delete') }}</button></form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+  <div class="card"><div class="empty"><span class="mark">◇</span>
+    {{ t('No deals recorded yet. Close a lead and record the commission here.') }}</div></div>
+{% endif %}
+{% include "_pager.html" %}
+
+{% endblock %}

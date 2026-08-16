@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="{{ lang }}" dir="{{ 'rtl' if rtl else 'ltr' }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{{ t('Dashboard') }}{% endblock %} · {{ company }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;450;500;550;600;700&family=IBM+Plex+Sans+Arabic:wght@400;450;500;600;700&family=IBM+Plex+Mono:wght@400;450;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+{% if logo_exists %}<link rel="icon" href="{{ logo_url }}">{% endif %}
+</head>
+<body>
+
+<aside class="rail" id="rail">
+  <a class="rail-brand" href="{{ url_for('main.dashboard') }}">
+    {% if logo_exists %}
+      <img src="{{ logo_url }}" alt="{{ company }}">
+    {% else %}
+      <span class="rail-mark">P</span>
+    {% endif %}
+    <span>
+      <b>{{ company.split(' ')[0] }}</b>
+      <span>{{ company.split(' ')[1:] | join(' ') or 'Real Estate' }}</span>
+    </span>
+  </a>
+
+  <nav class="rail-nav">
+    <div class="rail-group">{{ t('Daily') }}</div>
+    <a class="rail-link {{ 'active' if request.endpoint == 'main.dashboard' }}" href="{{ url_for('main.dashboard') }}">
+      <span class="idx">01</span> {{ t('Dashboard') }}</a>
+    <a class="rail-link {{ 'active' if request.blueprint == 'properties' }}" href="{{ url_for('properties.index') }}">
+      <span class="idx">02</span> {{ t('Properties') }}</a>
+    <a class="rail-link {{ 'active' if request.blueprint == 'imports' }}" href="{{ url_for('imports.upload') }}">
+      <span class="idx">03</span> {{ t('Import listings') }}</a>
+    <a class="rail-link {{ 'active' if request.endpoint == 'imports.history' }}"
+       href="{{ url_for('imports.history') }}" style="padding-left:44px">
+      {{ t('Import history') }}</a>
+    <a class="rail-link {{ 'active' if request.blueprint == 'leads' }}" href="{{ url_for('leads.board') }}">
+      <span class="idx">04</span> {{ t('Leads') }}</a>
+
+    <div class="rail-group">{{ t('Money') }}</div>
+    <a class="rail-link {{ 'active' if request.blueprint == 'deals' }}" href="{{ url_for('deals.index') }}">
+      <span class="idx">05</span> {{ t('Deals') }}</a>
+
+    <div class="rail-group">{{ t('Directory') }}</div>
+    <a class="rail-link {{ 'active' if request.endpoint == 'contacts.owners' }}" href="{{ url_for('contacts.owners') }}">
+      <span class="idx">06</span> {{ t('Owners') }}</a>
+    <a class="rail-link {{ 'active' if request.endpoint == 'contacts.partners' }}" href="{{ url_for('contacts.partners') }}">
+      <span class="idx">07</span> {{ t('Partners') }}</a>
+
+    <div class="rail-group">{{ t('Team') }}</div>
+    <a class="rail-link {{ 'active' if request.endpoint == 'main.notifications' }}" href="{{ url_for('main.notifications') }}">
+      <span class="idx">08</span> {{ t('Notifications') }}
+      {% if unread %}<span class="pill">{{ unread }}</span>{% endif %}</a>
+    <a class="rail-link {{ 'active' if request.endpoint == 'main.activity' }}" href="{{ url_for('main.activity') }}">
+      <span class="idx">09</span> {{ t('Activity log') }}</a>
+    {% if user and user.role == 'admin' %}
+    <a class="rail-link {{ 'active' if request.endpoint == 'admin.users' }}" href="{{ url_for('admin.users') }}">
+      <span class="idx">10</span> {{ t('Team members') }}</a>
+    <a class="rail-link {{ 'active' if request.endpoint == 'admin.settings' }}" href="{{ url_for('admin.settings') }}">
+      <span class="idx">11</span> {{ t('Settings') }}</a>
+    {% endif %}
+  </nav>
+
+  <div class="rail-foot">
+    <div class="lang-switch">
+      {% for code, label in langs.items() %}
+        <a class="{{ 'on' if lang == code }}" href="{{ url_for('set_language', code=code) }}">{{ label }}</a>
+      {% endfor %}
+    </div>
+    © {{ year }} {{ company }}<br>{{ t('Doha, Qatar') }} · {{ tz_label }}
+  </div>
+</aside>
+
+<div class="shell">
+  <header class="topbar">
+    <button class="burger" id="burger" aria-label="{{ t('Open menu') }}">
+      <svg width="16" height="12" viewBox="0 0 16 12" fill="none" stroke="currentColor" stroke-width="1.8">
+        <path d="M0 1h16M0 6h16M0 11h16"/></svg>
+    </button>
+
+    <form class="searchbox" action="{{ url_for('main.search') }}" method="get" role="search">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8">
+        <circle cx="7" cy="7" r="5"/><path d="M11 11l4 4"/></svg>
+      <input id="globalsearch" type="search" name="q" value="{{ request.args.get('q','') }}"
+             placeholder="{{ t('Search') }}   /" autocomplete="off">
+    </form>
+
+    <div class="topbar-spacer"></div>
+
+    <a class="bell" href="{{ url_for('main.notifications') }}" aria-label="{{ t('Notifications') }}">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+        <path d="M4 6a4 4 0 118 0c0 3 1 4 1 4H3s1-1 1-4z"/><path d="M6.5 13a1.5 1.5 0 003 0"/></svg>
+      {% if unread %}<span class="dot">{{ unread }}</span>{% endif %}
+    </a>
+
+    <a class="userchip" href="{{ url_for('auth.account') }}">
+      {{ avatar(user, 34) }}
+      <span class="who"><b>{{ user.name }}</b><em>{{ t('Admin') if user.role == 'admin' else t('Agent') }}</em></span>
+    </a>
+
+    <a class="btn btn-quiet btn-sm" href="{{ url_for('auth.logout') }}">{{ t('Sign out') }}</a>
+  </header>
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% if msgs %}
+    <div class="flash-wrap">
+      {% for cat, m in msgs %}<div class="flash {{ cat }}">{{ t(m) }}</div>{% endfor %}
+    </div>
+    {% endif %}
+  {% endwith %}
+
+  <main>{% block content %}{% endblock %}</main>
+</div>
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

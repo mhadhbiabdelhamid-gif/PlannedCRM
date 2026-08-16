@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}My account{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">{{ t('Admin') if user.role == 'admin' else t('Agent') }}</div>
+    <h1 class="page-title">{{ t('My account') }}</h1>
+  </div>
+</div>
+
+<form method="post" class="card" style="max-width:560px">
+  <div class="card-body">
+    <div class="field"><label>{{ t('Full name') }}</label>
+      <input type="text" name="name" value="{{ user.name }}" required></div>
+    <div class="field"><label>{{ t('Phone') }}</label>
+      <input type="tel" name="phone" value="{{ user.phone or '' }}"></div>
+    <div class="field"><label>{{ t('Email') }}</label>
+      <input type="email" value="{{ user.email }}" disabled>
+      <span class="small faint">An admin changes this for you.</span></div>
+
+    <div class="hairline"></div>
+    <div class="eyebrow" style="margin-bottom:10px">{{ t('Change password') }}</div>
+    <div class="field"><label>{{ t('Current password') }}</label>
+      <input type="password" name="current_password" autocomplete="current-password"></div>
+    <div class="field"><label>{{ t('New password') }}</label>
+      <input type="password" name="new_password" autocomplete="new-password"
+             placeholder="At least 8 characters"></div>
+  </div>
+  <div class="modal-foot"><button class="btn btn-gold" type="submit">{{ t('Save changes') }}</button></div>
+</form>
+{% endblock %}

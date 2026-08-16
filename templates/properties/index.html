@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Properties') }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">02 · {{ t('Listings') }}</div>
+    <h1 class="page-title">{{ t('Properties') }}</h1>
+  </div>
+  <div class="actions">
+    <a class="btn {{ 'btn-dark' if view == 'grid' }}" href="{{ url_for('properties.index', view='grid', **f) }}">{{ t('Grid') }}</a>
+    <a class="btn {{ 'btn-dark' if view == 'table' }}" href="{{ url_for('properties.index', view='table', **f) }}">{{ t('Table') }}</a>
+    {% if user.role == 'admin' %}
+      <a class="btn btn-dark" href="{{ url_for('admin.export_workbook') }}">{{ t('Export Excel') }}</a>
+      <a class="btn" href="{{ url_for('admin.export_properties') }}">{{ t('Export CSV') }}</a>
+    {% endif %}
+    <a class="btn" href="{{ url_for('imports.upload') }}">{{ t('Import from Excel') }}</a>
+    <a class="btn btn-gold" href="{{ url_for('properties.form') }}">{{ t('Add listing') }}</a>
+  </div>
+</div>
+
+<form class="card" method="get" style="margin-bottom:16px">
+  <input type="hidden" name="view" value="{{ view }}">
+  <div class="card-body">
+    <div class="filters">
+      <div class="field">
+        <label>{{ t('Search') }}</label>
+        <input type="text" name="q" value="{{ f.q }}" placeholder="{{ t('Title, address, building or flat') }}">
+      </div>
+      <div class="field">
+        <label>{{ t('Type') }}</label>
+        <select name="prop_type"><option value="">{{ t('Any') }}</option>
+          {% for tp in prop_types %}<option value="{{ tp }}" {{ 'selected' if f.prop_type == tp }}>{{ t(tp) }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>{{ t('Sale / Rent') }}</label>
+        <select name="listing_type"><option value="">{{ t('Any') }}</option>
+          {% for tp in listing_types %}<option value="{{ tp }}" {{ 'selected' if f.listing_type == tp }}>{{ t(tp) }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>{{ t('Status') }}</label>
+        <select name="status"><option value="">{{ t('Any') }}</option>
+          {% for s in statuses %}<option value="{{ s }}" {{ 'selected' if f.status == s }}>{{ t(s) }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>{{ t('Location') }}</label>
+        <input type="text" name="area" value="{{ f.area }}" placeholder="e.g. The Pearl">
+      </div>
+      <div class="field">
+        <label>{{ t('Min price') }}</label>
+        <input type="number" name="min_price" value="{{ f.min_price }}" step="any" inputmode="decimal">
+      </div>
+      <div class="field">
+        <label>{{ t('Max price') }}</label>
+        <input type="number" name="max_price" value="{{ f.max_price }}" step="any" inputmode="decimal">
+      </div>
+      <div class="field">
+        <label>{{ t('Bedrooms') }}</label>
+        <select name="beds">
+          <option value="">{{ t('Any') }}</option>
+          <option value="0" {{ 'selected' if f.beds == '0' }}>{{ t('Studio') }}</option>
+          {% for n in range(1, 6) %}
+            <option value="{{ n }}" {{ 'selected' if f.beds == n|string }}>{{ n }}</option>
+          {% endfor %}
+          <option value="6+" {{ 'selected' if f.beds == '6+' }}>6+</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>{{ t('Whose listing') }}</label>
+        <select name="owned">
+          <option value="">{{ t('Any') }}</option>
+          <option value="1" {{ 'selected' if f.owned == '1' }}>{{ t('Ours') }}</option>
+          <option value="0" {{ 'selected' if f.owned == '0' }}>{{ t('Third-party') }}</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>{{ t('Agent') }}</label>
+        <select name="agent"><option value="">{{ t('Anyone') }}</option>
+          {% for a in agents %}
+            <option value="{{ a.id }}" {{ 'selected' if f.agent == a.id|string }}>{{ a.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field inline">
+        <button class="btn btn-dark" type="submit">{{ t('Apply') }}</button>
+        <a class="btn btn-quiet" href="{{ url_for('properties.index', view=view) }}">{{ t('Clear') }}</a>
+      </div>
+    </div>
+  </div>
+</form>
+
+<div class="between" style="margin-bottom:12px">
+  <span class="mono muted">{{ rows|length }} {{ t('found') }}</span>
+  <form method="get" class="inline" style="gap:8px">
+    {% for k, v in f.items() %}{% if v %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endif %}{% endfor %}
+    <input type="hidden" name="view" value="{{ view }}">
+    <label class="eyebrow" style="margin:0">{{ t('Order by') }}</label>
+    <select name="sort" onchange="this.form.submit()" style="max-width:210px">
+      <option value="building" {{ 'selected' if sort == 'building' }}>{{ t('Building, then flat') }}</option>
+      <option value="newest" {{ 'selected' if sort == 'newest' }}>{{ t('Newest first') }}</option>
+      <option value="oldest" {{ 'selected' if sort == 'oldest' }}>{{ t('Oldest first') }}</option>
+      <option value="price_asc" {{ 'selected' if sort == 'price_asc' }}>{{ t('Price, low to high') }}</option>
+      <option value="price_desc" {{ 'selected' if sort == 'price_desc' }}>{{ t('Price, high to low') }}</option>
+    </select>
+  </form>
+</div>
+
+{% if not rows %}
+  <div class="card"><div class="empty">
+    <span class="mark">◇</span>
+    {{ t('No listings match those filters. Widen the search, or add the first listing.') }}
+  </div></div>
+
+{% elif view == 'table' %}
+  <div class="card table-scroll">
+    <table class="table">
+      <thead><tr>
+        <th>{{ t('Search') }}</th><th>{{ t('Title') }}</th><th>{{ t('Location') }}</th><th>{{ t('Type') }}</th>
+        <th>{{ t('Status') }}</th><th class="right">{{ t('Price') }}</th><th>{{ t('Agent') }}</th>
+      </tr></thead>
+      <tbody>
+      {% for p in rows %}
+        <tr onclick="location.href='{{ url_for('properties.detail', pid=p.id) }}'" style="cursor:pointer">
+          <td class="mono faint">{{ p.ref }}</td>
+          <td><b>{{ p.title }}</b>
+            <div class="small muted">
+              {%- if p.building_no %}{{ t('Building') }} {{ p.building_no }}{% endif -%}
+              {%- if p.unit_no %} · {{ t('Flat') }} {{ p.unit_no }}{% endif -%}
+              {%- if p.address %}{% if p.building_no or p.unit_no %} · {% endif %}{{ p.address }}{% endif -%}
+            </div></td>
+          <td class="muted">{{ p.area or '—' }}</td>
+          <td><span class="tag tag-{{ 'sale' if p.listing_type == 'Sale' else 'rent' }}">{{ t(p.listing_type) }}</span>
+              <span class="small muted">{{ t(p.prop_type) }}</span></td>
+          <td><span class="tag tag-{{ p.status|lower }}">{{ t(p.status) }}</span>
+            {% if p.is_own %}<span class="tag tag-sale">{{ t('Ours') }}</span>{% endif %}</td>
+          <td class="right price">{{ currency }} {{ p.price | money }}</td>
+          <td class="muted small">{{ p.agent_name or t('Unassigned') }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+{% elif groups %}
+  {% for grp in groups %}
+    <div class="group-head">
+      <b>{{ grp.building or t('No building set') }}</b>
+      {% if grp.area %}<span class="muted">{{ grp.area }}</span>{% endif %}
+      <span class="mono faint">{{ grp.rows|length }}
+        {{ t('unit') if grp.rows|length == 1 else t('units') }}</span>
+    </div>
+    <div class="prop-grid" style="margin-bottom:22px">
+      {% for p in grp.rows %}{% include "properties/_card.html" %}{% endfor %}
+    </div>
+  {% endfor %}
+
+{% else %}
+  <div class="prop-grid">
+    {% for p in rows %}
+      {% include "properties/_card.html" %}
+    {% endfor %}
+  </div>
+{% endif %}
+{% include "_pager.html" %}
+
+{% endblock %}

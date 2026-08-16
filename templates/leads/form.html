@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Edit lead') if l else t('Capture lead') }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">03 · {{ t('Pipeline') }}</div>
+    <h1 class="page-title">{{ t('Edit lead') if l else t('Capture a lead') }}</h1>
+  </div>
+</div>
+
+<form method="post" class="card" style="max-width:820px">
+  <div class="card-body">
+    <div class="form-grid">
+      <div class="field">
+        <label for="full_name">{{ t('Full name') }}</label>
+        <input id="full_name" type="text" name="full_name" required value="{{ l.full_name if l else '' }}">
+      </div>
+      <div class="field">
+        <label for="phone">{{ t('Phone') }}</label>
+        <input id="phone" type="tel" name="phone" value="{{ l.phone if l else '' }}" placeholder="+974 ...">
+      </div>
+
+      <div class="field">
+        <label for="email">{{ t('Email') }}</label>
+        <input id="email" type="email" name="email" value="{{ l.email if l else '' }}">
+      </div>
+      <div class="field">
+        <label for="source">{{ t('Source') }}</label>
+        <select id="source" name="source">
+          {% for s in sources %}<option value="{{ s }}" {{ 'selected' if l and l.source == s }}>{{ t(s) }}</option>{% endfor %}
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="status">{{ t('Pipeline stage') }}</label>
+        <select id="status" name="status">
+          {% for s in stages %}<option value="{{ s }}" {{ 'selected' if l and l.status == s }}>{{ t(s) }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="budget">{{ t('Budget') }} ({{ currency }})</label>
+        <input id="budget" type="number" name="budget" step="any" min="0" inputmode="decimal" value="{{ l.budget | round(2) if l and l.budget else '' }}">
+      </div>
+
+      <div class="field">
+        <label for="agent_id">{{ t('Assigned agent') }}</label>
+        <select id="agent_id" name="agent_id">
+          <option value="">{{ t('Leave in the shared pool') }}</option>
+          {% for a in agents %}
+            <option value="{{ a.id }}" {{ 'selected' if l and l.agent_id == a.id }}>{{ a.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="property_id">{{ t('Property of interest') }}</label>
+        <select id="property_id" name="property_id">
+          <option value="">{{ t('Not decided yet') }}</option>
+          {% for p in props %}
+            <option value="{{ p.id }}" {{ 'selected' if l and l.property_id == p.id }}>{{ p.ref }} — {{ p.title }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="next_follow_up">{{ t('Next follow-up') }}</label>
+        <input id="next_follow_up" type="datetime-local" name="next_follow_up"
+               value="{{ l.next_follow_up | local_input if l else '' }}">
+      </div>
+      <div class="field"></div>
+
+      <div class="field span-2">
+        <label for="notes">{{ t('Requirements and notes') }}</label>
+        <textarea id="notes" name="notes"
+          placeholder="What are they looking for? Area, size, move-in date, financing.">{{ l.notes if l else '' }}</textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-foot">
+    <a class="btn btn-quiet" href="{{ url_for('leads.detail', lid=l.id) if l else url_for('leads.board') }}">{{ t('Cancel') }}</a>
+    <button class="btn btn-gold" type="submit">{{ t('Save lead') if l else t('Capture lead') }}</button>
+  </div>
+</form>
+{% endblock %}

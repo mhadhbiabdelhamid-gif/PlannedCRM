@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+{% block title %}{{ person.name }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="profile-head">
+    {{ avatar(person, 88) }}
+    <div>
+      <div class="eyebrow">
+        {{ t('Admin') if person.role == 'admin' else (t('Manager') if person.role == 'manager' else t('Agent')) }}
+        {% if person.department %} · {{ person.department }}{% endif %}
+      </div>
+      <h1 class="page-title">{{ person.name }}</h1>
+      <div class="inline" style="margin-top:6px">
+        {% if person.job_title %}<span class="muted">{{ person.job_title }}</span>{% endif %}
+        {% if not person.is_active %}<span class="tag tag-sold">{{ t('Off') }}</span>{% endif %}
+        {% if person.joined_year %}
+          <span class="small faint">{{ t('Joined') }} {{ person.joined_year }}</span>{% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="actions">
+    <a class="btn btn-quiet" href="{{ url_for('admin.users') }}">{{ t('Back to team') }}</a>
+    {% if can_edit %}
+      <button class="btn" onclick="openModal('photo-modal')">{{ t('Change photo') }}</button>
+      <button class="btn btn-gold" onclick="openModal('profile-modal')">{{ t('Edit profile') }}</button>
+    {% endif %}
+  </div>
+</div>
+
+{% if may_see_numbers %}
+<div class="between" style="margin-bottom:12px">
+  <span class="eyebrow" style="margin:0">{{ t('Performance') }}</span>
+  <form method="get" class="inline" style="gap:8px">
+    <select name="period" onchange="this.form.submit()" style="max-width:170px">
+      {% for key, label in ranges %}
+        <option value="{{ key }}" {{ 'selected' if period == key }}>{{ t(label) }}</option>
+      {% endfor %}
+    </select>
+  </form>
+</div>
+
+<div class="metrics">
+  <div class="metric">
+    <div class="label">{{ t('Deals closed') }}</div>
+    <div class="value">{{ stats.deals }}</div>
+    <div class="foot">{{ currency }} {{ stats.value | money }} {{ t('in value') }}</div>
+  </div>
+  <div class="metric">
+    <div class="label">{{ t('Commission earned') }}</div>
+    <div class="value" style="font-size:32px">{{ currency }} {{ stats.commission | money }}</div>
+    <div class="foot">{{ currency }} {{ stats.collected | money }} {{ t('collected') }}</div>
+  </div>
+  <div class="metric">
+    <div class="label">{{ t('Conversion rate') }}</div>
+    <div class="value">{{ stats.conversion if stats.conversion is not none else '—' }}{% if stats.conversion is not none %}%{% endif %}</div>
+    <div class="foot">{{ stats.won }} {{ t('won') }} · {{ stats.lost }} {{ t('lost') }}</div>
+  </div>
+  <div class="metric">
+    <div class="label">{{ t('Leads assigned') }}</div>
+    <div class="value">{{ stats.assigned }}</div>
+    <div class="foot">{{ stats.contacts }} {{ t('contacts logged') }}</div>
+  </div>
+</div>
+
+<div class="grid g-4" style="margin-top:16px">
+  <div class="card"><div class="card-body">
+    <div class="eyebrow">{{ t('Active leads') }}</div>
+    <div class="metric" style="padding:0;border:none"><div class="value" style="font-size:30px">{{ stats.active_leads }}</div></div>
+  </div></div>
+  <div class="card"><div class="card-body">
+    <div class="eyebrow">{{ t('Live listings') }}</div>
+    <div class="metric" style="padding:0;border:none"><div class="value" style="font-size:30px">{{ stats.listings }}</div></div>
+  </div></div>
+  <a class="card" href="{{ url_for('leads.index', due='today') }}"><div class="card-body">
+    <div class="eyebrow">{{ t('Due today') }}</div>
+    <div class="metric" style="padding:0;border:none"><div class="value" style="font-size:30px">{{ stats.due_today }}</div></div>
+  </div></a>
+  <a class="card" href="{{ url_for('leads.index', due='overdue') }}"><div class="card-body">
+    <div class="eyebrow">{{ t('Overdue follow-ups') }}</div>
+    <div class="metric" style="padding:0;border:none">
+      <div class="value" style="font-size:30px;{{ 'color:var(--bad)' if stats.overdue }}">{{ stats.overdue }}</div></div>
+  </div></a>
+</div>
+{% endif %}
+
+<div class="grid g-main" style="margin-top:16px">
+  <div class="grid">
+    {% if may_see_numbers %}
+    <div class="card">
+      <div class="card-head"><h3>{{ t('Recent deals') }}</h3></div>
+      {% if recent_deals %}
+      <div class="table-scroll"><table class="table">
+        <thead><tr><th>{{ t('Deal') }}</th><th>{{ t('Property') }}</th>
+          <th class="right">{{ t('Deal value') }}</th><th class="right">{{ t('Commission') }}</th>
+          <th>{{ t('Status') }}</th></tr></thead>
+        <tbody>
+        {% for d in recent_deals %}
+          <tr>
+            <td class="mono faint">{{ d.ref }}<div class="small">{{ (d.closed_at or d.created_at) | nice_date }}</div></td>
+            <td class="small">{{ d.prop_title or '—' }}</td>
+            <td class="right price">{{ d.value | money }}</td>
+            <td class="right price">{{ d.commission_amt | money }}</td>
+            <td><span class="tag tag-{{ 'available' if d.status == 'Collected' else 'reserved' }}">{{ t(d.status) }}</span></td>
+          </tr>
+        {% endfor %}
+        </tbody></table></div>
+      {% else %}
+        <div class="empty"><span class="mark">◇</span>{{ t('No deals recorded in this period.') }}</div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="card">
+      <div class="card-head"><h3>{{ t('Live listings') }}</h3><span class="mono faint">{{ listings|length }}</span></div>
+      {% if listings %}
+      <div class="table-scroll"><table class="table"><tbody>
+        {% for p in listings %}
+          <tr onclick="location.href='{{ url_for('properties.detail', pid=p.id) }}'" style="cursor:pointer">
+            <td class="mono faint">{{ p.ref }}</td>
+            <td><b>{{ p.title }}</b></td>
+            <td><span class="tag tag-{{ p.status|lower }}">{{ t(p.status) }}</span></td>
+            <td class="right price">{{ currency }} {{ p.price | money }}</td>
+          </tr>
+        {% endfor %}
+      </tbody></table></div>
+      {% else %}
+        <div class="empty"><span class="mark">◇</span>{{ t('No live listings assigned.') }}</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h3>{{ t('Details') }}</h3></div>
+    <div class="card-body">
+      <dl class="spec-list" style="grid-template-columns:1fr">
+        <div><dt>{{ t('Email') }}</dt><dd class="small">{{ person.email }}</dd></div>
+        <div><dt>{{ t('Phone') }}</dt><dd class="mono">{{ person.phone or '—' }}</dd></div>
+        <div><dt>{{ t('Department') }}</dt><dd>{{ person.department or '—' }}</dd></div>
+        <div><dt>{{ t('Employment') }}</dt><dd>{{ t(person.employment) if person.employment else '—' }}</dd></div>
+        <div><dt>{{ t('Joined') }}</dt><dd>{{ person.joined_year or '—' }}</dd></div>
+        <div><dt>{{ t('Manager') }}</dt><dd>{{ person.manager_name or '—' }}</dd></div>
+        <div><dt>{{ t('Languages') }}</dt><dd>{{ person.languages or '—' }}</dd></div>
+        <div><dt>{{ t('Areas covered') }}</dt><dd>{{ person.areas_covered or '—' }}</dd></div>
+      </dl>
+      {% if person.bio %}
+        <div class="hairline"></div>
+        <div class="eyebrow">{{ t('About') }}</div>
+        <p style="white-space:pre-wrap;margin:8px 0 0">{{ person.bio }}</p>
+      {% endif %}
+      <div class="inline" style="margin-top:14px">
+        {% if person.phone %}<a class="btn btn-sm" href="tel:{{ person.phone }}">{{ t('Call') }}</a>{% endif %}
+        <a class="btn btn-sm" href="mailto:{{ person.email }}">{{ t('Email') }}</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if can_edit %}
+<div class="modal-back" id="photo-modal">
+  <div class="modal">
+    <div class="modal-head"><h3>{{ t('Change photo') }}</h3>
+      <button class="btn btn-quiet btn-sm" onclick="closeModal('photo-modal')">{{ t('Close') }}</button></div>
+    <form method="post" action="{{ url_for('admin.user_photo', uid=person.id) }}"
+          enctype="multipart/form-data">
+      <div class="modal-body">
+        <div class="inline" style="margin-bottom:14px">{{ avatar(person, 64) }}
+          <span class="small muted">{{ t('Square works best. The photo is cropped to a square and resized automatically.') }}</span></div>
+        <div class="field"><label>{{ t('New photo') }}</label>
+          <input type="file" name="photo" accept="image/*"></div>
+      </div>
+      <div class="modal-foot">
+        {% if person.photo %}
+          <button class="btn btn-danger" type="submit" name="remove" value="1">{{ t('Remove photo') }}</button>
+        {% endif %}
+        <button class="btn btn-gold" type="submit">{{ t('Upload') }}</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal-back" id="profile-modal">
+  <div class="modal">
+    <div class="modal-head"><h3>{{ t('Edit profile') }}</h3>
+      <button class="btn btn-quiet btn-sm" onclick="closeModal('profile-modal')">{{ t('Close') }}</button></div>
+    <form method="post" action="{{ url_for('admin.save_profile', uid=person.id) }}">
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="field"><label>{{ t('Job title') }}</label>
+            <input type="text" name="job_title" value="{{ person.job_title or '' }}"
+                   placeholder="{{ t('e.g. Senior Property Consultant') }}"></div>
+          <div class="field"><label>{{ t('Department') }}</label>
+            <input type="text" name="department" list="dept-list" value="{{ person.department or '' }}"></div>
+          <div class="field"><label>{{ t('Phone') }}</label>
+            <input type="tel" name="phone" value="{{ person.phone or '' }}"></div>
+          <div class="field"><label>{{ t('Year joined') }}</label>
+            <input type="number" name="joined_year" min="1990" max="2100"
+                   value="{{ person.joined_year or '' }}"></div>
+          <div class="field"><label>{{ t('Employment') }}</label>
+            <select name="employment">
+              <option value="">—</option>
+              {% for e in employment %}
+                <option value="{{ e }}" {{ 'selected' if person.employment == e }}>{{ t(e) }}</option>
+              {% endfor %}
+            </select></div>
+          {% if user.role == 'admin' %}
+          <div class="field"><label>{{ t('Manager') }}</label>
+            <select name="manager_id">
+              <option value="">—</option>
+              {% for m in managers %}
+                <option value="{{ m.id }}" {{ 'selected' if person.manager_id == m.id }}>{{ m.name }}</option>
+              {% endfor %}
+            </select></div>
+          {% endif %}
+          <div class="field span-2"><label>{{ t('Languages') }}</label>
+            <input type="text" name="languages" value="{{ person.languages or '' }}"
+                   placeholder="{{ t('e.g. Arabic, English, Hindi') }}"></div>
+          <div class="field span-2"><label>{{ t('Areas covered') }}</label>
+            <input type="text" name="areas_covered" value="{{ person.areas_covered or '' }}"
+                   placeholder="{{ t('e.g. The Pearl, Lusail, West Bay') }}"></div>
+          <div class="field span-2"><label>{{ t('About') }}</label>
+            <textarea name="bio">{{ person.bio or '' }}</textarea></div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-quiet" type="button" onclick="closeModal('profile-modal')">{{ t('Cancel') }}</button>
+        <button class="btn btn-gold" type="submit">{{ t('Save profile') }}</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<datalist id="dept-list">
+  {% for d in departments %}<option value="{{ d }}"></option>{% endfor %}
+</datalist>
+{% endif %}
+{% endblock %}

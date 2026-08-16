@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Activity log{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">08 · {{ t('Team') }}</div>
+    <h1 class="page-title">{{ t('Activity log') }}</h1>
+  </div>
+  <div class="actions"><span class="mono muted">Last {{ rows|length }} entries</span></div>
+</div>
+
+<div class="card table-scroll">
+  <table class="table">
+    <thead><tr><th>{{ t('When') }}</th><th>{{ t('Who') }}</th><th>{{ t('What') }}</th><th>{{ t('Detail') }}</th></tr></thead>
+    <tbody>
+    {% for a in rows %}
+      <tr>
+        <td class="mono faint nowrap">{{ a.created_at | nice_time }}</td>
+        <td>{{ a.user_name or 'System' }}</td>
+        <td>{{ t(a.action) }}</td>
+        <td class="small muted">
+          {% if a.entity_type == 'property' and a.entity_id %}
+            <a href="{{ url_for('properties.detail', pid=a.entity_id) }}">{{ a.detail or 'View listing' }}</a>
+          {% elif a.entity_type == 'lead' and a.entity_id %}
+            <a href="{{ url_for('leads.detail', lid=a.entity_id) }}">{{ a.detail or 'View lead' }}</a>
+          {% else %}{{ a.detail or '—' }}{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% include "_pager.html" %}
+
+{% endblock %}

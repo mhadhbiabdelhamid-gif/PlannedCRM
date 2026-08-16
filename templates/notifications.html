@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Notifications{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">07 · {{ t('Team') }}</div>
+    <h1 class="page-title">{{ t('Notifications') }}</h1>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body" style="padding-top:6px">
+    {% for n in items %}
+      <div class="feed-item">
+        <span class="feed-dot" style="{{ 'background:var(--line)' if n.is_read }}"></span>
+        <div class="stack" style="flex:1">
+          {% if n.link %}<a href="{{ n.link }}"><b>{{ n.message }}</b></a>
+          {% else %}<b>{{ n.message }}</b>{% endif %}
+          <span class="mono faint">{{ n.created_at | ago }}</span>
+        </div>
+      </div>
+    {% else %}
+      <div class="empty"><span class="mark">◇</span>
+        Nothing yet. You'll be alerted here when a lead is assigned to you or a listing changes status.</div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

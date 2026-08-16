@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Leads{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">03 · {{ t('Pipeline') }}</div>
+    <h1 class="page-title">{{ t('Leads') }}</h1>
+  </div>
+  <div class="actions">
+    <a class="btn" href="{{ url_for('leads.index') }}">{{ t('Table view') }}</a>
+    {% if user.role == 'admin' %}
+      <a class="btn btn-dark" href="{{ url_for('admin.export_workbook') }}">{{ t('Export Excel') }}</a>
+      <a class="btn" href="{{ url_for('admin.export_leads') }}">{{ t('Export CSV') }}</a>
+    {% endif %}
+    <a class="btn btn-gold" href="{{ url_for('leads.form') }}">{{ t('Capture lead') }}</a>
+  </div>
+</div>
+
+<form class="card" method="get" style="margin-bottom:16px">
+  <div class="card-body inline">
+    <label class="inline small" style="gap:6px">
+      <input type="checkbox" name="mine" value="1" {{ 'checked' if mine == '1' }}
+             onchange="this.form.submit()" style="width:auto">
+      {{ t('Only my leads') }}
+    </label>
+    <select name="source" onchange="this.form.submit()" style="max-width:190px">
+      <option value="">{{ t('Every source') }}</option>
+      {% for s in sources %}<option value="{{ s }}" {{ 'selected' if source == s }}>{{ t(s) }}</option>{% endfor %}
+    </select>
+    <select name="due" onchange="this.form.submit()" style="max-width:180px">
+      <option value="">{{ t('Any follow-up') }}</option>
+      <option value="overdue" {{ 'selected' if due == 'overdue' }}>{{ t('Overdue') }}</option>
+      <option value="today" {{ 'selected' if due == 'today' }}>{{ t('Due today') }}</option>
+      <option value="week" {{ 'selected' if due == 'week' }}>{{ t('Next 7 days') }}</option>
+      <option value="none" {{ 'selected' if due == 'none' }}>{{ t('No date set') }}</option>
+    </select>
+    <span class="mono muted">{{ total }} {{ t('in view') }}</span>
+    <span class="small faint" style="margin-left:auto">{{ t('Drag a card to move it through the pipeline') }}</span>
+  </div>
+</form>
+
+<div class="board" id="board">
+  {% for stage in stages %}
+  <section class="col" data-stage="{{ stage }}">
+    <header class="col-head">
+      <b>{{ t(stage) }}</b>
+      <span data-count>{{ columns[stage]|length }}</span>
+    </header>
+    <div class="col-body">
+      {% for l in columns[stage] %}
+        <article class="lead-card" data-id="{{ l.id }}">
+          <div class="row">
+            <b>{{ l.full_name }}</b>
+            <span class="mono faint">{{ l.updated_at | ago }}</span>
+          </div>
+          {% if l.phone %}<div class="mono small muted">{{ l.phone }}</div>{% endif %}
+          {% if l.prop_title %}<div class="small muted">{{ l.prop_title }}</div>{% endif %}
+          <div class="row">
+            <span class="tag tag-plain">{{ t(l.source) }}</span>
+            {% if l.budget %}<span class="mono small">{{ currency }} {{ l.budget | money }}</span>{% endif %}
+          </div>
+          {% if l.next_follow_up %}
+            {% if l.next_follow_up < day_start %}
+              <span class="tag tag-sold">{{ t('Overdue') }} {{ l.next_follow_up | nice_date }}</span>
+            {% elif l.next_follow_up < day_end %}
+              <span class="tag tag-reserved">{{ t('Due today') }}</span>
+            {% endif %}
+          {% endif %}
+          <div class="row">
+            <span class="small faint">{{ l.agent_name or t('Unassigned') }}</span>
+            <a class="btn btn-quiet btn-sm" href="{{ url_for('leads.detail', lid=l.id) }}">{{ t('Open') }}</a>
+          </div>
+        </article>
+      {% endfor %}
+      <div class="col-empty small faint" style="{{ 'display:none' if columns[stage] }};padding:8px 2px">
+        {{ t('Drop a lead here') }}
+      </div>
+    </div>
+  </section>
+  {% endfor %}
+</div>
+{% endblock %}

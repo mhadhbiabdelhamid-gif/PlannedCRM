@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Import history') }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">{{ t('Listings') }}</div>
+    <h1 class="page-title">{{ t('Import history') }}</h1>
+  </div>
+  <div class="actions">
+    <a class="btn btn-gold" href="{{ url_for('imports.upload') }}">{{ t('Import from Excel') }}</a>
+  </div>
+</div>
+
+{% if rows %}
+<div class="card table-scroll">
+  <table class="table">
+    <thead><tr>
+      <th>{{ t('When') }}</th><th>{{ t('Who') }}</th><th>{{ t('File') }}</th>
+      <th>{{ t('Partner or list name') }}</th><th>{{ t('Mode') }}</th>
+      <th class="right">{{ t('Rows') }}</th><th class="right">{{ t('Added') }}</th>
+      <th class="right">{{ t('Updated') }}</th><th class="right">{{ t('Skipped') }}</th>
+      <th class="right">{{ t('Removed') }}</th><th class="right">{{ t('Unusable') }}</th>
+      <th>{{ t('Status') }}</th><th></th>
+    </tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td class="mono small nowrap">{{ r.created_at | nice_time }}</td>
+        <td class="inline" style="gap:7px">{{ avatar({"name": r.user_name, "photo": r.user_photo}, 26) }}
+          <span class="small">{{ r.user_name or '—' }}</span></td>
+        <td class="small muted">{{ r.filename or '—' }}</td>
+        <td class="small">{{ r.source or '—' }}</td>
+        <td class="small muted">{{ t(r.mode) }}</td>
+        <td class="right mono">{{ r.rows_read }}</td>
+        <td class="right mono">{{ r.added }}</td>
+        <td class="right mono">{{ r.updated }}</td>
+        <td class="right mono faint">{{ r.skipped }}</td>
+        <td class="right mono">{{ r.removed or '' }}</td>
+        <td class="right mono {{ 'faint' if not r.failed }}">{{ r.failed or '' }}</td>
+        <td>
+          {% if r.undone_at %}
+            <span class="tag tag-plain">{{ t('Rolled back') }}</span>
+            <div class="small faint">{{ r.undone_name }} · {{ r.undone_at | nice_date }}</div>
+          {% elif r.mode == 'preview' %}
+            <span class="tag tag-plain">{{ t('Preview') }}</span>
+          {% else %}
+            <span class="tag tag-available">{{ t('Complete') }}</span>
+          {% endif %}
+        </td>
+        <td class="right">
+          {% if user.role == 'admin' and not r.undone_at and r.undo_data and r.mode != 'preview' %}
+            <form method="post" action="{{ url_for('imports.undo', iid=r.id) }}"
+                  data-confirm="{{ t('Roll back this import? Listings it added will be deleted, and listings it changed will go back to how they were beforehand. Any edits made since will be lost.') }}">
+              <button class="btn btn-sm btn-danger" type="submit">{{ t('Roll back') }}</button>
+            </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="small faint" style="margin-top:12px">
+  {{ t('Rolling back only affects listings that this import touched. Anything typed in by hand, or changed by a later import, is left alone.') }}
+</p>
+{% else %}
+  <div class="card"><div class="empty">
+    <span class="mark">◇</span>
+    <p>{{ t('No imports yet.') }}</p>
+    <p class="small">{{ t('Upload a partner availability list and every import will be recorded here — who ran it, what changed, and how to undo it.') }}</p>
+    <a class="btn btn-gold" href="{{ url_for('imports.upload') }}">{{ t('Import from Excel') }}</a>
+  </div></div>
+{% endif %}
+{% endblock %}

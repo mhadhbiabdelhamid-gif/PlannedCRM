@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Owners{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">05 · {{ t('Directory') }}</div>
+    <h1 class="page-title">{{ t('Owners') }}</h1>
+  </div>
+  <div class="actions">
+    {% if user.role == 'admin' %}<a class="btn" href="{{ url_for('admin.export_owners') }}">{{ t('Export CSV') }}</a>{% endif %}
+    <button class="btn btn-gold" onclick="openModal('owner-modal')">{{ t('Add owner') }}</button>
+  </div>
+</div>
+
+<form class="card" method="get" style="margin-bottom:16px">
+  <div class="card-body inline">
+    <input type="text" name="q" value="{{ q }}" placeholder="{{ t('Name, phone or company') }}" style="max-width:300px">
+    <button class="btn btn-dark" type="submit">{{ t('Search') }}</button>
+    {% if q %}<a class="btn btn-quiet" href="{{ url_for('contacts.owners') }}">{{ t('Clear') }}</a>{% endif %}
+    <span class="mono muted" style="margin-left:auto">{{ rows|length }} {{ t('found') }}</span>
+  </div>
+</form>
+
+{% if rows %}
+<div class="card table-scroll">
+  <table class="table">
+    <thead><tr><th>{{ t('Name') }}</th><th>{{ t('Company') }}</th><th>{{ t('Phone') }}</th><th>{{ t('Email') }}</th>
+      <th class="right">{{ t('Properties') }}</th><th></th></tr></thead>
+    <tbody>
+    {% for o in rows %}
+      <tr>
+        <td><b>{{ o.name }}</b>{% if o.notes %}<div class="small muted">{{ o.notes }}</div>{% endif %}</td>
+        <td class="muted">{{ o.company or '—' }}</td>
+        <td class="mono small">{{ o.phone or '—' }}</td>
+        <td class="small muted">{{ o.email or '—' }}</td>
+        <td class="right mono">{{ o.prop_count }}</td>
+        <td class="right nowrap">
+          <button class="btn btn-quiet btn-sm" onclick='openModal("owner-modal", {{ {"id":o.id,"name":o.name,"company":o.company,"phone":o.phone,"email":o.email,"notes":o.notes} | tojson }})'>{{ t('Edit') }}</button>
+          {% if user.role == 'admin' %}
+          <form method="post" action="{{ url_for('contacts.delete_owner', oid=o.id) }}"
+                style="display:inline" data-confirm="Remove {{ o.name }} from the directory?">
+            <button class="btn btn-quiet btn-sm btn-danger" type="submit">{{ t('Delete') }}</button></form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+  <div class="card"><div class="empty"><span class="mark">◇</span>
+    {{ t('No owners yet. Add one so listings can be linked to them.') }}</div></div>
+{% endif %}
+
+<div class="modal-back" id="owner-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 data-title data-edit-title="{{ t('Edit owner') }}">{{ t('Add owner') }}</h3>
+      <button class="btn btn-quiet btn-sm" onclick="closeModal('owner-modal')">{{ t('Close') }}</button>
+    </div>
+    <form method="post" action="{{ url_for('contacts.save_owner') }}">
+      <div class="modal-body">
+        <input type="hidden" name="id">
+        <div class="field"><label>{{ t('Name') }}</label><input type="text" name="name" required></div>
+        <div class="form-grid">
+          <div class="field"><label>{{ t('Phone') }}</label><input type="tel" name="phone"></div>
+          <div class="field"><label>{{ t('Email') }}</label><input type="email" name="email"></div>
+        </div>
+        <div class="field"><label>{{ t('Company') }}</label><input type="text" name="company"></div>
+        <div class="field"><label>{{ t('Notes') }}</label><textarea name="notes" style="min-height:70px"></textarea></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-quiet" type="button" onclick="closeModal('owner-modal')">{{ t('Cancel') }}</button>
+        <button class="btn btn-gold" type="submit">{{ t('Save owner') }}</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

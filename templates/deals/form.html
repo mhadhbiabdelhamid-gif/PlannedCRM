@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Edit deal') if d else t('New deal') }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">04 · {{ t('Money') }}</div>
+    <h1 class="page-title">{{ t('Edit deal') if d else t('Record a deal') }}</h1>
+  </div>
+</div>
+
+<form method="post" class="card" style="max-width:860px" id="dealform">
+  <div class="card-body">
+    <div class="form-grid">
+      <div class="field">
+        <label for="property_id">{{ t('Property') }}</label>
+        <select id="property_id" name="property_id" onchange="pullPrice(this)">
+          <option value="">{{ t('None') }}</option>
+          {% for p in props %}
+            <option value="{{ p.id }}" data-price="{{ p.price or 0 }}"
+              {{ 'selected' if (d and d.property_id == p.id) or (prefill.get('property_id') == p.id) }}>
+              {{ p.ref }} — {{ p.title }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="lead_id">{{ t('Client') }}</label>
+        <select id="lead_id" name="lead_id">
+          <option value="">{{ t('None') }}</option>
+          {% for l in leads %}
+            <option value="{{ l.id }}"
+              {{ 'selected' if (d and d.lead_id == l.id) or (prefill.get('lead_id') == l.id) }}>
+              {{ l.ref }} — {{ l.full_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="agent_id">{{ t('Agent') }}</label>
+        <select id="agent_id" name="agent_id">
+          <option value="">{{ t('Unassigned') }}</option>
+          {% for a in agents %}
+            <option value="{{ a.id }}"
+              {{ 'selected' if (d and d.agent_id == a.id) or (prefill.get('agent_id') == a.id) }}>
+              {{ a.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="deal_type">{{ t('Type') }}</label>
+        <select id="deal_type" name="deal_type">
+          {% for tp in listing_types %}
+            <option value="{{ tp }}"
+              {{ 'selected' if (d and d.deal_type == tp) or (prefill.get('deal_type') == tp) }}>{{ t(tp) }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="value">{{ t('Deal value') }} ({{ currency }})</label>
+        <input id="value" type="number" name="value" step="any" min="0" inputmode="decimal"
+               oninput="calc()" value="{{ d.value | round(2) if d else (prefill.get('value') or '') }}">
+      </div>
+      <div class="field">
+        <label for="commission_pct">{{ t('Commission %') }}</label>
+        <input id="commission_pct" type="number" name="commission_pct" step="any" min="0"
+               inputmode="decimal" oninput="calc()"
+               value="{{ d.commission_pct if d else default_pct }}">
+      </div>
+
+      <div class="field">
+        <label for="commission_amt">{{ t('Commission amount') }} ({{ currency }})</label>
+        <input id="commission_amt" type="number" name="commission_amt" step="any" min="0"
+               inputmode="decimal" value="{{ d.commission_amt | round(2) if d else '' }}">
+        <span class="small faint">{{ t('Worked out from the percentage — type over it to set your own figure.') }}</span>
+      </div>
+      <div class="field">
+        <label for="status">{{ t('Status') }}</label>
+        <select id="status" name="status">
+          {% for s in deal_status %}
+            <option value="{{ s }}" {{ 'selected' if d and d.status == s }}>{{ t(s) }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="closed_at">{{ t('Closed on') }}</label>
+        <input id="closed_at" type="datetime-local" name="closed_at"
+               value="{{ d.closed_at | local_input if d and d.closed_at else today }}">
+      </div>
+
+      <div class="field span-2">
+        <label for="notes">{{ t('Notes') }}</label>
+        <textarea id="notes" name="notes">{{ d.notes if d else '' }}</textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-foot">
+    <a class="btn btn-quiet" href="{{ url_for('deals.index') }}">{{ t('Cancel') }}</a>
+    <button class="btn btn-gold" type="submit">{{ t('Save deal') }}</button>
+  </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  var touched = false;
+  document.getElementById('commission_amt').addEventListener('input', function () { touched = true; });
+
+  function calc() {
+    if (touched) return;
+    var v = parseFloat(document.getElementById('value').value) || 0;
+    var p = parseFloat(document.getElementById('commission_pct').value) || 0;
+    document.getElementById('commission_amt').value = v && p ? (v * p / 100).toFixed(2) : '';
+  }
+
+  function pullPrice(sel) {
+    var price = sel.options[sel.selectedIndex].dataset.price;
+    var val = document.getElementById('value');
+    if (price && !val.value) { val.value = price; calc(); }
+  }
+
+  calc();
+</script>
+{% endblock %}

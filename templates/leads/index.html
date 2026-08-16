@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Leads list{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">03 · {{ t('Pipeline') }}</div>
+    <h1 class="page-title">{{ t('Leads list') }}</h1>
+  </div>
+  <div class="actions">
+    <a class="btn" href="{{ url_for('leads.board') }}">{{ t('Board view') }}</a>
+    <a class="btn btn-gold" href="{{ url_for('leads.form') }}">{{ t('Capture lead') }}</a>
+  </div>
+</div>
+
+<form class="card" method="get" style="margin-bottom:16px">
+  <div class="card-body inline">
+    <input type="text" name="q" value="{{ q }}" placeholder="{{ t('Name, phone or email') }}" style="max-width:320px">
+    <button class="btn btn-dark" type="submit">{{ t('Search') }}</button>
+    {% if q %}<a class="btn btn-quiet" href="{{ url_for('leads.index') }}">{{ t('Clear') }}</a>{% endif %}
+    <span class="mono muted" style="margin-left:auto">{{ rows|length }} {{ t('found') }}</span>
+  </div>
+  <div class="card-body" style="border-top:1px solid var(--line-soft);padding-top:12px">
+    <div class="chip-row">
+      <a class="chip {{ 'on' if not due }}" href="{{ url_for('leads.index', q=q) }}">{{ t('All') }}</a>
+      <a class="chip {{ 'on' if due == 'overdue' }}" href="{{ url_for('leads.index', q=q, due='overdue') }}">
+        {{ t('Overdue') }} · <span class="mono">{{ counts.overdue }}</span></a>
+      <a class="chip {{ 'on' if due == 'today' }}" href="{{ url_for('leads.index', q=q, due='today') }}">
+        {{ t('Due today') }} · <span class="mono">{{ counts.today }}</span></a>
+      <a class="chip {{ 'on' if due == 'week' }}" href="{{ url_for('leads.index', q=q, due='week') }}">
+        {{ t('Next 7 days') }} · <span class="mono">{{ counts.week }}</span></a>
+      <a class="chip {{ 'on' if due == 'none' }}" href="{{ url_for('leads.index', q=q, due='none') }}">
+        {{ t('No date set') }} · <span class="mono">{{ counts.none }}</span></a>
+    </div>
+  </div>
+</form>
+
+{% if rows %}
+<div class="card table-scroll">
+  <table class="table">
+    <thead><tr>
+      <th>#</th><th>{{ t('Name') }}</th><th>{{ t('Phone') }}</th><th>{{ t('Source') }}</th>
+      <th>{{ t('Status') }}</th><th>{{ t('Interested in') }}</th><th>{{ t('Agent') }}</th><th>{{ t('Follow-up') }}</th><th class="right">{{ t('Date') }}</th>
+    </tr></thead>
+    <tbody>
+    {% for l in rows %}
+      <tr onclick="location.href='{{ url_for('leads.detail', lid=l.id) }}'" style="cursor:pointer">
+        <td class="mono faint">{{ l.ref }}</td>
+        <td><b>{{ l.full_name }}</b>{% if l.email %}<div class="small muted">{{ l.email }}</div>{% endif %}</td>
+        <td class="mono small">{{ l.phone or '—' }}</td>
+        <td class="small muted">{{ t(l.source) }}</td>
+        <td><span class="tag tag-plain">{{ t(l.status) }}</span></td>
+        <td class="small muted">{{ l.prop_title or '—' }}</td>
+        <td class="small muted">{{ l.agent_name or t('Unassigned') }}</td>
+        <td class="nowrap">
+          {% if l.status in ('Won','Lost') %}<span class="faint">—</span>
+          {% elif not l.next_follow_up %}<span class="tag tag-plain">{{ t('No date set') }}</span>
+          {% elif l.next_follow_up|string < today %}
+            <span class="tag tag-sold">{{ l.next_follow_up | nice_date }}</span>
+          {% else %}<span class="mono small">{{ l.next_follow_up | nice_date }}</span>{% endif %}
+        </td>
+        <td class="right mono faint nowrap">{{ l.created_at | nice_date }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+  <div class="card"><div class="empty">
+    <span class="mark">◇</span>{{ t('No leads match. Capture one to start the pipeline.') }}</div></div>
+{% endif %}
+{% include "_pager.html" %}
+
+{% endblock %}

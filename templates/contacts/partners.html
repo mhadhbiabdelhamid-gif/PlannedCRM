@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Partners{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">06 · {{ t('Directory') }}</div>
+    <h1 class="page-title">{{ t('Partners') }}</h1>
+  </div>
+  <div class="actions">
+    <button class="btn btn-gold" onclick="openModal('partner-modal')">{{ t('Add partner') }}</button>
+  </div>
+</div>
+
+<div class="chip-row" style="margin-bottom:16px">
+  <a class="chip {{ 'on' if not ptype }}" href="{{ url_for('contacts.partners') }}">{{ t('All') }}</a>
+  {% for pt in partner_types %}
+    <a class="chip {{ 'on' if ptype == pt }}" href="{{ url_for('contacts.partners', partner_type=pt) }}">{{ t(pt) }}</a>
+  {% endfor %}
+</div>
+
+{% if rows %}
+<div class="card table-scroll">
+  <table class="table">
+    <thead><tr><th>{{ t('Name') }}</th><th>{{ t('Type') }}</th><th>{{ t('Phone') }}</th><th>{{ t('Email') }}</th><th></th></tr></thead>
+    <tbody>
+    {% for p in rows %}
+      <tr>
+        <td><b>{{ p.name }}</b>{% if p.notes %}<div class="small muted">{{ p.notes }}</div>{% endif %}</td>
+        <td><span class="tag tag-plain">{{ t(p.partner_type) }}</span></td>
+        <td class="mono small">{{ p.phone or '—' }}</td>
+        <td class="small muted">{{ p.email or '—' }}</td>
+        <td class="right nowrap">
+          <button class="btn btn-quiet btn-sm" onclick='openModal("partner-modal", {{ {"id":p.id,"name":p.name,"partner_type":p.partner_type,"phone":p.phone,"email":p.email,"notes":p.notes} | tojson }})'>{{ t('Edit') }}</button>
+          {% if user.role == 'admin' %}
+          <form method="post" action="{{ url_for('contacts.delete_partner', pid=p.id) }}"
+                style="display:inline" data-confirm="Remove {{ p.name }}?">
+            <button class="btn btn-quiet btn-sm btn-danger" type="submit">{{ t('Delete') }}</button></form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+  <div class="card"><div class="empty"><span class="mark">◇</span>
+    {{ t('No partners in this category yet.') }}</div></div>
+{% endif %}
+
+<div class="modal-back" id="partner-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 data-title data-edit-title="{{ t('Edit partner') }}">{{ t('Add partner') }}</h3>
+      <button class="btn btn-quiet btn-sm" onclick="closeModal('partner-modal')">{{ t('Close') }}</button>
+    </div>
+    <form method="post" action="{{ url_for('contacts.save_partner') }}">
+      <div class="modal-body">
+        <input type="hidden" name="id">
+        <div class="form-grid">
+          <div class="field"><label>{{ t('Name') }}</label><input type="text" name="name" required></div>
+          <div class="field"><label>{{ t('Type of partner') }}</label>
+            <select name="partner_type">
+              {% for pt in partner_types %}<option value="{{ pt }}">{{ t(pt) }}</option>{% endfor %}
+            </select></div>
+          <div class="field"><label>{{ t('Phone') }}</label><input type="tel" name="phone"></div>
+          <div class="field"><label>{{ t('Email') }}</label><input type="email" name="email"></div>
+        </div>
+        <div class="field"><label>{{ t('Notes') }}</label><textarea name="notes" style="min-height:70px"></textarea></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-quiet" type="button" onclick="closeModal('partner-modal')">{{ t('Cancel') }}</button>
+        <button class="btn btn-gold" type="submit">{{ t('Save partner') }}</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

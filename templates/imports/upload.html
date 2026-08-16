@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Import listings') }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">02 · {{ t('Listings') }}</div>
+    <h1 class="page-title">{{ t('Import from a partner list') }}</h1>
+  </div>
+  <div class="actions">
+    <a class="btn" href="{{ url_for('imports.history') }}">{{ t('Import history') }}</a>
+    <a class="btn btn-quiet" href="{{ url_for('properties.index') }}">{{ t('Back to list') }}</a>
+  </div>
+</div>
+
+<div class="grid g-main">
+  <form method="post" enctype="multipart/form-data" class="card">
+    <div class="card-body">
+      <p class="muted" style="margin-top:0">
+        {{ t('Upload the Excel file a partner sent you. Every agency lays theirs out differently, so the system works out where the table starts and which column is which, then shows you what it found before anything is saved.') }}
+      </p>
+      <div class="field">
+        <label>{{ t('Partner spreadsheet') }}</label>
+        <input type="file" name="workbook" accept=".xlsx,.xlsm" required>
+        <span class="small faint">
+          {{ t('Excel .xlsx files. If a partner sends an old .xls, open it in Excel and use Save As to make an .xlsx first.') }}
+        </span>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-gold" type="submit">{{ t('Read the file') }}</button>
+    </div>
+  </form>
+
+  <div class="grid">
+    <div class="card">
+      <div class="card-head"><h3>{{ t('What it can work out') }}</h3></div>
+      <div class="card-body small muted">
+        <p style="margin-top:0">{{ t('Headings that sit several rows down under a logo. Unit numbers buried in codes like ARPQ02-B00-F01-A101. Rent written as 9000 qrs, sizes as 113 sqm. Studio, 1 BHK, Two Bedrooms and 3 Beds; 5 Baths all become bedroom counts. Vacant and Booked become statuses. Every sheet in the file is read separately.') }}</p>
+        <p style="margin-bottom:0">{{ t('Nothing is written until you press Import on the next screen.') }}</p>
+      </div>
+    </div>
+
+    {% if recent %}
+    <div class="card">
+      <div class="card-head"><h3>{{ t('Recent imports') }}</h3></div>
+      <div class="card-body" style="padding-top:6px">
+        {% for a in recent %}
+          <div class="feed-item">
+            <span class="feed-dot"></span>
+            <div class="stack">
+              <div class="small"><b>{{ a.user_name or 'System' }}</b></div>
+              <div class="small muted">{{ a.detail }}</div>
+              <div class="mono faint">{{ a.created_at | ago }}</div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

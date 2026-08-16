@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Dashboard') }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">{{ t('Today') }} · {{ t('Admin') if user.role == 'admin' else t('Agent') }}</div>
+    <h1 class="page-title">{{ t('Good to see you') }}, {{ user.name.split(' ')[0] }}</h1>
+  </div>
+  <div class="actions">
+    <a class="btn" href="{{ url_for('properties.form') }}">{{ t('Add listing') }}</a>
+    <a class="btn btn-gold" href="{{ url_for('leads.form') }}">{{ t('Capture lead') }}</a>
+  </div>
+</div>
+
+<div class="metrics">
+  <div class="metric">
+    <div class="label">{{ t('Total listings') }}</div>
+    <div class="value">{{ total_listings }}</div>
+    <div class="foot">{{ available }} {{ t('available now') }}</div>
+  </div>
+  <div class="metric">
+    <div class="label">{{ t('New leads today') }}</div>
+    <div class="value">{{ new_leads }}</div>
+    <div class="foot">{{ leads_week }} {{ t('in the last 7 days') }}</div>
+  </div>
+  <div class="metric">
+    <div class="label">{{ t('Follow-ups due today') }}</div>
+    <div class="value">{{ due_today|length }}</div>
+    <div class="foot">
+      {% if overdue %}<span style="color:var(--bad);font-weight:600">
+        {{ overdue|length }} {{ t('overdue') }}</span>
+      {% else %}{{ t('nothing overdue') }}{% endif %}
+    </div>
+  </div>
+  <div class="metric">
+    <div class="label">{{ t('Upcoming viewings') }}</div>
+    <div class="value">{{ viewings_count }}</div>
+    <div class="foot">{{ t('scheduled from today') }}</div>
+  </div>
+</div>
+
+<div class="grid g-main" style="margin-top:16px">
+
+  <div class="grid">
+    {% if overdue or due_today %}
+    <div class="card">
+      <div class="card-head">
+        <h3>{{ t('Needs a call today') }}</h3>
+        <a class="btn btn-quiet btn-sm" href="{{ url_for('leads.index', due='week') }}">
+          {{ t('This week') }}</a>
+      </div>
+      <div class="table-scroll">
+        <table class="table">
+          <tbody>
+          {% for l in overdue %}
+            <tr>
+              <td style="width:6px;padding:0;background:var(--bad)"></td>
+              <td><a href="{{ url_for('leads.detail', lid=l.id) }}"><b>{{ l.full_name }}</b></a>
+                <div class="small muted">{{ t(l.status) }}{% if l.phone %} · <span class="mono">{{ l.phone }}</span>{% endif %}</div></td>
+              <td><span class="tag tag-sold">{{ t('Overdue') }}</span></td>
+              <td class="right mono small nowrap">{{ l.next_follow_up | nice_date }}</td>
+              <td class="right nowrap">
+                {% if l.phone %}<a class="btn btn-sm" href="tel:{{ l.phone }}">{{ t('Call') }}</a>{% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+          {% for l in due_today %}
+            <tr>
+              <td style="width:6px;padding:0;background:var(--gold)"></td>
+              <td><a href="{{ url_for('leads.detail', lid=l.id) }}"><b>{{ l.full_name }}</b></a>
+                <div class="small muted">{{ t(l.status) }}{% if l.phone %} · <span class="mono">{{ l.phone }}</span>{% endif %}</div></td>
+              <td><span class="tag tag-reserved">{{ t('Today') }}</span></td>
+              <td class="right mono small nowrap">{{ l.next_follow_up | nice_time }}</td>
+              <td class="right nowrap">
+                {% if l.phone %}<a class="btn btn-sm" href="tel:{{ l.phone }}">{{ t('Call') }}</a>{% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if no_followup %}
+    <a class="card" href="{{ url_for('leads.index', due='none') }}" style="display:block">
+      <div class="card-body between">
+        <span><b>{{ no_followup }}</b> {{ t('open leads have no follow-up date') }}</span>
+        <span class="btn btn-sm">{{ t('Review them') }}</span>
+      </div>
+    </a>
+    {% endif %}
+
+    <div class="card">
+      <div class="card-head">
+        <h3>{{ t('Pipeline') }}</h3>
+        <a class="btn btn-quiet btn-sm" href="{{ url_for('leads.board') }}">{{ t('Open board') }}</a>
+      </div>
+      <div class="card-body">
+        <div class="chip-row">
+          {% for s in stages %}
+            <a class="chip {{ 'on' if pipeline.get(s) }}" href="{{ url_for('leads.board') }}">
+              {{ t(s) }} · <span class="mono">{{ pipeline.get(s, 0) }}</span>
+            </a>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>{{ t('Upcoming viewings') }}</h3></div>
+      {% if upcoming %}
+      <div class="table-scroll">
+        <table class="table">
+          <thead><tr><th>{{ t('When') }}</th><th>{{ t('Client') }}</th><th>{{ t('Property') }}</th>
+            <th>{{ t('Agent') }}</th><th></th></tr></thead>
+          <tbody>
+          {% for v in upcoming %}
+            <tr>
+              <td class="mono nowrap">{{ v.scheduled_at | nice_time }}</td>
+              <td><a href="{{ url_for('leads.detail', lid=v.lead_id) }}">{{ v.full_name or '—' }}</a></td>
+              <td class="muted">{{ v.prop_title or '—' }}</td>
+              <td class="muted">{{ v.agent_name or t('Unassigned') }}</td>
+              <td class="right">
+                <form method="post" action="{{ url_for('leads.viewing_done', vid=v.id) }}">
+                  <button class="btn btn-quiet btn-sm" type="submit">{{ t('Mark done') }}</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+        <div class="empty">
+          <span class="mark">◇</span>
+          {{ t('Nothing booked yet. Open a lead and schedule a viewing to see it here.') }}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="card-head">
+        <h3>{{ t('Commission this month') }}</h3>
+        <a class="btn btn-quiet btn-sm" href="{{ url_for('deals.index') }}">{{ t('Deals') }}</a>
+      </div>
+      <div class="card-body">
+        <div class="metric" style="padding:0;border:none">
+          <div class="value" style="font-size:38px">{{ currency }} {{ commission | money }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h3>{{ t('Team activity') }}</h3>
+        <a class="btn btn-quiet btn-sm" href="{{ url_for('main.activity') }}">{{ t('Full log') }}</a>
+      </div>
+      <div class="card-body" style="padding-top:4px">
+        {% if feed %}
+          {% for a in feed %}
+          <div class="feed-item">
+            <span class="feed-dot"></span>
+            <div class="stack">
+              <div><b>{{ a.user_name or 'System' }}</b> <span class="muted">{{ t(a.action) | lower }}</span></div>
+              {% if a.detail %}<div class="small muted">{{ a.detail }}</div>{% endif %}
+              <div class="mono faint">{{ a.created_at | ago }}</div>
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div class="empty"><span class="mark">◇</span>{{ t('Activity shows up here as the team works.') }}</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

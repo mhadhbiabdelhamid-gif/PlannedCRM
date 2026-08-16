@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Settings') }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">10 · {{ t('Admin') }}</div>
+    <h1 class="page-title">{{ t('Settings') }}</h1>
+  </div>
+</div>
+
+<div class="grid g-2" style="align-items:start">
+  <form method="post" class="card">
+    <div class="card-head"><h3>{{ t('Company details') }}</h3></div>
+    <div class="card-body">
+      <div class="field"><label>{{ t('Company name') }}</label>
+        <input type="text" name="company_name" value="{{ s.company_name or 'Planned Real Estate' }}"></div>
+      <div class="field"><label>{{ t('Tagline') }}</label>
+        <input type="text" name="tagline" value="{{ s.tagline or 'Property Consultants · Doha, Qatar' }}">
+        <span class="small faint">{{ t('Appears under the company name on exported sheets.') }}</span></div>
+      <div class="form-grid">
+        <div class="field"><label>{{ t('Currency code') }}</label>
+          <input type="text" name="currency" value="{{ s.currency or 'QAR' }}" maxlength="4"></div>
+        <div class="field"><label>{{ t('VAT / tax %') }}</label>
+          <input type="number" name="vat_percent" value="{{ s.vat_percent or 0 }}" step="any" inputmode="decimal"></div>
+        <div class="field"><label>{{ t('Default commission %') }}</label>
+          <input type="number" name="commission_pct" value="{{ s.commission_pct or '2.5' }}" step="any" inputmode="decimal"></div>
+        <div class="field"><label>{{ t('Phone') }}</label><input type="tel" name="phone" value="{{ s.phone }}"></div>
+        <div class="field"><label>{{ t('Second phone') }}</label><input type="tel" name="phone2" value="{{ s.phone2 }}"></div>
+        <div class="field"><label>{{ t('Email') }}</label><input type="email" name="email" value="{{ s.email }}"></div>
+        <div class="field"><label>{{ t('P.O. Box') }}</label><input type="text" name="po_box" value="{{ s.po_box }}"></div>
+        <div class="field"><label>{{ t('CR number') }}</label><input type="text" name="cr_number" value="{{ s.cr_number }}"></div>
+      </div>
+      <div class="field"><label>{{ t('Office address') }}</label>
+        <textarea name="address" style="min-height:70px">{{ s.address }}</textarea></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-gold" type="submit">{{ t('Save settings') }}</button></div>
+  </form>
+
+  <div class="grid">
+    <div class="card">
+      <div class="card-head"><h3>{{ t('Export data') }}</h3></div>
+      <div class="card-body">
+        <p class="small muted" style="margin-top:0">
+          CSV files open directly in Excel. Keep a copy off the server as your backup.</p>
+        <div class="inline" style="margin-bottom:10px">
+          <a class="btn btn-gold" href="{{ url_for('admin.export_workbook') }}">
+            {{ t('Excel workbook') }}</a>
+          <span class="small faint">{{ t('Branded, four sheets, ready to send') }}</span>
+        </div>
+        <div class="inline">
+          <a class="btn" href="{{ url_for('admin.export_leads') }}">{{ t('Leads') }}</a>
+          <a class="btn" href="{{ url_for('admin.export_properties') }}">{{ t('Properties') }}</a>
+          <a class="btn" href="{{ url_for('admin.export_deals') }}">{{ t('Deals') }}</a>
+          <a class="btn" href="{{ url_for('admin.export_owners') }}">{{ t('Owners') }}</a>
+        </div>
+      </div>
+    </div>
+
+    <form method="post" action="{{ url_for('admin.upload_logo') }}"
+          enctype="multipart/form-data" class="card">
+      <div class="card-head"><h3>{{ t('Branding') }}</h3></div>
+      <div class="card-body">
+        {% if logo_exists %}
+          <div class="inline" style="margin-bottom:12px">
+            <img src="{{ logo_url }}" alt="" style="width:56px;height:56px;object-fit:contain;
+                 background:var(--ink);padding:6px;border-radius:var(--radius)">
+            <span class="small muted">This is the logo in use right now.</span>
+          </div>
+        {% else %}
+          <p class="small muted" style="margin-top:0">
+            No logo uploaded yet, so the placeholder monogram is showing.</p>
+        {% endif %}
+        <div class="field">
+          <label>{{ t('Upload') }} — PNG, JPG, WEBP or SVG</label>
+          <input type="file" name="logo" accept="image/*" required>
+        </div>
+        <p class="small faint" style="margin:0">
+          Square works best, 256&times;256 or larger, transparent background. It replaces the
+          mark in the sidebar, on the sign-in screen and in the browser tab.
+        </p>
+      </div>
+      <div class="modal-foot"><button class="btn btn-gold" type="submit">{{ t('Save') }}</button></div>
+    </form>
+
+    <div class="card" id="backups">
+      <div class="card-head">
+        <h3>Backups</h3>
+        {% if backup_age is not none %}
+          <span class="tag tag-{{ 'available' if backup_age < 36 else 'reserved' }}">
+            {{ backup_age | round | int }}h ago</span>
+        {% else %}
+          <span class="tag tag-sold">none yet</span>
+        {% endif %}
+      </div>
+      <div class="card-body">
+        <p class="small muted" style="margin-top:0">
+          A copy is taken automatically once a day while the CRM is running, and the
+          last {{ backup_keep }} are kept. Download one now and then and keep it somewhere
+          that isn't this computer.
+        </p>
+
+        <div class="inline" style="margin-bottom:14px">
+          <a class="btn btn-gold" href="{{ url_for('admin.backup_download') }}">
+            Download everything</a>
+          <a class="btn" href="{{ url_for('admin.backup_download', uploads=0) }}">
+            Database only</a>
+          <form method="post" action="{{ url_for('admin.backup_now') }}" style="display:inline">
+            <button class="btn" type="submit">Back up now</button>
+          </form>
+        </div>
+
+        <p class="small faint" style="margin:0 0 10px">
+          <b>Download everything</b> is the one to keep — database, photos and documents in a
+          single zip, with restore instructions inside. <b>Database only</b> is much smaller
+          and fine for a quick daily copy.
+        </p>
+
+        <div class="hairline"></div>
+        <div class="eyebrow" style="margin-bottom:6px">Where backups are saved</div>
+        <p class="small muted" style="margin:0 0 10px">
+          A backup sitting on this computer won't help if this computer dies. Paste the
+          path of a OneDrive or Google Drive folder below and every backup is carried off
+          the machine automatically.
+        </p>
+        <form method="post" action="{{ url_for('admin.backup_folder_save') }}">
+          <div class="field">
+            <input type="text" name="backup_folder" value="{{ backup_custom }}"
+                   placeholder="{{ backup_default }}"
+                   style="font-family:var(--mono);font-size:13px">
+            <span class="small faint">
+              Leave empty to keep them on this computer. To get the path: open the folder in
+              File Explorer, click the address bar once so the text highlights, copy it, and
+              paste it here.
+            </span>
+          </div>
+          <button class="btn" type="submit">Save folder and test it</button>
+        </form>
+        <div class="hairline"></div>
+
+        {% if backup_list %}
+          <div class="eyebrow" style="margin-bottom:8px">Recent backups</div>
+          <div class="table-scroll">
+            <table class="table">
+              <tbody>
+              {% for name, size, when in backup_list %}
+                <tr>
+                  <td class="mono small">{{ when.strftime('%d %b %Y, %H:%M') }}</td>
+                  <td class="small muted">{{ 'automatic' if '-auto' in name else 'manual' }}</td>
+                  <td class="right mono small">{{ size | round | int }} KB</td>
+                  <td class="right">
+                    <a class="btn btn-quiet btn-sm"
+                       href="{{ url_for('admin.backup_file', name=name) }}">Download</a>
+                  </td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <p class="small faint mono" style="margin-top:10px;word-break:break-all">
+            {{ backup_folder }}</p>
+        {% else %}
+          <p class="small muted" style="margin:0">
+            No copies yet. The first automatic one is taken within a day of starting,
+            or press <b>Back up now</b>.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>Time zone</h3></div>
+      <div class="card-body small muted">
+        Times are shown in <b>{{ tz_label }}</b> (Doha) and stored in UTC. Change it with the
+        <span class="mono">TZ_OFFSET_HOURS</span> environment variable.
+      </div>
+    </div>
+  </div>
+</div>
+
+<form method="post" action="{{ url_for('admin.save_templates') }}" class="card"
+      style="margin-top:16px" id="templates">
+  <div class="card-head">
+    <h3>{{ t('WhatsApp message templates') }}</h3>
+    <span class="mono faint">{{ placeholders | join('  ') }}</span>
+  </div>
+  <div class="card-body">
+    <p class="small muted" style="margin-top:0">
+      These fill the WhatsApp buttons on lead and property pages. Anything in curly braces is
+      swapped for the real value — an unknown placeholder is simply left blank.
+    </p>
+    {% for key, text in templates.items() %}
+      <div class="field">
+        <label for="{{ key }}">{{ t(labels[key]) }}</label>
+        <textarea id="{{ key }}" name="{{ key }}" style="min-height:64px">{{ text }}</textarea>
+      </div>
+    {% endfor %}
+  </div>
+  <div class="modal-foot"><button class="btn btn-gold" type="submit">{{ t('Save templates') }}</button></div>
+</form>
+{% endblock %}

@@ -1,0 +1,24 @@
+<a class="prop-card" href="{{ url_for('properties.detail', pid=p.id) }}">
+  <div class="prop-thumb" {% if p.cover %}style="background-image:url('{{ url_for('main.uploaded_file', kind='images', filename=p.cover) }}')"{% endif %}>
+    {% if not p.cover %}<span class="ph">{{ p.prop_type[0] }}</span>{% endif %}
+    <div class="tags">
+      <span class="tag tag-{{ 'sale' if p.listing_type == 'Sale' else 'rent' }}">{{ t(p.listing_type) }}</span>
+      <span class="tag tag-{{ p.status|lower }}">{{ t(p.status) }}</span>
+      {% if p.is_own %}<span class="tag tag-sale">{{ t('Ours') }}</span>{% endif %}
+    </div>
+  </div>
+  <div class="prop-body">
+    <div class="mono faint">{{ p.ref }}</div>
+    <h4>{{ p.title }}</h4>
+    <div class="small muted">
+      {%- if p.unit_no %}{{ t('Flat') }} {{ p.unit_no }} · {% endif -%}
+      {{ p.area or p.address or '—' }}</div>
+    <div class="prop-price">{{ currency }} {{ p.price | money }}</div>
+    <div class="prop-meta">
+      <span>{{ t(p.prop_type) }}</span>
+      {% if p.bedrooms %}<span>{{ p.bedrooms }} {{ t('Bedrooms') }}</span>{% endif %}
+      {% if p.bathrooms %}<span>{{ p.bathrooms }} {{ t('Bathrooms') }}</span>{% endif %}
+      {% if p.size_sqm %}<span>{{ p.size_sqm | money }} m²</span>{% endif %}
+    </div>
+  </div>
+</a>

@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Search{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">{{ t('Quick find') }}</div>
+    <h1 class="page-title">{% if q %}{{ t('Results for') }} “{{ q }}”{% else %}{{ t('Search') }}{% endif %}</h1>
+  </div>
+</div>
+
+{% if not q %}
+  <div class="card"><div class="empty"><span class="mark">◇</span>
+    Type an address, a client name or a phone number in the bar above. Press <span class="mono">/</span> from anywhere to jump there.</div></div>
+{% else %}
+
+<div class="card" style="margin-bottom:16px">
+  <div class="card-head"><h3>{{ t('Properties') }}</h3><span class="mono faint">{{ props|length }}</span></div>
+  {% if props %}
+  <div class="table-scroll"><table class="table">
+    <tbody>
+    {% for p in props %}
+      <tr onclick="location.href='{{ url_for('properties.detail', pid=p.id) }}'" style="cursor:pointer">
+        <td class="mono faint">{{ p.ref }}</td>
+        <td><b>{{ p.title }}</b><div class="small muted">{{ p.address or p.area or '' }}</div></td>
+        <td><span class="tag tag-{{ p.status|lower }}">{{ t(p.status) }}</span></td>
+        <td class="right price">{{ currency }} {{ p.price | money }}</td>
+      </tr>
+    {% endfor %}
+    </tbody></table></div>
+  {% else %}<div class="card-body muted small">No listings matched.</div>{% endif %}
+</div>
+
+<div class="card" style="margin-bottom:16px">
+  <div class="card-head"><h3>{{ t('Leads') }}</h3><span class="mono faint">{{ leads|length }}</span></div>
+  {% if leads %}
+  <div class="table-scroll"><table class="table">
+    <tbody>
+    {% for l in leads %}
+      <tr onclick="location.href='{{ url_for('leads.detail', lid=l.id) }}'" style="cursor:pointer">
+        <td class="mono faint">{{ l.ref }}</td>
+        <td><b>{{ l.full_name }}</b><div class="small muted">{{ l.email or '' }}</div></td>
+        <td class="mono small">{{ l.phone or '—' }}</td>
+        <td><span class="tag tag-plain">{{ t(l.status) }}</span></td>
+        <td class="small muted">{{ l.agent_name or t('Unassigned') }}</td>
+      </tr>
+    {% endfor %}
+    </tbody></table></div>
+  {% else %}<div class="card-body muted small">No leads matched.</div>{% endif %}
+</div>
+
+{% if owners %}
+<div class="card">
+  <div class="card-head"><h3>{{ t('Owners') }}</h3><span class="mono faint">{{ owners|length }}</span></div>
+  <div class="table-scroll"><table class="table">
+    <tbody>
+    {% for o in owners %}
+      <tr><td><b>{{ o.name }}</b></td><td class="mono small">{{ o.phone or '—' }}</td>
+          <td class="small muted">{{ o.company or '' }}</td></tr>
+    {% endfor %}
+    </tbody></table></div>
+</div>
+{% endif %}
+
+{% endif %}
+{% endblock %}

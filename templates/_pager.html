@@ -1,0 +1,34 @@
+{% if pager.pages > 1 %}
+<div class="pager">
+  <span class="small muted">
+    {{ t('Showing') }} {{ pager.first }}–{{ pager.last }} {{ t('of') }} {{ pager.total }}
+  </span>
+  <div class="pager-links">
+    {% if pager.has_prev %}
+      <a class="btn btn-sm" href="{{ url_for(request.endpoint, page=pager.prev, **args) }}">
+        {{ t('Previous') }}</a>
+    {% else %}<span class="btn btn-sm" disabled>{{ t('Previous') }}</span>{% endif %}
+
+    {% if 1 not in pager.window %}
+      <a class="btn btn-sm" href="{{ url_for(request.endpoint, page=1, **args) }}">1</a>
+      <span class="faint">…</span>
+    {% endif %}
+
+    {% for p in pager.window %}
+      <a class="btn btn-sm {{ 'btn-dark' if p == pager.page }}"
+         href="{{ url_for(request.endpoint, page=p, **args) }}">{{ p }}</a>
+    {% endfor %}
+
+    {% if pager.pages not in pager.window %}
+      <span class="faint">…</span>
+      <a class="btn btn-sm" href="{{ url_for(request.endpoint, page=pager.pages, **args) }}">
+        {{ pager.pages }}</a>
+    {% endif %}
+
+    {% if pager.has_next %}
+      <a class="btn btn-sm" href="{{ url_for(request.endpoint, page=pager.next, **args) }}">
+        {{ t('Next') }}</a>
+    {% else %}<span class="btn btn-sm" disabled>{{ t('Next') }}</span>{% endif %}
+  </div>
+</div>
+{% endif %}

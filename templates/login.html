@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="{{ lang }}" dir="{{ 'rtl' if rtl else 'ltr' }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ t('Sign in') }} · {{ company }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;450;500;550;600;700&family=IBM+Plex+Sans+Arabic:wght@400;450;500;600;700&family=IBM+Plex+Mono:wght@400;450;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+<div class="login-wrap">
+
+  <section class="login-art">
+    <div class="inline">
+      {% if logo_exists %}
+        <img src="{{ logo_url }}" alt="" style="width:64px;height:64px;object-fit:contain">
+      {% else %}
+        <span class="rail-mark">P</span>
+      {% endif %}
+      <span class="eyebrow" style="color:var(--gold)">{{ company }}</span>
+    </div>
+
+    <h1>{{ t('Every listing, ') }}<em>{{ t('every lead') }}</em>{{ t(', in one place.') }}</h1>
+
+    <div class="mono" style="color:#8A8578;letter-spacing:.12em">
+      {{ t('INTERNAL SYSTEM · DOHA, QATAR') }}
+    </div>
+  </section>
+
+  <section class="login-form">
+    <div class="login-box">
+      <div class="eyebrow">{{ t('Team access') }}</div>
+      <h2 class="page-title" style="margin-top:6px">{{ t('Sign in') }}</h2>
+      <div class="hairline"></div>
+
+      {% with msgs = get_flashed_messages(with_categories=true) %}
+        {% for cat, m in msgs %}<div class="flash {{ cat }}">{{ t(m) }}</div>{% endfor %}
+      {% endwith %}
+
+      <form method="post">
+        <div class="field">
+          <label for="email">{{ t('Work email') }}</label>
+          <input id="email" type="email" name="email" required autofocus autocomplete="username">
+        </div>
+        <div class="field">
+          <label for="password">{{ t('Password') }}</label>
+          <input id="password" type="password" name="password" required autocomplete="current-password">
+        </div>
+        <button class="btn btn-gold" style="width:100%;justify-content:center" type="submit">
+          {{ t('Sign in') }}
+        </button>
+      </form>
+
+      <div class="lang-switch" style="margin-top:22px">
+        {% for code, label in langs.items() %}
+          <a class="{{ 'on' if lang == code }}" href="{{ url_for('set_language', code=code) }}"
+             style="border-color:var(--line);color:var(--muted)">{{ label }}</a>
+        {% endfor %}
+      </div>
+
+      <p class="small muted" style="margin-top:16px">
+        {{ t('No account yet? An admin creates it for you under Team members.') }}
+      </p>
+    </div>
+  </section>
+
+</div>
+</body>
+</html>

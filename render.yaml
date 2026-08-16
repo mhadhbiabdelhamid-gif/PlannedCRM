@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: planned-crm
+    runtime: python
+    plan: starter          # a paid plan is required for the persistent disk below
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn "app:create_app()" --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: HTTPS_ONLY
+        value: "1"
+      - key: TZ_OFFSET_HOURS
+        value: "3"
+      - key: DATABASE_PATH
+        value: /var/data/crm.sqlite3
+      - key: UPLOAD_FOLDER
+        value: /var/data/uploads
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+    disk:
+      name: crm-data
+      mountPath: /var/data
+      sizeGB: 5

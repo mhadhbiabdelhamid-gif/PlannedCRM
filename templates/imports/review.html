@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Check the import') }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">{{ filename }}</div>
+    <h1 class="page-title">{{ t('Check before importing') }}</h1>
+  </div>
+  <div class="actions">
+    <form method="post" action="{{ url_for('imports.discard', token=token) }}">
+      <button class="btn btn-quiet" type="submit">{{ t('Discard this file') }}</button>
+    </form>
+  </div>
+</div>
+
+<form method="post" action="{{ url_for('imports.commit', token=token) }}">
+<input type="hidden" name="filename" value="{{ filename }}">
+
+<div class="card" style="margin-bottom:16px">
+  <div class="card-head"><h3>{{ t('Applies to every sheet') }}</h3></div>
+  <div class="card-body">
+    <div class="filters">
+      <div class="field">
+        <label>{{ t('Sale or rent') }}</label>
+        <select name="listing_type">
+          {% for tp in listing_types %}<option value="{{ tp }}">{{ t(tp) }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>{{ t('Owner') }}</label>
+        <select name="owner_id">
+          <option value="">{{ t('None') }}</option>
+          {% for o in owners %}<option value="{{ o.id }}">{{ o.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>{{ t('Assign to agent') }}</label>
+        <select name="agent_id">
+          <option value="">{{ t('Leave in the shared pool') }}</option>
+          {% for a in agents %}
+            <option value="{{ a.id }}" {{ 'selected' if a.id == user.id }}>{{ a.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field span-2">
+        <label>{{ t('What should this import do') }}</label>
+        <select name="mode" id="mode" onchange="modeChanged()">
+          {% for key, label in modes %}
+            <option value="{{ key }}" {{ 'selected' if key == 'update' }}>{{ t(label) }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>{{ t('Partner or list name') }}</label>
+        <input type="text" name="source" list="source-list"
+               value="{{ suggested_source }}" required>
+      </div>
+      <div class="field">
+        <label>{{ t('Units missing from this file') }}</label>
+        <select name="missing">
+          <option value="">{{ t('Leave them as they are') }}</option>
+          <option value="Rented" selected>{{ t('Mark as Rented — no longer available') }}</option>
+          <option value="Reserved">{{ t('Mark as Reserved') }}</option>
+          {% if user.role == 'admin' %}
+            <option value="delete">{{ t('Delete them') }}</option>
+          {% endif %}
+        </select>
+      </div>
+    </div>
+    <div id="mode-note" class="small" style="margin:12px 0 0;padding:10px 12px;
+         border-radius:var(--radius);background:var(--gold-tint);border:1px solid var(--line)"></div>
+
+    <p class="small faint" style="margin:10px 0 0">
+      {{ t('Imported listings are marked as third-party, never as your own stock. A unit counts as already existing when the building and flat number both match. Every import is recorded in the history and can be rolled back.') }}
+    </p>
+    <p class="small faint" style="margin:6px 0 0">
+      <b>{{ t('Partner or list name') }}</b>
+      {{ t('groups every import from the same partner. Keep it the same each month and the system can tell which units they have dropped from the new list — those are handled by the setting beside it. Only listings imported under this same name are ever touched; anything typed in by hand is left alone.') }}
+    </p>
+  </div>
+</div>
+
+{% for sheet in sheets %}
+<div class="card" style="margin-bottom:16px">
+  <div class="card-head">
+    <h3>
+      <label class="inline" style="gap:8px;font-weight:700">
+        <input type="checkbox" name="use__{{ sheet.name }}" value="1"
+               {{ 'checked' if sheet.count }} style="width:auto">
+        {{ sheet.name }}
+      </label>
+    </h3>
+    <span class="mono {{ 'muted' if sheet.count else 'faint' }}">
+      {{ sheet.count }} {{ t('listings found') }} · {{ t('header at row') }} {{ sheet.header_row }}
+    </span>
+  </div>
+
+  <div class="card-body">
+    {% if not sheet.count %}
+      <p class="muted small" style="margin:0">
+        {{ t("Nothing recognisable on this sheet. If it does hold listings, correct the header row and columns below, or leave it unticked.") }}
+      </p>
+    {% endif %}
+
+    <div class="filters" style="margin-bottom:14px">
+      <div class="field">
+        <label>{{ t('Header is on row') }}</label>
+        <input type="number" name="header__{{ sheet.name }}" value="{{ sheet.header_row }}" min="1">
+      </div>
+      <div class="field">
+        <label>{{ t('Building, if the file has no column for it') }}</label>
+        <input type="text" name="building__{{ sheet.name }}" value="{{ sheet.context if 'building_no' not in sheet.mapping else '' }}">
+      </div>
+      <div class="field">
+        <label>{{ t('Location / district') }}</label>
+        <input type="text" name="area__{{ sheet.name }}" list="area-list" value="">
+      </div>
+      <div class="field" style="grid-column:span 2">
+        <label>{{ t('Blank cells') }}</label>
+        <label class="inline small" style="gap:7px;text-transform:none;letter-spacing:0">
+          <input type="checkbox" name="filldown__{{ sheet.name }}" value="1" checked style="width:auto">
+          {{ t('Copy blank building, location and description from the row above') }}
+        </label>
+        <label class="inline small" style="gap:7px;text-transform:none;letter-spacing:0;margin-top:5px">
+          <input type="checkbox" name="fillnumbers__{{ sheet.name }}" value="1" style="width:auto">
+          {{ t('Also copy blank rent, bedrooms and size') }}
+        </label>
+      </div>
+    </div>
+
+    <div class="eyebrow" style="margin-bottom:8px">{{ t('Which column is which') }}</div>
+    <div class="filters" style="margin-bottom:16px">
+      {% for field, label in fields %}
+        <div class="field">
+          <label>{{ t(label) }}</label>
+          <select name="map__{{ sheet.name }}__{{ field }}">
+            <option value="0">{{ t('Not in this file') }}</option>
+            {% for head in sheet.headers %}
+              <option value="{{ loop.index }}"
+                {{ 'selected' if sheet.mapping.get(field) == loop.index }}>
+                {{ loop.index }}. {{ head or t('(no heading)') }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+      {% endfor %}
+    </div>
+
+    {% if sheet.flagged %}
+      <div class="inline" style="gap:8px;margin-bottom:12px;padding:10px 12px;
+           border-radius:var(--radius);background:rgba(180,119,42,.08);
+           border:1px solid rgba(180,119,42,.3)">
+        <b class="small">{{ sheet.flagged }} {{ t('rows need a look') }}</b>
+        <span class="small muted">{{ sheet.issue_summary }}</span>
+      </div>
+      <p class="small faint" style="margin:-6px 0 12px">
+        {{ t('These are still imported — nothing is thrown away. Fix them on the listing afterwards, or correct the file and import again.') }}
+      </p>
+    {% endif %}
+
+    {% if sheet.preview %}
+      <div class="eyebrow" style="margin-bottom:8px">
+        {{ t('First rows as they will be saved') }}
+      </div>
+      <div class="table-scroll">
+        <table class="table">
+          <thead><tr>
+            <th>{{ t('Building') }}</th><th>{{ t('Flat') }}</th><th>{{ t('Title') }}</th>
+            <th>{{ t('Type') }}</th><th class="right">{{ t('Beds') }}</th>
+            <th class="right">{{ t('Baths') }}</th><th class="right">{{ t('Size') }}</th>
+            <th class="right">{{ t('Price') }}</th><th>{{ t('Status') }}</th>
+          </tr></thead>
+          <tbody>
+          {% for l in sheet.preview %}
+            <tr>
+              <td>{{ l.building_no or '—' }}</td>
+              <td class="mono">{{ l.unit_no or '—' }}</td>
+              <td class="small">{{ l.title }}</td>
+              <td class="small muted">{{ t(l.prop_type) }}</td>
+              <td class="right mono">{{ l.bedrooms if l.bedrooms is not none else '—' }}</td>
+              <td class="right mono">{{ l.bathrooms or '—' }}</td>
+              <td class="right mono">{{ l.size_sqm | money if l.size_sqm else '—' }}</td>
+              <td class="right price">{{ l.price | money if l.price else '—' }}</td>
+              <td><span class="tag tag-{{ l.status|lower }}">{{ t(l.status) }}</span>
+                {% if l.issues %}
+                  <div class="small" style="color:var(--warn)">{{ l.issues | join(', ') }}</div>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if sheet.count > sheet.preview|length %}
+        <p class="small faint" style="margin:10px 0 0">
+          {{ t('Showing the first') }} {{ sheet.preview|length }} {{ t('of') }} {{ sheet.count }}.
+          {{ t('All of them will be imported.') }}
+        </p>
+      {% endif %}
+    {% endif %}
+  </div>
+</div>
+{% endfor %}
+
+<datalist id="source-list">
+  {% for src in sources %}<option value="{{ src }}"></option>{% endfor %}
+</datalist>
+
+<datalist id="area-list">
+  {% for a in areas %}<option value="{{ a }}"></option>{% endfor %}
+</datalist>
+
+<div class="card">
+  <div class="card-body between">
+    <span class="muted">
+      {{ t('Ticked sheets will be imported. Anything you change above is used instead of what was guessed.') }}
+    </span>
+    <button class="btn btn-gold" type="submit">{{ t('Import these listings') }}</button>
+  </div>
+</div>
+
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  var NOTES = {
+    preview: {{ t('Nothing is written. You will get a report of what would change, recorded in the import history.') | tojson }},
+    add: {{ t('Only units we do not already have are added. Existing listings keep their current prices and status.') | tojson }},
+    update: {{ t('Existing units are refreshed from the file and new ones are added. This is the usual choice for a monthly partner update.') | tojson }},
+    replace: {{ t('WARNING: every listing previously imported under this partner name that is not in the new file will be deleted. Listings typed in by hand are never touched. This can be rolled back from the import history.') | tojson }}
+  };
+
+  function modeChanged() {
+    var mode = document.getElementById('mode').value;
+    var note = document.getElementById('mode-note');
+    note.textContent = NOTES[mode];
+    var danger = mode === 'replace';
+    note.style.background = danger ? 'rgba(138,58,58,.08)' : 'var(--gold-tint)';
+    note.style.borderColor = danger ? 'rgba(138,58,58,.35)' : 'var(--line)';
+    var go = document.getElementById('go');
+    go.textContent = mode === 'preview'
+      ? {{ t('Run the preview') | tojson }}
+      : (danger ? {{ t('Replace these listings') | tojson }}
+                : {{ t('Import these listings') | tojson }});
+    go.classList.toggle('btn-danger', danger);
+  }
+
+  document.querySelector('form[action*="commit"]').addEventListener('submit', function (e) {
+    if (document.getElementById('mode').value !== 'replace') return;
+    var name = document.querySelector('[name=source]').value || 'this partner';
+    if (!window.confirm(
+        {{ t('Replace mode will DELETE listings previously imported for') | tojson }}
+        + ' "' + name + '" '
+        + {{ t('that are not in this file. Continue?') | tojson }})) {
+      e.preventDefault();
+    }
+  });
+
+  modeChanged();
+</script>
+{% endblock %}
