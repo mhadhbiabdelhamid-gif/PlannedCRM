@@ -8,7 +8,7 @@ from flask import (Blueprint, current_app, g, jsonify, redirect,
 from auth import is_admin, login_required, sees_all
 from db import execute, local_now, local_today, paginate, query, utc_day_bounds
 
-bp = Blueprint("main", __name__)
+main = Blueprint("main", __name__)
 
 @main.route('/')
 def index():
