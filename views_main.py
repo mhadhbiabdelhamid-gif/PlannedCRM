@@ -10,11 +10,6 @@ from db import execute, local_now, local_today, paginate, query, utc_day_bounds
 
 bp = Blueprint("main", __name__)
 
-@bp.route('/')
-def index():
-    # This tells the server what to show when visiting the main web address
-    return redirect(url_for('properties.index'))
-
 @bp.route("/")
 @login_required
 def dashboard():
