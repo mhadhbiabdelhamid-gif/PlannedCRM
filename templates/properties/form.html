@@ -41,6 +41,18 @@
         </span>
       </div>
       <div class="field">
+        <label for="floor_no">{{ t('Floor') }}</label>
+        <input id="floor_no" type="text" name="floor_no" list="floor-list"
+               value="{{ p.floor_no if p and p.floor_no else '' }}"
+               placeholder="{{ t('e.g. 12, Ground, Mezzanine') }}">
+        <datalist id="floor-list">
+          <option value="G"></option><option value="M"></option>
+          {% for n in range(1, 41) %}<option value="{{ n }}"></option>{% endfor %}
+          <option value="PH"></option>
+        </datalist>
+      </div>
+
+      <div class="field">
         <label for="unit_no">{{ t('Flat number') }}</label>
         <input id="unit_no" type="text" name="unit_no"
                value="{{ p.unit_no if p and p.unit_no else '' }}"
@@ -106,6 +118,18 @@
       </div>
 
       <div class="field">
+        <label for="partner_id">{{ t('Partner') }}</label>
+        <select id="partner_id" name="partner_id">
+          <option value="">{{ t('None') }}</option>
+          {% for pa in partners %}
+            <option value="{{ pa.id }}" {{ 'selected' if p and p.partner_id == pa.id }}>
+              {{ pa.name }}{% if pa.partner_type %} — {{ t(pa.partner_type) }}{% endif %}</option>
+          {% endfor %}
+        </select>
+        <span class="small faint">{{ t('If this listing came from a partner agency rather than a direct owner.') }}</span>
+      </div>
+
+      <div class="field">
         <label for="agent_id">{{ t('Agent in charge') }}</label>
         <select id="agent_id" name="agent_id">
           <option value="">{{ t('Unassigned') }}</option>
@@ -141,6 +165,33 @@
         </label>
         <span class="small faint">
           {{ t('Tick this for your own stock. Exports keep these on a separate sheet from third-party listings.') }}
+        </span>
+      </div>
+
+      <div class="field span-2">
+        <label>{{ t('Extra rooms') }}</label>
+        {% set chosen = (p.extras or '') if p else '' %}
+        <div class="chip-row" style="margin-bottom:8px">
+          {% for room in extra_rooms %}
+            <label class="chip {{ 'on' if room in chosen }}" style="cursor:pointer">
+              <input type="checkbox" name="extras" value="{{ room }}"
+                     style="width:auto;margin-inline-end:5px"
+                     {{ 'checked' if room in chosen }}>
+              {{ t(room) }}
+            </label>
+          {% endfor %}
+        </div>
+        {% set known = extra_rooms | join(',') %}
+        {% set other = [] %}
+        {% for piece in chosen.split(',') %}
+          {% if piece.strip() and piece.strip() not in extra_rooms %}
+            {% set _ = other.append(piece.strip()) %}
+          {% endif %}
+        {% endfor %}
+        <input type="text" name="extras_other" value="{{ other | join(', ') }}"
+               placeholder="{{ t('Anything else — separate with commas') }}">
+        <span class="small faint">
+          {{ t('Rooms the flat has besides bedrooms. Key features below is for the building and the view.') }}
         </span>
       </div>
 

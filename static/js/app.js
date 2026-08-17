@@ -187,3 +187,63 @@
     }
   });
 })();
+
+/* ---------------------------------------------- bulk selection on listings */
+(function () {
+  "use strict";
+  var bar = document.getElementById("bulkbar");
+  if (!bar) return;
+
+  var form = document.getElementById("bulkform");
+
+  function boxes() {
+    return Array.prototype.slice.call(
+      document.querySelectorAll('input[name="ids"][form="bulkform"]'));
+  }
+
+  window.bulkChanged = function () {
+    var picked = boxes().filter(function (b) { return b.checked; });
+    document.getElementById("pick-count").textContent = picked.length;
+    bar.hidden = picked.length === 0;
+    var all = document.getElementById("pick-all");
+    all.checked = picked.length > 0 && picked.length === boxes().length;
+    all.indeterminate = picked.length > 0 && picked.length < boxes().length;
+    refreshGo();
+  };
+
+  window.pickAll = function (state) {
+    boxes().forEach(function (b) { b.checked = state; });
+    window.bulkChanged();
+  };
+
+  function refreshGo() {
+    var action = document.getElementById("bulk-action").value;
+    var picked = boxes().some(function (b) { return b.checked; });
+    var needsValue = ["status", "listing_type", "agent", "owner", "partner"]
+      .indexOf(action) !== -1;
+    var go = document.getElementById("bulk-go");
+    go.disabled = !picked || !action;
+    go.classList.toggle("btn-danger", action === "delete");
+    go.textContent = action === "delete" ? "Delete" : "Apply";
+    // only the select that belongs to the chosen action may submit a value
+    document.querySelectorAll(".bulk-value").forEach(function (sel) {
+      var mine = sel.id === "bulk-" + action;
+      sel.hidden = !mine;
+      sel.disabled = !mine;
+    });
+    if (!needsValue) return;
+  }
+
+  window.bulkAction = refreshGo;
+
+  form.addEventListener("submit", function (e) {
+    var picked = boxes().filter(function (b) { return b.checked; });
+    if (!picked.length) { e.preventDefault(); return; }
+    if (document.getElementById("bulk-action").value === "delete") {
+      var msg = form.dataset.confirmDelete + "\n\n" + picked.length + " selected.";
+      if (!window.confirm(msg)) { e.preventDefault(); }
+    }
+  });
+
+  refreshGo();
+})();

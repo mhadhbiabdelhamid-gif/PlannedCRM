@@ -177,6 +177,70 @@
   </div>
 </div>
 
+<form method="post" action="{{ url_for('admin.save_email') }}" class="card"
+      style="margin-top:16px" id="email">
+  <div class="card-head">
+    <h3>{{ t('Email account') }}</h3>
+    {% if mail_ready %}<span class="tag tag-available">{{ t('Set up') }}</span>
+    {% else %}<span class="tag tag-plain">{{ t('Not set up') }}</span>{% endif %}
+  </div>
+  <div class="card-body">
+    <p class="small muted" style="margin-top:0">
+      {{ t('Connect the company mailbox and the CRM can send from it — messages come from your own address and appear in its Sent folder.') }}
+    </p>
+
+    <div class="field">
+      <label>{{ t('Provider') }}</label>
+      <select onchange="fillPreset(this.value)" style="max-width:320px">
+        <option value="">{{ t('Choose to fill in the server details') }}</option>
+        {% for key, preset in mail_presets.items() %}
+          <option value="{{ key }}">{{ preset.label }}</option>
+        {% endfor %}
+      </select>
+      <span class="small faint" id="preset-note"></span>
+    </div>
+
+    <div class="form-grid">
+      <div class="field"><label>{{ t('Server address') }}</label>
+        <input type="text" name="smtp_host" id="smtp_host" value="{{ mail.smtp_host }}"
+               placeholder="smtp.gmail.com"></div>
+      <div class="field"><label>{{ t('Port') }}</label>
+        <input type="number" name="smtp_port" id="smtp_port" value="{{ mail.smtp_port or '587' }}"></div>
+      <div class="field"><label>{{ t('Security') }}</label>
+        <select name="smtp_security" id="smtp_security">
+          <option value="starttls" {{ 'selected' if mail.smtp_security != 'ssl' }}>STARTTLS (587)</option>
+          <option value="ssl" {{ 'selected' if mail.smtp_security == 'ssl' }}>SSL (465)</option>
+          <option value="none" {{ 'selected' if mail.smtp_security == 'none' }}>{{ t('None') }}</option>
+        </select></div>
+      <div class="field"><label>{{ t('Username') }}</label>
+        <input type="text" name="smtp_user" value="{{ mail.smtp_user }}"
+               placeholder="info@plannedrealestate.com" autocomplete="off"></div>
+      <div class="field"><label>{{ t('Password') }}</label>
+        <input type="password" name="smtp_pass" autocomplete="new-password"
+               placeholder="{{ t('Saved — leave blank to keep it') if mail.has_password else t('App password') }}">
+        <span class="small faint">{{ t('Gmail and Microsoft 365 need an App Password, not the normal one.') }}</span></div>
+      <div class="field"><label>{{ t('Send from') }}</label>
+        <input type="email" name="smtp_from" value="{{ mail.smtp_from }}"
+               placeholder="info@plannedrealestate.com">
+        <span class="small faint">{{ t('Leave blank to use the username.') }}</span></div>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn" type="submit" name="test" value="1">{{ t('Save and test the connection') }}</button>
+    <button class="btn btn-gold" type="submit">{{ t('Save email settings') }}</button>
+  </div>
+</form>
+
+{% if mail_ready %}
+<form method="post" action="{{ url_for('admin.test_send') }}" class="card" style="margin-top:16px">
+  <div class="card-body inline">
+    <span class="small muted">{{ t('Send a test message to') }}</span>
+    <input type="email" name="to" value="{{ user.email }}" style="max-width:280px">
+    <button class="btn" type="submit">{{ t('Send test') }}</button>
+  </div>
+</form>
+{% endif %}
+
 <form method="post" action="{{ url_for('admin.save_templates') }}" class="card"
       style="margin-top:16px" id="templates">
   <div class="card-head">
@@ -197,4 +261,19 @@
   </div>
   <div class="modal-foot"><button class="btn btn-gold" type="submit">{{ t('Save templates') }}</button></div>
 </form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  var PRESETS = {{ mail_presets | tojson }};
+  function fillPreset(key) {
+    var note = document.getElementById('preset-note');
+    if (!key || !PRESETS[key]) { note.textContent = ''; return; }
+    var p = PRESETS[key];
+    if (p.host) document.getElementById('smtp_host').value = p.host;
+    document.getElementById('smtp_port').value = p.port;
+    document.getElementById('smtp_security').value = p.security;
+    note.textContent = p.note;
+  }
+</script>
 {% endblock %}

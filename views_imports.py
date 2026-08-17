@@ -166,9 +166,9 @@ def commit(token):
         # whatever the reviewer chose on screen wins over the guess
         mapping = {}
         for field, _label in importer.FIELDS:
-            raw = d.get(f"map__{name}__{field}", "")
-            if raw.isdigit() and int(raw) > 0:
-                mapping[field] = int(raw)
+            chosen = importer.as_columns(d.getlist(f"map__{name}__{field}"))
+            if chosen:
+                mapping[field] = chosen
 
         defaults = {
             "building_no": d.get(f"building__{name}", "").strip(),
@@ -219,8 +219,8 @@ def commit(token):
                 item["prop_type"], item["listing_type"], item["status"],
                 item["price"] or 0, item["size_sqm"], item["bedrooms"],
                 item["bathrooms"], item["description"], item["features"],
-                owner_id, agent_id, building, unit, item["map_url"], 0,
-                source, stamp,
+                owner_id, agent_id, building, item.get("floor_no", ""), unit,
+                item.get("extras", ""), item["map_url"], 0, source, stamp,
             )
 
             if existing:
@@ -229,18 +229,18 @@ def commit(token):
                     "UPDATE properties SET title=?,address=?,area=?,prop_type=?,"
                     "listing_type=?,status=?,price=?,size_sqm=?,bedrooms=?,bathrooms=?,"
                     "description=?,features=?,owner_id=COALESCE(?, owner_id),"
-                    "agent_id=COALESCE(?, agent_id),building_no=?,unit_no=?,"
-                    "map_url=?,is_own=?,import_source=?,imported_at=?,"
-                    "updated_at=? WHERE id=?",
+                    "agent_id=COALESCE(?, agent_id),building_no=?,floor_no=?,"
+                    "unit_no=?,extras=?,map_url=?,is_own=?,import_source=?,"
+                    "imported_at=?,updated_at=? WHERE id=?",
                     values + (stamp, existing["id"]))
                 updated += 1
             else:
                 new_id = execute(
                     "INSERT INTO properties (title,address,area,prop_type,listing_type,"
                     "status,price,size_sqm,bedrooms,bathrooms,description,features,"
-                    "owner_id,agent_id,building_no,unit_no,map_url,is_own,"
-                    "import_source,imported_at,ref,created_at,updated_at)"
-                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "owner_id,agent_id,building_no,floor_no,unit_no,extras,map_url,"
+                    "is_own,import_source,imported_at,ref,created_at,updated_at)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     values + (next_ref("PRE-P", "properties"), stamp, stamp))
                 undo["inserted"].append(new_id)
                 added += 1

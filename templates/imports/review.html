@@ -129,13 +129,16 @@
       </div>
     </div>
 
-    <div class="eyebrow" style="margin-bottom:8px">{{ t('Which column is which') }}</div>
+    <div class="eyebrow" style="margin-bottom:4px">{{ t('Which column is which') }}</div>
+    <p class="small faint" style="margin:0 0 10px">
+      {{ t('Pick more than one column for a field by holding Ctrl (Cmd on a Mac). Descriptions and addresses are joined together; for numbers the first column that has a value is used. Leave a field with nothing selected if the file does not have it.') }}
+    </p>
     <div class="filters" style="margin-bottom:16px">
       {% for field, label in fields %}
         <div class="field">
           <label>{{ t(label) }}</label>
-          <select name="map__{{ sheet.name }}__{{ field }}">
-            <option value="0">{{ t('Not in this file') }}</option>
+          <select name="map__{{ sheet.name }}__{{ field }}" multiple size="4"
+                  style="height:auto;padding:4px">
             {% for head in sheet.headers %}
               <option value="{{ loop.index }}"
                 {{ 'selected' if sheet.mapping.get(field) == loop.index }}>

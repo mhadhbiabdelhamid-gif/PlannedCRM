@@ -1,14 +1,16 @@
 {% extends "base.html" %}
-{% block title %}Owners{% endblock %}
+{% block title %}{{ t('Owners') }}{% endblock %}
 
 {% block content %}
 <div class="page-head">
   <div>
-    <div class="eyebrow">05 · {{ t('Directory') }}</div>
+    <div class="eyebrow">{{ t('Directory') }}</div>
     <h1 class="page-title">{{ t('Owners') }}</h1>
   </div>
   <div class="actions">
-    {% if user.role == 'admin' %}<a class="btn" href="{{ url_for('admin.export_owners') }}">{{ t('Export CSV') }}</a>{% endif %}
+    {% if user.role in ('admin','manager') %}
+      <a class="btn" href="{{ url_for('admin.export_owners') }}">{{ t('Export CSV') }}</a>
+    {% endif %}
     <button class="btn btn-gold" onclick="openModal('owner-modal')">{{ t('Add owner') }}</button>
   </div>
 </div>
@@ -23,30 +25,51 @@
 </form>
 
 {% if rows %}
-<div class="card table-scroll">
-  <table class="table">
-    <thead><tr><th>{{ t('Name') }}</th><th>{{ t('Company') }}</th><th>{{ t('Phone') }}</th><th>{{ t('Email') }}</th>
-      <th class="right">{{ t('Properties') }}</th><th></th></tr></thead>
-    <tbody>
-    {% for o in rows %}
-      <tr>
-        <td><b>{{ o.name }}</b>{% if o.notes %}<div class="small muted">{{ o.notes }}</div>{% endif %}</td>
-        <td class="muted">{{ o.company or '—' }}</td>
-        <td class="mono small">{{ o.phone or '—' }}</td>
-        <td class="small muted">{{ o.email or '—' }}</td>
-        <td class="right mono">{{ o.prop_count }}</td>
-        <td class="right nowrap">
-          <button class="btn btn-quiet btn-sm" onclick='openModal("owner-modal", {{ {"id":o.id,"name":o.name,"company":o.company,"phone":o.phone,"email":o.email,"notes":o.notes} | tojson }})'>{{ t('Edit') }}</button>
-          {% if user.role == 'admin' %}
-          <form method="post" action="{{ url_for('contacts.delete_owner', oid=o.id) }}"
-                style="display:inline" data-confirm="Remove {{ o.name }} from the directory?">
-            <button class="btn btn-quiet btn-sm btn-danger" type="submit">{{ t('Delete') }}</button></form>
+<div class="contact-grid">
+  {% for o in rows %}
+    <div class="contact-card">
+      <div class="top">
+        <span class="contact-photo">
+          {% if o.photo %}
+            <img src="{{ url_for('main.uploaded_file', kind='contacts', filename=o.photo) }}" alt="">
+          {% else %}{{ o.name | initials }}{% endif %}
+        </span>
+        <div style="min-width:0">
+          <b>{{ o.name }}</b>
+          {% if o.company %}<div class="small muted">{{ o.company }}</div>{% endif %}
+          <span class="tag tag-plain">{{ o.prop_count }} {{ t('properties') }}</span>
+          {% if o.available_count %}
+            <span class="tag tag-available">{{ o.available_count }} {{ t('available') }}</span>
           {% endif %}
-        </td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
+        </div>
+      </div>
+
+      <dl>
+        <div class="line"><span>{{ t('Phone') }}</span><span class="mono">{{ o.phone or '—' }}</span></div>
+        <div class="line"><span>{{ t('Email') }}</span><span>{{ o.email or '—' }}</span></div>
+        {% if o.address %}<div class="line"><span>{{ t('Address') }}</span><span>{{ o.address }}</span></div>{% endif %}
+      </dl>
+      {% if o.notes %}<p class="small muted" style="margin:0">{{ o.notes }}</p>{% endif %}
+
+      <div class="foot">
+        {% if o.phone %}<a class="btn btn-sm" href="tel:{{ o.phone }}">{{ t('Call') }}</a>{% endif %}
+        {% if o.prop_count %}
+          <a class="btn btn-sm" href="{{ url_for('properties.index', q=o.name) }}">{{ t('Properties') }}</a>
+        {% endif %}
+        <button class="btn btn-sm btn-quiet"
+          onclick='openModal("owner-modal", {{ {"id":o.id,"name":o.name,"company":o.company,"phone":o.phone,"email":o.email,"address":o.address,"notes":o.notes} | tojson }})'>
+          {{ t('Edit') }}</button>
+        <button class="btn btn-sm btn-quiet"
+          onclick='openPhoto("owner-photo", {{ url_for("contacts.owner_photo", oid=o.id) | tojson }}, {{ o.name | tojson }}, {{ (o.photo or "") | tojson }})'>
+          {{ t('Photo') }}</button>
+        {% if user.role == 'admin' %}
+          <form method="post" action="{{ url_for('contacts.delete_owner', oid=o.id) }}"
+                data-confirm="{{ t('Remove') }} {{ o.name }}?">
+            <button class="btn btn-sm btn-quiet btn-danger" type="submit">{{ t('Delete') }}</button></form>
+        {% endif %}
+      </div>
+    </div>
+  {% endfor %}
 </div>
 {% else %}
   <div class="card"><div class="empty"><span class="mark">◇</span>
@@ -64,10 +87,11 @@
         <input type="hidden" name="id">
         <div class="field"><label>{{ t('Name') }}</label><input type="text" name="name" required></div>
         <div class="form-grid">
+          <div class="field"><label>{{ t('Company') }}</label><input type="text" name="company"></div>
           <div class="field"><label>{{ t('Phone') }}</label><input type="tel" name="phone"></div>
-          <div class="field"><label>{{ t('Email') }}</label><input type="email" name="email"></div>
+          <div class="field span-2"><label>{{ t('Email') }}</label><input type="email" name="email"></div>
+          <div class="field span-2"><label>{{ t('Address') }}</label><input type="text" name="address"></div>
         </div>
-        <div class="field"><label>{{ t('Company') }}</label><input type="text" name="company"></div>
         <div class="field"><label>{{ t('Notes') }}</label><textarea name="notes" style="min-height:70px"></textarea></div>
       </div>
       <div class="modal-foot">
@@ -77,4 +101,6 @@
     </form>
   </div>
 </div>
+
+{% include "contacts/_photo_modal.html" %}
 {% endblock %}

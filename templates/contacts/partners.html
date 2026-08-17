@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Partners{% endblock %}
+{% block title %}{{ t('Partners') }}{% endblock %}
 
 {% block content %}
 <div class="page-head">
   <div>
-    <div class="eyebrow">06 · {{ t('Directory') }}</div>
+    <div class="eyebrow">{{ t('Directory') }}</div>
     <h1 class="page-title">{{ t('Partners') }}</h1>
   </div>
   <div class="actions">
@@ -20,28 +20,51 @@
 </div>
 
 {% if rows %}
-<div class="card table-scroll">
-  <table class="table">
-    <thead><tr><th>{{ t('Name') }}</th><th>{{ t('Type') }}</th><th>{{ t('Phone') }}</th><th>{{ t('Email') }}</th><th></th></tr></thead>
-    <tbody>
-    {% for p in rows %}
-      <tr>
-        <td><b>{{ p.name }}</b>{% if p.notes %}<div class="small muted">{{ p.notes }}</div>{% endif %}</td>
-        <td><span class="tag tag-plain">{{ t(p.partner_type) }}</span></td>
-        <td class="mono small">{{ p.phone or '—' }}</td>
-        <td class="small muted">{{ p.email or '—' }}</td>
-        <td class="right nowrap">
-          <button class="btn btn-quiet btn-sm" onclick='openModal("partner-modal", {{ {"id":p.id,"name":p.name,"partner_type":p.partner_type,"phone":p.phone,"email":p.email,"notes":p.notes} | tojson }})'>{{ t('Edit') }}</button>
-          {% if user.role == 'admin' %}
-          <form method="post" action="{{ url_for('contacts.delete_partner', pid=p.id) }}"
-                style="display:inline" data-confirm="Remove {{ p.name }}?">
-            <button class="btn btn-quiet btn-sm btn-danger" type="submit">{{ t('Delete') }}</button></form>
+<div class="contact-grid">
+  {% for p in rows %}
+    <div class="contact-card">
+      <div class="top">
+        <span class="contact-photo">
+          {% if p.photo %}
+            <img src="{{ url_for('main.uploaded_file', kind='contacts', filename=p.photo) }}" alt="">
+          {% else %}{{ p.name | initials }}{% endif %}
+        </span>
+        <div style="min-width:0">
+          <b>{{ p.name }}</b>
+          {% if p.company %}<div class="small muted">{{ p.company }}</div>{% endif %}
+          <span class="tag tag-plain">{{ t(p.partner_type) }}</span>
+          {% if p.prop_count %}
+            <span class="tag tag-sale">{{ p.prop_count }} {{ t('properties') }}</span>
           {% endif %}
-        </td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
+        </div>
+      </div>
+
+      <dl>
+        <div class="line"><span>{{ t('Phone') }}</span><span class="mono">{{ p.phone or '—' }}</span></div>
+        <div class="line"><span>{{ t('Email') }}</span><span>{{ p.email or '—' }}</span></div>
+        {% if p.address %}<div class="line"><span>{{ t('Address') }}</span><span>{{ p.address }}</span></div>{% endif %}
+      </dl>
+      {% if p.notes %}<p class="small muted" style="margin:0">{{ p.notes }}</p>{% endif %}
+
+      <div class="foot">
+        {% if p.phone %}<a class="btn btn-sm" href="tel:{{ p.phone }}">{{ t('Call') }}</a>{% endif %}
+        {% if p.prop_count %}
+          <a class="btn btn-sm" href="{{ url_for('properties.index', q=p.name) }}">{{ t('Properties') }}</a>
+        {% endif %}
+        <button class="btn btn-sm btn-quiet"
+          onclick='openModal("partner-modal", {{ {"id":p.id,"name":p.name,"partner_type":p.partner_type,"company":p.company,"phone":p.phone,"email":p.email,"address":p.address,"notes":p.notes} | tojson }})'>
+          {{ t('Edit') }}</button>
+        <button class="btn btn-sm btn-quiet"
+          onclick='openPhoto("owner-photo", {{ url_for("contacts.partner_photo", pid=p.id) | tojson }}, {{ p.name | tojson }}, {{ (p.photo or "") | tojson }})'>
+          {{ t('Photo') }}</button>
+        {% if user.role == 'admin' %}
+          <form method="post" action="{{ url_for('contacts.delete_partner', pid=p.id) }}"
+                data-confirm="{{ t('Remove') }} {{ p.name }}?">
+            <button class="btn btn-sm btn-quiet btn-danger" type="submit">{{ t('Delete') }}</button></form>
+        {% endif %}
+      </div>
+    </div>
+  {% endfor %}
 </div>
 {% else %}
   <div class="card"><div class="empty"><span class="mark">◇</span>
@@ -63,8 +86,10 @@
             <select name="partner_type">
               {% for pt in partner_types %}<option value="{{ pt }}">{{ t(pt) }}</option>{% endfor %}
             </select></div>
+          <div class="field"><label>{{ t('Company') }}</label><input type="text" name="company"></div>
           <div class="field"><label>{{ t('Phone') }}</label><input type="tel" name="phone"></div>
-          <div class="field"><label>{{ t('Email') }}</label><input type="email" name="email"></div>
+          <div class="field span-2"><label>{{ t('Email') }}</label><input type="email" name="email"></div>
+          <div class="field span-2"><label>{{ t('Address') }}</label><input type="text" name="address"></div>
         </div>
         <div class="field"><label>{{ t('Notes') }}</label><textarea name="notes" style="min-height:70px"></textarea></div>
       </div>
@@ -75,4 +100,6 @@
     </form>
   </div>
 </div>
+
+{% include "contacts/_photo_modal.html" %}
 {% endblock %}

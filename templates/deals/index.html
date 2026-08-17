@@ -35,6 +35,19 @@
   </div>
 </div>
 
+{% if mine %}
+<div class="metrics" style="margin-top:12px">
+  <div class="metric">
+    <div class="label">{{ t('Your share earned') }}</div>
+    <div class="value" style="font-size:34px">{{ currency }} {{ mine.earned | money }}</div>
+  </div>
+  <div class="metric">
+    <div class="label">{{ t('Your share collected') }}</div>
+    <div class="value" style="font-size:34px">{{ currency }} {{ mine.collected | money }}</div>
+  </div>
+</div>
+{% endif %}
+
 <div class="chip-row" style="margin:16px 0">
   <a class="chip {{ 'on' if not status }}" href="{{ url_for('deals.index') }}">{{ t('All') }}</a>
   {% for s in deal_status %}
@@ -58,10 +71,24 @@
             {% else %}—{% endif %}</td>
         <td>{% if d.lead_id %}<a href="{{ url_for('leads.detail', lid=d.lead_id) }}">{{ d.lead_name }}</a>
             {% else %}—{% endif %}</td>
-        <td class="small muted">{{ d.agent_name or t('Unassigned') }}</td>
-        <td class="right price">{{ currency }} {{ d.value | money }}</td>
+        <td class="small muted">{{ d.agent_names or d.agent_name or t('Unassigned') }}
+          {% if d.agent_count and d.agent_count > 1 %}
+            <div class="small faint">{{ d.agent_count }} {{ t('agents') }}</div>
+          {% endif %}</td>
+        <td class="right price">{{ currency }} {{ d.value | money }}
+          {% if d.asking_price and d.value and d.value < d.asking_price %}
+            <div class="small faint">{{ t('asking') }} {{ d.asking_price | money }}</div>
+          {% endif %}
+          {% if d.free_months %}
+            <div class="small faint">{{ d.free_months }} {{ t('months free') }}</div>
+          {% endif %}</td>
         <td class="right price">{{ currency }} {{ d.commission_amt | money }}
-          <div class="small faint mono">{{ d.commission_pct }}%</div></td>
+          <div class="small faint mono">
+            {%- if d.commission_basis == 'fixed' -%}{{ t('fixed') }}
+            {%- else -%}{{ d.commission_pct }}%
+              {%- if d.commission_basis == 'annual_rent' %} {{ t('of contract') }}
+              {%- elif d.commission_basis == 'monthly_rent' %} {{ t('of monthly') }}{% endif -%}
+            {%- endif -%}</div></td>
         <td><span class="tag tag-{{ 'available' if d.status == 'Collected' else ('sold' if d.status == 'Cancelled' else 'reserved') }}">{{ t(d.status) }}</span>
           {% if d.closed_at %}<div class="small faint">{{ d.closed_at | nice_date }}</div>{% endif %}</td>
         <td class="right nowrap">

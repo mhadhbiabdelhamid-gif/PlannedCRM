@@ -1,0 +1,142 @@
+{# Standalone page for testing. To fold it into the CRM, drop everything
+   outside .wrap and extend your base template instead. Note that Jinja parses
+   its tags inside HTML comments too, so use Jinja comments for these notes. #}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Listing intake &middot; Planned Real Estate</title>
+<style>
+  :root {
+    --ink: #17181a;
+    --panel: #1f2124;
+    --line: #33363b;
+    --gold: #c9a227;
+    --text: #e8e6e1;
+    --muted: #9a9691;
+    --flag: #d98324;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 32px 20px; background: var(--ink); color: var(--text);
+    font: 15px/1.55 "Segoe UI", system-ui, sans-serif;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 20px; font-weight: 600; letter-spacing: .01em; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 24px; }
+  textarea {
+    width: 100%; min-height: 190px; padding: 14px; resize: vertical;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+    color: var(--text); font: inherit;
+  }
+  textarea:focus, button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .row { display: flex; gap: 12px; align-items: center; margin-top: 12px; }
+  button {
+    background: var(--gold); color: #17181a; border: 0; border-radius: 6px;
+    padding: 10px 20px; font: 600 14px inherit; cursor: pointer;
+  }
+  button:disabled { opacity: .5; cursor: default; }
+  .status { color: var(--muted); font-size: 13px; }
+  .status.bad { color: #e0685f; }
+  .warn {
+    background: #2a2318; border: 1px solid #5a4a1e; border-radius: 6px;
+    padding: 12px 14px; margin-bottom: 20px; font-size: 13px;
+  }
+  h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .08em;
+       color: var(--muted); font-weight: 600; margin: 40px 0 12px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--gold);
+    border-radius: 6px; padding: 14px 16px; margin-bottom: 10px;
+  }
+  .card a { color: var(--text); text-decoration: none; font-weight: 600; }
+  .card a:hover { color: var(--gold); }
+  .meta { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .flag { color: var(--flag); font-size: 13px; margin-top: 6px; }
+  .dupe { color: #e0685f; font-size: 13px; margin-top: 6px; }
+  .empty { color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Listing intake</h1>
+  <p class="sub">Paste a message from an owner or partner agency. Arabic or English, one unit or many.</p>
+
+  {% if key_missing %}
+  <div class="warn">
+    No API key found for <strong>{{ provider }}</strong>. Set
+    {% if provider == 'gemini' %}GEMINI_API_KEY{% else %}ANTHROPIC_API_KEY{% endif %}
+    on this computer and restart the server.
+  </div>
+  {% endif %}
+
+  <textarea id="raw" dir="auto" placeholder="Paste the WhatsApp or email message here..."></textarea>
+  <div class="row">
+    <button id="go">Read message</button>
+    <span class="status" id="status"></span>
+  </div>
+
+  <h2>Waiting for review</h2>
+  {% if drafts %}
+    {% for d in drafts %}
+    <div class="card">
+      <a href="{{ url_for('intake.review', draft_id=d.id) }}" dir="auto">
+        {{ d.data.title_en or 'Untitled listing' }}
+      </a>
+      <div class="meta" dir="auto">
+        {{ d.data.area or 'area unknown' }} &middot;
+        {% if d.data.price %}{{ '{:,.0f}'.format(d.data.price) }} QAR{% if d.data.price_period %} / {{ d.data.price_period }}{% endif %}{% else %}no price{% endif %}
+        &middot; {{ d.data.source_name or 'source unknown' }}
+      </div>
+      {% if d.data.review_flags %}
+        <div class="flag">Needs a look: {{ d.data.review_flags | join('; ') }}</div>
+      {% endif %}
+      {% if d.data.duplicates %}
+        <div class="dupe">
+          Possible duplicate of
+          {% for dup in d.data.duplicates %}#{{ dup.property_id }} ({{ dup.reason }}){% if not loop.last %}, {% endif %}{% endfor %}
+        </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  {% else %}
+    <p class="empty">Nothing pending. Paste a message above to add listings.</p>
+  {% endif %}
+
+</div>
+<script>
+  const btn = document.getElementById('go');
+  const box = document.getElementById('raw');
+  const out = document.getElementById('status');
+
+  btn.addEventListener('click', async () => {
+    const text = box.value.trim();
+    if (!text) { out.className = 'status bad'; out.textContent = 'Paste a message first.'; return; }
+    btn.disabled = true;
+    out.className = 'status';
+    out.textContent = 'Reading...';
+    try {
+      const res = await fetch('{{ url_for("intake.parse") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ raw_text: text })
+      });
+      const data = await res.json();
+      if (data.error) {
+        out.className = 'status bad';
+        out.textContent = data.error;
+      } else {
+        out.textContent = data.count + ' listing(s) ready for review.';
+        location.reload();
+      }
+    } catch (err) {
+      out.className = 'status bad';
+      out.textContent = 'Could not reach the server.';
+    } finally {
+      btn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

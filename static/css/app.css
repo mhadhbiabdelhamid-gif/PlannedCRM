@@ -28,7 +28,7 @@
   --cool:       #4A5A6E;
   --bad:        #8A3A3A;
 
-  --rail:       252px;
+  --rail:       268px;
   --radius:     4px;
   --radius-lg:  6px;
 
@@ -140,8 +140,8 @@ h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -.015em;
 .rail-brand {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 24px 20px 22px;
+  gap: 15px;
+  padding: 26px 18px 24px;
   border-bottom: 1px solid var(--ink-line);
   position: relative;
 }
@@ -156,20 +156,25 @@ h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -.015em;
 }
 
 .rail-brand img {
-  width: 56px; height: 56px;
+  width: 84px; height: 84px;
   object-fit: contain;
-  flex: 0 0 56px;
+  flex: 0 0 84px;
 }
 
+/* when the logo is this size the wordmark beside it becomes clutter */
+.rail-brand.big-logo { flex-direction: column; gap: 10px; text-align: center; }
+.rail-brand.big-logo img { width: 132px; height: 132px; flex: none; }
+.rail-brand.big-logo .stack-name { display: none; }
+
 .rail-mark {
-  width: 56px; height: 56px;
-  flex: 0 0 56px;
+  width: 84px; height: 84px;
+  flex: 0 0 84px;
   display: grid; place-items: center;
   border: 1px solid var(--gold);
   border-radius: var(--radius);
   color: var(--gold);
   font-family: var(--display);
-  font-size: 26px;
+  font-size: 38px;
   font-weight: 600;
   letter-spacing: -.04em;
 }
@@ -1180,4 +1185,164 @@ body[lang="ar"],
 
 @media (max-width: 860px) {
   .pager { justify-content: center; }
+}
+
+
+/* ---- owner and partner directory cards */
+.contact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--s4);
+}
+
+.contact-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--s4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  transition: border-color .15s, box-shadow .15s;
+}
+
+.contact-card:hover { border-color: var(--gold); box-shadow: var(--shadow); }
+.contact-card .top { display: flex; gap: var(--s3); align-items: center; }
+.contact-card .top b { font-size: 16px; font-weight: 600; display: block; line-height: 1.3; }
+
+.contact-photo {
+  width: 60px; height: 60px;
+  flex: 0 0 60px;
+  border-radius: var(--radius);
+  object-fit: cover;
+  background: var(--ink);
+  display: grid;
+  place-items: center;
+  color: var(--gold);
+  font-weight: 600;
+  font-size: 18px;
+  overflow: hidden;
+}
+
+.contact-photo img { width: 100%; height: 100%; object-fit: cover; }
+
+.contact-card dl { margin: 0; display: grid; gap: 5px; }
+.contact-card .line { display: flex; justify-content: space-between; gap: 10px; font-size: 13.5px; }
+.contact-card .line span:first-child { color: var(--faint); }
+
+.contact-card .foot {
+  border-top: 1px solid var(--line-soft);
+  padding-top: var(--s3);
+  margin-top: auto;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 860px) {
+  .contact-grid { grid-template-columns: 1fr; }
+  .rail-brand.big-logo img { width: 96px; height: 96px; }
+}
+
+/* ---- company grouping on the listings page */
+.group-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: 0 0 10px;
+  margin: var(--s5) 0 var(--s3);
+  border-bottom: 1px solid var(--line);
+}
+
+.group-head:first-child { margin-top: 0; }
+
+.group-head.ours {
+  border-bottom-color: var(--gold);
+  border-bottom-width: 2px;
+}
+
+.group-photo {
+  width: 42px; height: 42px;
+  flex: 0 0 42px;
+  border-radius: var(--radius);
+  object-fit: contain;
+  background: var(--ink);
+  padding: 3px;
+}
+
+.group-head .mono { margin-left: auto; }
+[dir="rtl"] .group-head .mono { margin-left: 0; margin-right: auto; }
+
+/* a stand-in photo is dimmed, so nobody mistakes it for the property */
+.prop-thumb.is-standin { position: relative; }
+
+.prop-thumb.is-standin::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(11, 11, 13, .55);
+}
+
+.standin-note {
+  position: absolute;
+  bottom: 8px; left: 8px; right: 8px;
+  z-index: 1;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--gold-lift);
+  text-align: center;
+}
+
+/* ---- bulk selection on the listings page */
+.bulkbar {
+  position: sticky;
+  top: 60px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  margin-bottom: var(--s4);
+  background: var(--ink);
+  color: #fff;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.bulkbar select { height: 32px; padding: 0 9px; font-size: 13px; }
+.bulkbar .small.faint { color: #97928A; }
+.bulkbar input[type=checkbox] { width: auto; accent-color: var(--gold); }
+.bulkbar #pick-count { font-weight: 700; color: var(--gold); }
+
+.prop-wrap { position: relative; }
+
+.prop-wrap .pick {
+  position: absolute;
+  top: 10px; right: 10px;
+  z-index: 3;
+  width: 28px; height: 28px;
+  display: grid; place-items: center;
+  background: rgba(255,255,255,.94);
+  border-radius: var(--radius);
+  box-shadow: 0 1px 3px rgba(0,0,0,.25);
+  cursor: pointer;
+}
+
+[dir="rtl"] .prop-wrap .pick { right: auto; left: 10px; }
+
+.prop-wrap .pick input,
+td.pick input { width: 16px; height: 16px; accent-color: var(--gold-deep); cursor: pointer; }
+
+.prop-wrap:has(input:checked) .prop-card { border-color: var(--gold); box-shadow: var(--shadow); }
+.prop-wrap:has(input:checked) .pick { background: var(--gold); }
+
+tr:has(td.pick input:checked) { background: var(--gold-tint) !important; }
+
+td.pick { text-align: center; }
+
+@media (max-width: 860px) {
+  .bulkbar { position: static; }
 }

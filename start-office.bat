@@ -8,9 +8,9 @@ if not exist ".venv\Scripts\python.exe" set NEEDVENV=1
 
 REM A moved .venv still has the old path baked in, so test it before trusting it.
 if "%NEEDVENV%"=="0" (
-    ".venv\Scripts\python.exe" -c "import flask, waitress" >nul 2>&1
+    ".venv\Scripts\python.exe" -c "import flask, waitress, openpyxl" >nul 2>&1
     if errorlevel 1 (
-        echo The virtual environment is from the old folder location. Rebuilding...
+        echo The virtual environment is out of date or from another folder. Rebuilding...
         rmdir /s /q ".venv"
         set NEEDVENV=1
     )

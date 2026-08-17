@@ -5,3 +5,4 @@ instance/
 .venv/
 venv/
 .DS_Store
+instance/ai_keys.env 

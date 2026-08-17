@@ -292,6 +292,40 @@ def mark_contacted(lid):
     return redirect(url_for("leads.detail", lid=lid) + "#history")
 
 
+@bp.route("/<int:lid>/email", methods=("POST",))
+@login_required
+def send_email(lid):
+    import mailer
+    l = query("SELECT l.*, p.title AS prop_title, p.price, p.building_no, p.unit_no,"
+              " p.area FROM leads l LEFT JOIN properties p ON p.id = l.property_id"
+              " WHERE l.id = ?", (lid,), one=True)
+    if l is None or not can_edit(l):
+        flash("That lead belongs to another agent.", "error")
+        return redirect(url_for("leads.board"))
+
+    to = request.form.get("to", "").strip() or (l["email"] or "")
+    subject = request.form.get("subject", "").strip()
+    body = request.form.get("body", "").strip()
+    if not body:
+        flash("Write something before sending.", "error")
+        return redirect(url_for("leads.detail", lid=lid))
+
+    ok, message = mailer.send(to, subject, body,
+                              from_name=g.user["name"], reply_to=g.user["email"])
+    if ok:
+        stamp = now()
+        execute("INSERT INTO comments (entity_type, entity_id, user_id, body, created_at)"
+                " VALUES ('lead',?,?,?,?)",
+                (lid, g.user["id"], f"Email — {subject}\n\n{body}", stamp))
+        execute("UPDATE leads SET last_contact_at = ?, updated_at = ? WHERE id = ?",
+                (stamp, stamp, lid))
+        if l["status"] == "New":
+            execute("UPDATE leads SET status = 'Contacted' WHERE id = ?", (lid,))
+        log(g.user["id"], "Sent an email", "lead", lid, f"{to}: {subject}")
+    flash(message, "ok" if ok else "error")
+    return redirect(url_for("leads.detail", lid=lid) + "#history")
+
+
 @bp.route("/<int:lid>/claim", methods=("POST",))
 @login_required
 def claim(lid):

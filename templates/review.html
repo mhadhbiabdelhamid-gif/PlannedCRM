@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Review draft &middot; Planned Real Estate</title>
+<style>
+  :root {
+    --ink: #17181a; --panel: #1f2124; --line: #33363b;
+    --gold: #c9a227; --text: #e8e6e1; --muted: #9a9691; --flag: #d98324;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 32px 20px; background: var(--ink); color: var(--text);
+         font: 15px/1.55 "Segoe UI", system-ui, sans-serif; }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  a.back { color: var(--muted); font-size: 13px; text-decoration: none; }
+  a.back:hover { color: var(--gold); }
+  h1 { font-size: 20px; font-weight: 600; margin: 10px 0 20px; }
+  .cols { display: grid; grid-template-columns: 1fr 300px; gap: 24px; align-items: start; }
+  @media (max-width: 760px) { .cols { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line);
+           border-radius: 6px; padding: 16px; }
+  .raw { white-space: pre-wrap; font-size: 13px; color: var(--muted); max-height: 420px; overflow: auto; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+  @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } }
+  label { display: block; font-size: 12px; text-transform: uppercase;
+          letter-spacing: .06em; color: var(--muted); margin-bottom: 4px; }
+  input, select, textarea {
+    width: 100%; padding: 8px 10px; background: #17181a; color: var(--text);
+    border: 1px solid var(--line); border-radius: 4px; font: inherit;
+  }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--gold); outline-offset: 1px; }
+  .field.wide { grid-column: 1 / -1; }
+  .check label.inline { display: flex; align-items: center; gap: 8px;
+    text-transform: none; letter-spacing: 0; font-size: 14px; color: var(--text); }
+  .check input { width: auto; }
+  .missing input, .missing select { border-color: var(--flag); }
+  .alert { border-radius: 6px; padding: 12px 14px; font-size: 13px; margin-bottom: 16px; }
+  .alert.flag { background: #2a2318; border: 1px solid #5a4a1e; }
+  .alert.dupe { background: #2b1c1b; border: 1px solid #6a2f2a; }
+  .actions { display: flex; gap: 12px; margin-top: 24px; }
+  button { border: 0; border-radius: 6px; padding: 11px 22px; font: 600 14px inherit; cursor: pointer; }
+  .save { background: var(--gold); color: #17181a; }
+  .drop { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+  .drop:hover { color: #e0685f; border-color: #6a2f2a; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <a class="back" href="{{ url_for('intake.index') }}">&larr; Back to intake</a>
+  <h1 dir="auto">{{ data.title_en or 'Review draft' }}</h1>
+
+  {% if data.review_flags %}
+  <div class="alert flag">Check before saving: {{ data.review_flags | join('; ') }}</div>
+  {% endif %}
+  {% if data.duplicates %}
+  <div class="alert dupe">
+    Already in the system:
+    {% for dup in data.duplicates %}property #{{ dup.property_id }} ({{ dup.reason }}){% if not loop.last %}, {% endif %}{% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="cols">
+    <form method="post" action="{{ url_for('intake.approve', draft_id=draft.id) }}" class="panel">
+      <div class="grid">
+        {% macro field(name, label_text, wide=false) %}
+          <div class="field {% if wide %}wide{% endif %} {% if not data.get(name) %}missing{% endif %}">
+            <label for="{{ name }}">{{ label_text }}</label>
+            <input id="{{ name }}" name="{{ name }}" dir="auto"
+                   value="{{ data.get(name) if data.get(name) is not none else '' }}">
+          </div>
+        {% endmacro %}
+
+        <div class="field wide">
+          <label for="title">Title</label>
+          <input id="title" name="title" dir="auto" value="{{ data.title_en or '' }}">
+        </div>
+
+        <div class="field">
+          <label for="listing_type">Rent or sale</label>
+          <select id="listing_type" name="listing_type">
+            {% for opt in ['', 'rent', 'sale'] %}
+            <option value="{{ opt }}" {% if data.listing_type == opt %}selected{% endif %}>{{ opt or '—' }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {{ field('property_type', 'Property type') }}
+        {{ field('area', 'Area') }}
+        {{ field('building', 'Building') }}
+        {{ field('floor', 'Floor') }}
+        {{ field('unit', 'Unit') }}
+        {{ field('bedrooms', 'Bedrooms') }}
+        {{ field('bathrooms', 'Bathrooms') }}
+        {{ field('size_sqm', 'Size (sqm)') }}
+        {{ field('price', 'Price (QAR)') }}
+
+        <div class="field">
+          <label for="price_period">Price period</label>
+          <select id="price_period" name="price_period">
+            {% for opt in ['', 'monthly', 'yearly', 'total'] %}
+            <option value="{{ opt }}" {% if data.price_period == opt %}selected{% endif %}>{{ opt or '—' }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="furnishing">Furnishing</label>
+          <select id="furnishing" name="furnishing">
+            {% for opt in ['', 'furnished', 'semi_furnished', 'unfurnished'] %}
+            <option value="{{ opt }}" {% if data.furnishing == opt %}selected{% endif %}>{{ opt or '—' }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="source_type">Listed by</label>
+          <select id="source_type" name="source_type">
+            {% for opt in ['', 'owner', 'agency'] %}
+            <option value="{{ opt }}" {% if data.source_type == opt %}selected{% endif %}>{{ opt or '—' }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {{ field('source_name', 'Owner / agency name') }}
+        {{ field('contact_phone', 'Contact') }}
+        {{ field('available_from', 'Available from') }}
+        {{ field('amenities', 'Amenities', wide=true) }}
+        {{ field('notes', 'Notes', wide=true) }}
+        <div class="field wide check">
+          <label for="is_own" class="inline">
+            <input type="checkbox" id="is_own" name="is_own" value="1">
+            Company listing — show first in results
+          </label>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button type="submit" class="save">Add to listings</button>
+      </div>
+    </form>
+
+    <div>
+      <div class="panel">
+        <label>Original message</label>
+        <div class="raw" dir="auto">{{ draft.raw_text }}</div>
+      </div>
+      <form method="post" action="{{ url_for('intake.reject', draft_id=draft.id) }}" class="actions">
+        <button type="submit" class="drop">Discard draft</button>
+      </form>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

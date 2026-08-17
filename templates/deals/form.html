@@ -22,6 +22,7 @@
               {{ p.ref }} — {{ p.title }}</option>
           {% endfor %}
         </select>
+        <span class="small faint" id="askhint"></span>
       </div>
       <div class="field">
         <label for="lead_id">{{ t('Client') }}</label>
@@ -36,43 +37,13 @@
       </div>
 
       <div class="field">
-        <label for="agent_id">{{ t('Agent') }}</label>
-        <select id="agent_id" name="agent_id">
-          <option value="">{{ t('Unassigned') }}</option>
-          {% for a in agents %}
-            <option value="{{ a.id }}"
-              {{ 'selected' if (d and d.agent_id == a.id) or (prefill.get('agent_id') == a.id) }}>
-              {{ a.name }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="field">
         <label for="deal_type">{{ t('Type') }}</label>
-        <select id="deal_type" name="deal_type">
+        <select id="deal_type" name="deal_type" onchange="typeChanged()">
           {% for tp in listing_types %}
             <option value="{{ tp }}"
               {{ 'selected' if (d and d.deal_type == tp) or (prefill.get('deal_type') == tp) }}>{{ t(tp) }}</option>
           {% endfor %}
         </select>
-      </div>
-
-      <div class="field">
-        <label for="value">{{ t('Deal value') }} ({{ currency }})</label>
-        <input id="value" type="number" name="value" step="any" min="0" inputmode="decimal"
-               oninput="calc()" value="{{ d.value | round(2) if d else (prefill.get('value') or '') }}">
-      </div>
-      <div class="field">
-        <label for="commission_pct">{{ t('Commission %') }}</label>
-        <input id="commission_pct" type="number" name="commission_pct" step="any" min="0"
-               inputmode="decimal" oninput="calc()"
-               value="{{ d.commission_pct if d else default_pct }}">
-      </div>
-
-      <div class="field">
-        <label for="commission_amt">{{ t('Commission amount') }} ({{ currency }})</label>
-        <input id="commission_amt" type="number" name="commission_amt" step="any" min="0"
-               inputmode="decimal" value="{{ d.commission_amt | round(2) if d else '' }}">
-        <span class="small faint">{{ t('Worked out from the percentage — type over it to set your own figure.') }}</span>
       </div>
       <div class="field">
         <label for="status">{{ t('Status') }}</label>
@@ -84,15 +55,103 @@
       </div>
 
       <div class="field">
+        <label for="value">{{ t('Agreed amount') }} ({{ currency }})</label>
+        <input id="value" type="number" name="value" step="any" min="0" inputmode="decimal"
+               oninput="calc()" value="{{ d.value | round(2) if d else (prefill.get('value') or '') }}">
+        <span class="small faint" id="valuehint">{{ t('What was actually agreed — may differ from the asking price.') }}</span>
+      </div>
+      <div class="field">
         <label for="closed_at">{{ t('Closed on') }}</label>
         <input id="closed_at" type="datetime-local" name="closed_at"
                value="{{ d.closed_at | local_input if d and d.closed_at else today }}">
       </div>
+    </div>
+  </div>
+
+  <div class="card-body" id="leasebox" style="border-top:1px solid var(--line)">
+    <div class="eyebrow">{{ t('Lease terms') }}</div>
+    <div class="form-grid">
+      <div class="field">
+        <label for="term_months">{{ t('Lease length (months)') }}</label>
+        <input id="term_months" type="number" name="term_months" step="1" min="0"
+               inputmode="numeric" oninput="calc()"
+               value="{{ d.term_months if d and d.term_months else 12 }}">
+      </div>
+      <div class="field">
+        <label for="free_months">{{ t('Free months') }}</label>
+        <input id="free_months" type="number" name="free_months" step="0.5" min="0"
+               inputmode="decimal" oninput="calc()"
+               value="{{ d.free_months if d and d.free_months else 0 }}">
+        <span class="small faint">{{ t('Half months are allowed.') }}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card-body" style="border-top:1px solid var(--line)">
+    <div class="eyebrow">{{ t('Commission') }}</div>
+    <div class="form-grid">
+      <div class="field">
+        <label for="commission_basis">{{ t('Worked out as') }}</label>
+        <select id="commission_basis" name="commission_basis" onchange="basisChanged()">
+          <option value="monthly_rent" {{ 'selected' if d and d.commission_basis == 'monthly_rent' }}>{{ t('% of one month rent') }}</option>
+          <option value="annual_rent"  {{ 'selected' if d and d.commission_basis == 'annual_rent' }}>{{ t('% of the whole contract') }}</option>
+          <option value="sale_price"   {{ 'selected' if d and d.commission_basis == 'sale_price' }}>{{ t('% of the sale price') }}</option>
+          <option value="fixed"        {{ 'selected' if d and d.commission_basis == 'fixed' }}>{{ t('Fixed amount') }}</option>
+        </select>
+      </div>
+      <div class="field" id="onbox">
+        <label for="commission_on">{{ t('Free months') }}</label>
+        <select id="commission_on" name="commission_on" onchange="calc()">
+          <option value="contract"  {{ 'selected' if not d or d.commission_on != 'effective' }}>{{ t("Don't reduce the commission") }}</option>
+          <option value="effective" {{ 'selected' if d and d.commission_on == 'effective' }}>{{ t('Reduce the commission') }}</option>
+        </select>
+      </div>
+
+      <div class="field" id="pctbox">
+        <label for="commission_pct">{{ t('Rate %') }}</label>
+        <input id="commission_pct" type="number" name="commission_pct" step="any" min="0"
+               inputmode="decimal" oninput="calc()"
+               value="{{ d.commission_pct if d else default_pct }}">
+      </div>
+      <div class="field">
+        <label for="commission_amt">{{ t('Commission amount') }} ({{ currency }})</label>
+        <input id="commission_amt" type="number" name="commission_amt" step="any" min="0"
+               inputmode="decimal" oninput="touched = true; renderSplit()"
+               value="{{ d.commission_amt | round(2) if d else '' }}">
+        <span class="small faint">{{ t('Worked out for you — type over it to set your own figure.') }}</span>
+      </div>
 
       <div class="field span-2">
-        <label for="notes">{{ t('Notes') }}</label>
-        <textarea id="notes" name="notes">{{ d.notes if d else '' }}</textarea>
+        <div class="small faint mono" id="workings"></div>
       </div>
+    </div>
+  </div>
+
+  <div class="card-body" style="border-top:1px solid var(--line)">
+    <div class="eyebrow">{{ t('Who worked on it') }}</div>
+    <table class="table" id="agenttable">
+      <thead><tr>
+        <th style="width:45%">{{ t('Agent') }}</th>
+        <th style="width:22%">{{ t('Role') }}</th>
+        <th style="width:18%" class="right">{{ t('Share %') }}</th>
+        <th class="right">{{ t('Earns') }}</th>
+        <th></th>
+      </tr></thead>
+      <tbody id="agentrows"></tbody>
+      <tfoot><tr>
+        <td colspan="2"><a class="btn btn-quiet btn-sm" href="#" onclick="addRow(); return false">{{ t('Add another agent') }}</a></td>
+        <td class="right mono" id="sharetotal"></td>
+        <td class="right mono" id="amounttotal"></td>
+        <td></td>
+      </tr></tfoot>
+    </table>
+    <div class="small" id="shareerror" style="color:var(--danger,#e0685f)"></div>
+  </div>
+
+  <div class="card-body" style="border-top:1px solid var(--line)">
+    <div class="field">
+      <label for="notes">{{ t('Notes') }}</label>
+      <textarea id="notes" name="notes">{{ d.notes if d else '' }}</textarea>
     </div>
   </div>
 
@@ -105,22 +164,153 @@
 
 {% block scripts %}
 <script>
-  var touched = false;
-  document.getElementById('commission_amt').addEventListener('input', function () { touched = true; });
+const AGENTS = {{ agents_json | safe }};
+const EXISTING = {{ deal_agents_json | safe }};
+const DEFAULT_RENT_PCT = {{ default_rent_pct }};
+const DEFAULT_SALE_PCT = {{ default_pct }};
+const CUR = {{ currency | tojson }};
 
-  function calc() {
-    if (touched) return;
-    var v = parseFloat(document.getElementById('value').value) || 0;
-    var p = parseFloat(document.getElementById('commission_pct').value) || 0;
-    document.getElementById('commission_amt').value = v && p ? (v * p / 100).toFixed(2) : '';
+let touched = {{ 'true' if d and d.commission_amt else 'false' }};
+
+function money(n) {
+  return CUR + ' ' + (Number(n) || 0).toLocaleString(undefined,
+    {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+// ---- commission, mirroring commission.py ----
+function base() {
+  const v = parseFloat(document.getElementById('value').value) || 0;
+  const term = parseFloat(document.getElementById('term_months').value) || 0;
+  const free = parseFloat(document.getElementById('free_months').value) || 0;
+  const basis = document.getElementById('commission_basis').value;
+  const on = document.getElementById('commission_on').value;
+  if (basis === 'fixed') return 0;
+  if (basis === 'sale_price') return v;
+  if (basis === 'monthly_rent') {
+    if (on === 'effective' && term > 0) return v * Math.max(term - free, 0) / term;
+    return v;
+  }
+  const months = (on === 'effective') ? Math.max(term - free, 0) : term;
+  return v * months;
+}
+
+function calc() {
+  const basis = document.getElementById('commission_basis').value;
+  const pct = parseFloat(document.getElementById('commission_pct').value) || 0;
+  const b = base();
+  if (!touched && basis !== 'fixed') {
+    document.getElementById('commission_amt').value = b && pct ? (b * pct / 100).toFixed(2) : '';
   }
 
-  function pullPrice(sel) {
-    var price = sel.options[sel.selectedIndex].dataset.price;
-    var val = document.getElementById('value');
-    if (price && !val.value) { val.value = price; calc(); }
+  const v = parseFloat(document.getElementById('value').value) || 0;
+  const term = parseFloat(document.getElementById('term_months').value) || 0;
+  const free = parseFloat(document.getElementById('free_months').value) || 0;
+  const bits = [];
+  if (basis === 'monthly_rent' || basis === 'annual_rent') {
+    if (term > 0 && free > 0) {
+      bits.push('{{ t("Effective rent") }} ' + money(v * Math.max(term - free, 0) / term) + '/mo');
+    }
+    bits.push('{{ t("Tenant pays") }} ' + money(v * Math.max(term - free, 0)));
   }
+  if (basis !== 'fixed') bits.push('{{ t("Commission base") }} ' + money(b));
+  document.getElementById('workings').textContent = bits.join('   ·   ');
+  renderSplit();
+}
 
+function basisChanged() {
+  const basis = document.getElementById('commission_basis').value;
+  document.getElementById('leasebox').style.display =
+    (basis === 'sale_price') ? 'none' : '';
+  document.getElementById('onbox').style.display =
+    (basis === 'monthly_rent' || basis === 'annual_rent') ? '' : 'none';
+  document.getElementById('pctbox').style.display =
+    (basis === 'fixed') ? 'none' : '';
+  if (basis === 'fixed') touched = true;
   calc();
+}
+
+function typeChanged() {
+  const isRent = /rent|إيجار/i.test(document.getElementById('deal_type').value);
+  const sel = document.getElementById('commission_basis');
+  if (!{{ 'true' if d else 'false' }}) {
+    sel.value = isRent ? 'monthly_rent' : 'sale_price';
+    document.getElementById('commission_pct').value = isRent ? DEFAULT_RENT_PCT : DEFAULT_SALE_PCT;
+  }
+  basisChanged();
+}
+
+function pullPrice(sel) {
+  const price = sel.options[sel.selectedIndex].dataset.price;
+  const val = document.getElementById('value');
+  document.getElementById('askhint').textContent =
+    price && Number(price) ? '{{ t("Asking") }} ' + money(price) : '';
+  if (price && !val.value) { val.value = price; calc(); }
+}
+
+// ---- agent split ----
+function addRow(userId, role, share) {
+  const tb = document.getElementById('agentrows');
+  const tr = document.createElement('tr');
+  const opts = AGENTS.map(a =>
+    `<option value="${a.id}" ${String(a.id) === String(userId) ? 'selected' : ''}>${a.name}</option>`).join('');
+  const roles = [['lead','{{ t("Lead") }}'],['support','{{ t("Support") }}'],['referrer','{{ t("Referrer") }}']]
+    .map(([v, l]) => `<option value="${v}" ${v === role ? 'selected' : ''}>${l}</option>`).join('');
+  tr.innerHTML =
+    `<td><select name="agent_user_id" required><option value="">—</option>${opts}</select></td>
+     <td><select name="agent_role">${roles}</select></td>
+     <td><input type="number" name="agent_share" step="any" min="0" class="right"
+          value="${share === undefined ? '' : share}" oninput="renderSplit()"></td>
+     <td class="right mono earns"></td>
+     <td class="right"><a href="#" class="small faint" onclick="this.closest('tr').remove(); renderSplit(); return false">{{ t('Remove') }}</a></td>`;
+  tb.appendChild(tr);
+  renderSplit();
+}
+
+function renderSplit() {
+  const rows = [...document.querySelectorAll('#agentrows tr')];
+  const shares = rows.map(r => parseFloat(r.querySelector('[name=agent_share]').value) || 0);
+  const total = shares.reduce((a, b) => a + b, 0);
+  const amt = parseFloat(document.getElementById('commission_amt').value) || 0;
+
+  let parts = shares.map(s => Math.round(amt * s) / 100);
+  const drift = Math.round((amt - parts.reduce((a, b) => a + b, 0)) * 100) / 100;
+  if (drift && parts.length) {
+    let big = 0;
+    shares.forEach((s, i) => { if (s > shares[big]) big = i; });
+    parts[big] = Math.round((parts[big] + drift) * 100) / 100;
+  }
+  rows.forEach((r, i) => { r.querySelector('.earns').textContent = money(parts[i]); });
+
+  document.getElementById('sharetotal').textContent = total.toFixed(2).replace(/\.00$/, '') + '%';
+  document.getElementById('amounttotal').textContent = money(amt);
+  const err = document.getElementById('shareerror');
+  if (!rows.length) {
+    err.textContent = '{{ t("Add at least one agent.") }}';
+  } else if (Math.abs(total - 100) > 0.01) {
+    err.textContent = '{{ t("Shares must total 100%.") }} ' + total.toFixed(2).replace(/\.00$/, '') + '%';
+  } else {
+    err.textContent = '';
+  }
+}
+
+document.getElementById('dealform').addEventListener('submit', function (e) {
+  const rows = [...document.querySelectorAll('#agentrows tr')];
+  const total = rows.reduce((a, r) =>
+    a + (parseFloat(r.querySelector('[name=agent_share]').value) || 0), 0);
+  if (!rows.length || Math.abs(total - 100) > 0.01) {
+    e.preventDefault();
+    renderSplit();
+    document.getElementById('shareerror').scrollIntoView({block: 'center'});
+  }
+});
+
+// ---- start ----
+if (EXISTING.length) {
+  EXISTING.forEach(a => addRow(a.user_id, a.role, a.share_pct));
+} else {
+  addRow({{ (prefill.get('agent_id') or (d.agent_id if d else None)) or 'null' }}, 'lead', 100);
+}
+basisChanged();
+pullPrice(document.getElementById('property_id'));
 </script>
 {% endblock %}

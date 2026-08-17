@@ -1,0 +1,144 @@
+{# Standalone page for testing. To fold it into the CRM, keep .wrap and extend
+   your base template instead. #}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Social posts &middot; Planned Real Estate</title>
+<style>
+  :root { --ink:#17181a; --panel:#1f2124; --line:#33363b; --gold:#c9a227;
+          --text:#e8e6e1; --muted:#9a9691; --flag:#d98324; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:32px 20px; background:var(--ink); color:var(--text);
+         font:15px/1.55 "Segoe UI", system-ui, sans-serif; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:20px; font-weight:600; margin:0 0 4px; }
+  .sub { color:var(--muted); font-size:13px; margin:0 0 24px; }
+  h2 { font-size:14px; text-transform:uppercase; letter-spacing:.08em;
+       color:var(--muted); font-weight:600; margin:36px 0 12px; }
+  .warn { background:#2a2318; border:1px solid #5a4a1e; border-radius:6px;
+          padding:12px 14px; margin-bottom:20px; font-size:13px; }
+  .list { border:1px solid var(--line); border-radius:6px; overflow:hidden; }
+  .item { display:flex; align-items:center; gap:12px; padding:10px 14px;
+          background:var(--panel); border-bottom:1px solid var(--line); }
+  .item:last-child { border-bottom:0; }
+  .item input { width:auto; accent-color:var(--gold); }
+  .item label { flex:1; cursor:pointer; }
+  .ref { color:var(--muted); font-size:12px; letter-spacing:.04em; }
+  .meta { color:var(--muted); font-size:13px; }
+  .bar { display:flex; gap:12px; align-items:center; margin-top:16px; }
+  button { background:var(--gold); color:#17181a; border:0; border-radius:6px;
+           padding:10px 20px; font:600 14px inherit; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  button:focus-visible, input:focus-visible { outline:2px solid var(--gold);
+           outline-offset:2px; }
+  .status { color:var(--muted); font-size:13px; }
+  .status.bad { color:#e0685f; }
+  .card { background:var(--panel); border:1px solid var(--line);
+          border-left:3px solid var(--gold); border-radius:6px;
+          padding:14px 16px; margin-bottom:10px; }
+  .card a { color:var(--text); text-decoration:none; font-weight:600; }
+  .card a:hover { color:var(--gold); }
+  .flag { color:var(--flag); font-size:13px; margin-top:6px; }
+  .empty { color:var(--muted); font-size:14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Social posts</h1>
+  <p class="sub">Pick one listing for a single post, or several for a carousel.
+    Order matters — slides follow the order you tick them.</p>
+
+  {% if not can_publish %}
+  <div class="warn">Publishing isn't set up yet, so posts are generated for you
+    to copy and post by hand. Add the Meta credentials to turn on direct
+    posting.</div>
+  {% endif %}
+
+  <h2>Available listings</h2>
+  <div class="list">
+    {% for p in listings %}
+    <div class="item">
+      <input type="checkbox" id="p{{ p.id }}" value="{{ p.id }}" class="pick">
+      <label for="p{{ p.id }}">
+        <span class="ref">{{ p.ref }}</span>
+        {{ p.title or (p.prop_type ~ ' in ' ~ (p.area or '')) }}
+        <div class="meta">
+          {{ p.area or '' }}
+          {%- if p.bedrooms is not none %} · {{ p.bedrooms }} BR{% endif %}
+          {%- if p.price %} · {{ '{:,.0f}'.format(p.price) }} QAR{% endif %}
+        </div>
+      </label>
+    </div>
+    {% else %}
+    <div class="item"><span class="empty">No available listings yet.</span></div>
+    {% endfor %}
+  </div>
+
+  <div class="bar">
+    <button id="go">Write the post</button>
+    <span class="status" id="status"></span>
+  </div>
+
+  <h2>Waiting to post</h2>
+  {% if drafts %}
+    {% for d in drafts %}
+    <div class="card">
+      <a href="{{ url_for('social.review', post_id=d.id) }}" dir="auto">
+        {{ d.content.hook_en or 'Untitled post' }}
+      </a>
+      <div class="meta">{{ d.kind }} · {{ d.status }} · {{ d.created_at }}</div>
+      {% if d.content.review_flags %}
+      <div class="flag">Check: {{ d.content.review_flags | join('; ') }}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  {% else %}
+    <p class="empty">Nothing waiting. Pick some listings above.</p>
+  {% endif %}
+
+</div>
+<script>
+  const btn = document.getElementById('go');
+  const out = document.getElementById('status');
+
+  btn.addEventListener('click', async () => {
+    const ids = [...document.querySelectorAll('.pick:checked')].map(c => c.value);
+    if (!ids.length) {
+      out.className = 'status bad';
+      out.textContent = 'Tick at least one listing.';
+      return;
+    }
+    if (ids.length > 10) {
+      out.className = 'status bad';
+      out.textContent = 'Instagram allows 10 slides per carousel.';
+      return;
+    }
+    btn.disabled = true;
+    out.className = 'status';
+    out.textContent = 'Writing...';
+    try {
+      const res = await fetch('{{ url_for("social.generate_post") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ property_ids: ids })
+      });
+      const data = await res.json();
+      if (data.error) {
+        out.className = 'status bad';
+        out.textContent = data.error;
+      } else {
+        location.href = '/social/post/' + data.post_id;
+      }
+    } catch (err) {
+      out.className = 'status bad';
+      out.textContent = 'Could not reach the server.';
+    } finally {
+      btn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

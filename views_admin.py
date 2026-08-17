@@ -9,6 +9,7 @@ from flask import (Blueprint, Response, current_app, flash, g, redirect,
                    render_template, request, send_file, url_for)
 import backups
 import excel_export
+import mailer
 import performance
 import whatsapp
 from werkzeug.security import generate_password_hash
@@ -27,7 +28,9 @@ admin = Blueprint("admin", __name__, url_prefix="/admin")
 def owners():
     q = request.args.get("q", "").strip()
     sql = ("SELECT o.*, (SELECT COUNT(*) FROM properties p WHERE p.owner_id = o.id)"
-           " AS prop_count FROM owners o")
+           " AS prop_count,"
+           " (SELECT COUNT(*) FROM properties p WHERE p.owner_id = o.id"
+           "   AND p.status = 'Available') AS available_count FROM owners o")
     args = []
     if q:
         sql += " WHERE o.name LIKE ? OR o.phone LIKE ? OR o.company LIKE ?"
@@ -43,20 +46,94 @@ def save_owner():
     oid = d.get("id")
     vals = (d.get("name", "").strip(), d.get("phone", "").strip(),
             d.get("email", "").strip(), d.get("company", "").strip(),
-            d.get("notes", "").strip())
+            d.get("notes", "").strip(), d.get("address", "").strip())
     if not vals[0]:
         flash("An owner needs a name.", "error")
     elif oid:
-        execute("UPDATE owners SET name=?,phone=?,email=?,company=?,notes=? WHERE id=?",
-                vals + (oid,))
+        execute("UPDATE owners SET name=?,phone=?,email=?,company=?,notes=?,address=?"
+                " WHERE id=?", vals + (oid,))
         log(g.user["id"], "Updated owner", "owner", int(oid), vals[0])
         flash("Owner updated.", "ok")
     else:
-        new_id = execute("INSERT INTO owners (name,phone,email,company,notes,created_at)"
-                         " VALUES (?,?,?,?,?,?)", vals + (now(),))
+        new_id = execute("INSERT INTO owners (name,phone,email,company,notes,address,"
+                         "created_at) VALUES (?,?,?,?,?,?,?)", vals + (now(),))
         log(g.user["id"], "Added owner", "owner", new_id, vals[0])
         flash("Owner added.", "ok")
     return redirect(url_for("contacts.owners"))
+
+
+def _save_contact_photo(kind, record_id, file_storage):
+    """Shared by owners and partners: square, shrink, store."""
+    ext = (file_storage.filename.rsplit(".", 1)[-1].lower()
+           if "." in file_storage.filename else "")
+    if ext not in ("png", "jpg", "jpeg", "webp"):
+        return None, "Use a PNG, JPG or WEBP image."
+
+    folder = os.path.join(current_app.config["UPLOAD_FOLDER"], "contacts")
+    os.makedirs(folder, exist_ok=True)
+    name = f"{uuid.uuid4().hex}.{ext}"
+    path = os.path.join(folder, name)
+    file_storage.save(path)
+
+    try:
+        from PIL import Image
+        img = Image.open(path)
+        img = img.convert("RGB") if ext in ("jpg", "jpeg") else img.convert("RGBA")
+        side = min(img.size)
+        left, top = (img.width - side) // 2, (img.height - side) // 2
+        img.crop((left, top, left + side, top + side)).resize((480, 480)).save(path)
+    except ImportError:
+        pass                     # Pillow is optional; full-size photo still works
+    except Exception:
+        pass
+    return name, None
+
+
+@contacts.route("/owners/<int:oid>/photo", methods=("POST",))
+@login_required
+def owner_photo(oid):
+    return _contact_photo("owners", oid, "contacts.owners")
+
+
+@contacts.route("/partners/<int:pid>/photo", methods=("POST",))
+@login_required
+def partner_photo(pid):
+    return _contact_photo("partners", pid, "contacts.partners")
+
+
+def _contact_photo(table, record_id, back):
+    folder = os.path.join(current_app.config["UPLOAD_FOLDER"], "contacts")
+    old = query(f"SELECT photo FROM {table} WHERE id = ?", (record_id,), one=True)
+
+    if request.form.get("remove"):
+        execute(f"UPDATE {table} SET photo = NULL WHERE id = ?", (record_id,))
+        if old and old["photo"]:
+            try:
+                os.remove(os.path.join(folder, old["photo"]))
+            except OSError:
+                pass
+        flash("Photo removed.", "ok")
+        return redirect(url_for(back))
+
+    fs = request.files.get("photo")
+    if not fs or not fs.filename:
+        flash("Choose an image first.", "error")
+        return redirect(url_for(back))
+
+    name, problem = _save_contact_photo(table, record_id, fs)
+    if problem:
+        flash(problem, "error")
+        return redirect(url_for(back))
+
+    execute(f"UPDATE {table} SET photo = ? WHERE id = ?", (name, record_id))
+    if old and old["photo"]:
+        try:
+            os.remove(os.path.join(folder, old["photo"]))
+        except OSError:
+            pass
+    log(g.user["id"], f"Updated a {table[:-1]} photo", table[:-1], record_id)
+    flash("Photo updated.", "ok")
+    return redirect(url_for(back))
 
 
 @contacts.route("/owners/<int:oid>/delete", methods=("POST",))
@@ -72,11 +149,13 @@ def delete_owner(oid):
 @login_required
 def partners():
     ptype = request.args.get("partner_type", "")
-    sql, args = "SELECT * FROM partners", []
+    sql = ("SELECT p.*, (SELECT COUNT(*) FROM properties pr WHERE pr.partner_id = p.id)"
+           " AS prop_count FROM partners p")
+    args = []
     if ptype:
-        sql += " WHERE partner_type = ?"
+        sql += " WHERE p.partner_type = ?"
         args.append(ptype)
-    sql += " ORDER BY name"
+    sql += " ORDER BY p.name"
     return render_template("contacts/partners.html", rows=query(sql, args),
                            partner_types=PARTNER_TYPES, ptype=ptype)
 
@@ -87,17 +166,19 @@ def save_partner():
     d = request.form
     pid = d.get("id")
     vals = (d.get("name", "").strip(), d.get("partner_type"), d.get("phone", "").strip(),
-            d.get("email", "").strip(), d.get("notes", "").strip())
+            d.get("email", "").strip(), d.get("notes", "").strip(),
+            d.get("company", "").strip(), d.get("address", "").strip())
     if not vals[0]:
         flash("A partner needs a name.", "error")
     elif pid:
-        execute("UPDATE partners SET name=?,partner_type=?,phone=?,email=?,notes=?"
-                " WHERE id=?", vals + (pid,))
+        execute("UPDATE partners SET name=?,partner_type=?,phone=?,email=?,notes=?,"
+                "company=?,address=? WHERE id=?", vals + (pid,))
         log(g.user["id"], "Updated partner", "partner", int(pid), vals[0])
         flash("Partner updated.", "ok")
     else:
         new_id = execute("INSERT INTO partners (name,partner_type,phone,email,notes,"
-                         "created_at) VALUES (?,?,?,?,?,?)", vals + (now(),))
+                         "company,address,created_at) VALUES (?,?,?,?,?,?,?,?)",
+                         vals + (now(),))
         log(g.user["id"], "Added partner", "partner", new_id, vals[0])
         flash("Partner added.", "ok")
     return redirect(url_for("contacts.partners"))
@@ -213,8 +294,12 @@ def user_photo(uid):
         left, top = (img.width - side) // 2, (img.height - side) // 2
         img = img.crop((left, top, left + side, top + side)).resize((320, 320))
         img.save(path)
+    except ImportError:
+        # Pillow is optional; the photo is kept at its original size
+        flash("Photo saved. Install Pillow if you want photos resized "
+              "automatically — large files will load slowly otherwise.", "ok")
     except Exception:
-        pass                      # an unresized photo still works
+        pass                      # a photo that cannot be processed is still usable
 
     execute("UPDATE users SET photo = ? WHERE id = ?", (name, uid))
     if old and old["photo"]:
@@ -316,15 +401,54 @@ def settings():
     s = {k: get_setting(k) for k in SETTING_KEYS}
     s.setdefault("commission_pct", "")
     templates = {k: get_setting(k) or v for k, v in whatsapp.DEFAULTS.items()}
+    mail = mailer.settings()
+    mail["has_password"] = bool(mail.get("smtp_pass"))
+    mail.pop("smtp_pass", None)          # never send the password back to a page
     return render_template("admin/settings.html", s=s, templates=templates,
                            labels=whatsapp.LABELS,
                            placeholders=whatsapp.PLACEHOLDERS,
                            backup_list=backups.list_backups(current_app)[:10],
                            backup_age=backups.last_backup_age_hours(current_app),
                            backup_folder=backups.backup_folder(current_app),
+                           mail=mail, mail_presets=mailer.PRESETS,
+                           mail_ready=mailer.is_configured(),
                            backup_keep=backups.KEEP,
                            backup_custom=get_setting('backup_folder', ''),
                            backup_default=backups.default_folder(current_app))
+
+
+@admin.route("/settings/email", methods=("POST",))
+@admin_required
+def save_email():
+    d = request.form
+    for key in mailer.SETTING_KEYS:
+        if key == "smtp_pass":
+            # a blank password field means "leave the saved one alone"
+            if d.get("smtp_pass", "").strip():
+                set_setting("smtp_pass", d["smtp_pass"])
+            continue
+        set_setting(key, d.get(key, "").strip())
+    log(g.user["id"], "Updated the email settings")
+
+    if d.get("test"):
+        ok, message = mailer.test_connection()
+        flash(message, "ok" if ok else "error")
+    else:
+        flash("Email settings saved.", "ok")
+    return redirect(url_for("admin.settings") + "#email")
+
+
+@admin.route("/settings/email/test-send", methods=("POST",))
+@admin_required
+def test_send():
+    to = request.form.get("to", "").strip() or g.user["email"]
+    ok, message = mailer.send(
+        to, "Test message from your CRM",
+        "This is a test from Planned CRM.\n\n"
+        "If you are reading it, sending email from the CRM is working.",
+        from_name=get_setting("company_name", "Planned Real Estate"))
+    flash(message, "ok" if ok else "error")
+    return redirect(url_for("admin.settings") + "#email")
 
 
 @admin.route("/backup/folder", methods=("POST",))
@@ -493,13 +617,15 @@ def export_leads():
 @admin.route("/export/properties.csv")
 @manager_required
 def export_properties():
-    rows = query("SELECT p.ref, p.title, p.address, p.building_no, p.unit_no, p.area,"
+    rows = query("SELECT p.ref, p.title, p.address, p.building_no, p.floor_no,"
+                 " p.unit_no, p.extras, p.area,"
                  " p.prop_type, p.listing_type,"
                  " p.status, p.price, p.size_sqm, p.bedrooms, p.bathrooms,"
                  " o.name AS owner, u.name AS agent, p.created_at FROM properties p"
                  " LEFT JOIN owners o ON o.id = p.owner_id"
                  " LEFT JOIN users u ON u.id = p.agent_id ORDER BY p.id")
-    return _csv(rows, ["ref", "title", "address", "building_no", "unit_no", "area",
+    return _csv(rows, ["ref", "title", "address", "building_no", "floor_no",
+                       "unit_no", "extras", "area",
                        "prop_type", "listing_type",
                        "status", "price", "size_sqm", "bedrooms", "bathrooms", "owner",
                        "agent", "created_at"], "planned-properties.csv")

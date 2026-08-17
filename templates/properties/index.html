@@ -58,6 +58,15 @@
         <input type="number" name="max_price" value="{{ f.max_price }}" step="any" inputmode="decimal">
       </div>
       <div class="field">
+        <label>{{ t('Floor') }}</label>
+        <select name="floor">
+          <option value="">{{ t('Any') }}</option>
+          {% for fl in floors %}
+            <option value="{{ fl }}" {{ 'selected' if f.floor == fl }}>{{ fl }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
         <label>{{ t('Bedrooms') }}</label>
         <select name="beds">
           <option value="">{{ t('Any') }}</option>
@@ -92,6 +101,11 @@
   </div>
 </form>
 
+<form method="post" action="{{ url_for('properties.bulk') }}" id="bulkform"
+      data-confirm-delete="{{ t('Delete the selected listings? A backup is taken first, but this cannot be undone from this page.') }}">
+  <input type="hidden" name="back" value="{{ request.full_path }}">
+</form>
+
 <div class="between" style="margin-bottom:12px">
   <span class="mono muted">{{ rows|length }} {{ t('found') }}</span>
   <form method="get" class="inline" style="gap:8px">
@@ -99,6 +113,7 @@
     <input type="hidden" name="view" value="{{ view }}">
     <label class="eyebrow" style="margin:0">{{ t('Order by') }}</label>
     <select name="sort" onchange="this.form.submit()" style="max-width:210px">
+      <option value="company" {{ 'selected' if sort == 'company' }}>{{ t('Company, then building') }}</option>
       <option value="building" {{ 'selected' if sort == 'building' }}>{{ t('Building, then flat') }}</option>
       <option value="newest" {{ 'selected' if sort == 'newest' }}>{{ t('Newest first') }}</option>
       <option value="oldest" {{ 'selected' if sort == 'oldest' }}>{{ t('Oldest first') }}</option>
@@ -106,6 +121,47 @@
       <option value="price_desc" {{ 'selected' if sort == 'price_desc' }}>{{ t('Price, high to low') }}</option>
     </select>
   </form>
+</div>
+
+<div class="bulkbar" id="bulkbar" hidden>
+  <label class="inline small" style="gap:7px;white-space:nowrap">
+    <input type="checkbox" id="pick-all" onchange="pickAll(this.checked)">
+    <span id="pick-count">0</span> {{ t('selected') }}
+  </label>
+
+  <select name="action" form="bulkform" id="bulk-action" onchange="bulkAction()"
+          style="max-width:210px">
+    <option value="">{{ t('Choose an action') }}</option>
+    {% for key, label in bulk_actions.items() %}
+      {% if key != 'delete' or user.role == 'admin' %}
+        <option value="{{ key }}">{{ t(label) }}</option>
+      {% endif %}
+    {% endfor %}
+  </select>
+
+  <select name="value" form="bulkform" id="bulk-status" class="bulk-value" hidden style="max-width:170px">
+    {% for s in statuses %}<option value="{{ s }}">{{ t(s) }}</option>{% endfor %}
+  </select>
+  <select name="value" form="bulkform" id="bulk-listing_type" class="bulk-value" hidden style="max-width:170px">
+    {% for tp in listing_types %}<option value="{{ tp }}">{{ t(tp) }}</option>{% endfor %}
+  </select>
+  <select name="value" form="bulkform" id="bulk-agent" class="bulk-value" hidden style="max-width:200px">
+    <option value="">{{ t('Unassigned') }}</option>
+    {% for a in agents %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}
+  </select>
+  <select name="value" form="bulkform" id="bulk-owner" class="bulk-value" hidden style="max-width:220px">
+    <option value="">{{ t('None') }}</option>
+    {% for o in owners_list %}<option value="{{ o.id }}">{{ o.name }}</option>{% endfor %}
+  </select>
+  <select name="value" form="bulkform" id="bulk-partner" class="bulk-value" hidden style="max-width:220px">
+    <option value="">{{ t('None') }}</option>
+    {% for pa in partners_list %}<option value="{{ pa.id }}">{{ pa.name }}</option>{% endfor %}
+  </select>
+
+  <button class="btn btn-gold btn-sm" type="submit" form="bulkform" id="bulk-go" disabled>
+    {{ t('Apply') }}</button>
+  <button class="btn btn-quiet btn-sm" type="button" onclick="pickAll(false)">{{ t('Clear') }}</button>
+  <span class="small faint" style="margin-left:auto">{{ t('Applies to this page only') }}</span>
 </div>
 
 {% if not rows %}
@@ -118,16 +174,20 @@
   <div class="card table-scroll">
     <table class="table">
       <thead><tr>
+        <th style="width:34px"></th>
         <th>{{ t('Search') }}</th><th>{{ t('Title') }}</th><th>{{ t('Location') }}</th><th>{{ t('Type') }}</th>
         <th>{{ t('Status') }}</th><th class="right">{{ t('Price') }}</th><th>{{ t('Agent') }}</th>
       </tr></thead>
       <tbody>
       {% for p in rows %}
-        <tr onclick="location.href='{{ url_for('properties.detail', pid=p.id) }}'" style="cursor:pointer">
+        <tr onclick="if(!event.target.closest('.pick'))location.href='{{ url_for('properties.detail', pid=p.id) }}'" style="cursor:pointer">
+          <td class="pick"><input type="checkbox" name="ids" value="{{ p.id }}" form="bulkform"
+              onchange="bulkChanged()" onclick="event.stopPropagation()"></td>
           <td class="mono faint">{{ p.ref }}</td>
           <td><b>{{ p.title }}</b>
             <div class="small muted">
               {%- if p.building_no %}{{ t('Building') }} {{ p.building_no }}{% endif -%}
+              {%- if p.floor_no %} · {{ t('Floor') }} {{ p.floor_no }}{% endif -%}
               {%- if p.unit_no %} · {{ t('Flat') }} {{ p.unit_no }}{% endif -%}
               {%- if p.address %}{% if p.building_no or p.unit_no %} · {% endif %}{{ p.address }}{% endif -%}
             </div></td>
@@ -146,9 +206,23 @@
 
 {% elif groups %}
   {% for grp in groups %}
-    <div class="group-head">
-      <b>{{ grp.building or t('No building set') }}</b>
-      {% if grp.area %}<span class="muted">{{ grp.area }}</span>{% endif %}
+    <div class="group-head {{ 'ours' if grp.kind == 'ours' }}">
+      {% if grp.photo %}
+        <img class="group-photo" src="{{ url_for('main.uploaded_file', kind='contacts', filename=grp.photo) }}" alt="">
+      {% elif grp.kind == 'ours' and logo_exists %}
+        <img class="group-photo" src="{{ logo_url }}" alt="">
+      {% endif %}
+      <div>
+        <b>{{ t(grp.label) if grp.kind in ('none',) else grp.label }}</b>
+        <div class="small muted">
+          {% if grp.kind == 'ours' %}{{ t('Our own properties') }}
+          {% elif grp.kind == 'owner' %}{{ t('Owner') }}{% if grp.company %} · {{ grp.company }}{% endif %}
+          {% elif grp.kind == 'partner' %}{{ t('Partner') }}
+          {% elif grp.kind == 'list' %}{{ t('From partner list') }}
+          {% elif grp.kind == 'building' %}{{ grp.company or '' }}
+          {% endif %}
+        </div>
+      </div>
       <span class="mono faint">{{ grp.rows|length }}
         {{ t('unit') if grp.rows|length == 1 else t('units') }}</span>
     </div>

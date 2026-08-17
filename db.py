@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS owners (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     name       TEXT NOT NULL,
+    photo      TEXT,
     phone      TEXT,
     email      TEXT,
     company    TEXT,
@@ -44,6 +45,7 @@ CREATE TABLE IF NOT EXISTS owners (
 CREATE TABLE IF NOT EXISTS partners (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     name         TEXT NOT NULL,
+    photo        TEXT,
     partner_type TEXT NOT NULL DEFAULT 'Developer',
     phone        TEXT,
     email        TEXT,
@@ -58,7 +60,9 @@ CREATE TABLE IF NOT EXISTS properties (
     address      TEXT,
     area         TEXT,
     building_no  TEXT,
+    floor_no     TEXT,
     unit_no      TEXT,
+    extras       TEXT,
     map_url      TEXT,
     is_own       INTEGER NOT NULL DEFAULT 0,
     import_source TEXT,
@@ -73,6 +77,7 @@ CREATE TABLE IF NOT EXISTS properties (
     description  TEXT,
     features     TEXT,
     owner_id     INTEGER REFERENCES owners(id) ON DELETE SET NULL,
+    partner_id   INTEGER REFERENCES partners(id) ON DELETE SET NULL,
     agent_id     INTEGER REFERENCES users(id) ON DELETE SET NULL,
     created_at   TEXT NOT NULL,
     updated_at   TEXT NOT NULL
@@ -322,7 +327,21 @@ MIGRATIONS = [
     ("users", "areas_covered", "TEXT"),
     ("users", "bio", "TEXT"),
     ("users", "manager_id", "INTEGER"),
+    ("owners", "photo", "TEXT"),
+    ("owners", "address", "TEXT"),
+    ("partners", "photo", "TEXT"),
+    ("partners", "company", "TEXT"),
+    ("partners", "address", "TEXT"),
+    ("properties", "partner_id", "INTEGER"),
+    ("properties", "floor_no", "TEXT"),
+    ("properties", "extras", "TEXT"),
 ]
+
+# Rooms a flat may have besides bedrooms. Kept apart from Key features, which
+# is about the building and the view rather than the rooms themselves.
+EXTRA_ROOMS = ["Office", "Study", "Maid's room", "Driver's room", "Majlis",
+               "Balcony", "Terrace", "Garden", "Roof", "Store", "Laundry",
+               "Pantry", "Basement", "Parking"]
 
 IMPORT_MODES = [
     ("preview", "Preview only — check the file, change nothing"),
@@ -415,8 +434,12 @@ def notify(user_id, message, link=None):
 
 
 def get_setting(key, default=""):
+    """Always returns text. A row saved with a NULL value used to come back as
+    None, which then broke anything calling .strip() on it."""
     row = query("SELECT value FROM settings WHERE key = ?", (key,), one=True)
-    return row["value"] if row else default
+    if row is None or row["value"] is None:
+        return default
+    return row["value"]
 
 
 def set_setting(key, value):

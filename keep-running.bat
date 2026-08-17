@@ -19,7 +19,7 @@ echo [%date% %time%] Starting the CRM... >> "instance\server.log"
 REM Use the virtual environment only if it still works from this location.
 set PY=python
 if exist ".venv\Scripts\python.exe" (
-    ".venv\Scripts\python.exe" -c "import flask, waitress" >nul 2>&1
+    ".venv\Scripts\python.exe" -c "import flask, waitress, openpyxl" >nul 2>&1
     if not errorlevel 1 set PY=.venv\Scripts\python.exe
 )
 %PY% serve_office.py >> "instance\server.log" 2>&1

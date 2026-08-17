@@ -12,6 +12,7 @@ Run these from the project folder, with the server stopped.
 """
 import getpass
 import os
+import sqlite3
 import shutil
 import socket
 import sys
@@ -79,6 +80,48 @@ def doctor():
         inactive = query("SELECT email FROM users WHERE is_active=0")
         for u in inactive:
             print(f"  switched off: {u['email']}")
+
+    print("\n--- Can the app write? ---")
+    folder = os.path.dirname(path)
+    for label, target in (("database file", path), ("instance folder", folder)):
+        try:
+            if target == folder:
+                probe = os.path.join(folder, ".write-test")
+                open(probe, "w").close()
+                os.remove(probe)
+            else:
+                con = sqlite3.connect(target)
+                con.execute("CREATE TABLE IF NOT EXISTS _probe (x INTEGER)")
+                con.execute("DROP TABLE _probe")
+                con.commit()
+                con.close()
+            print(f"  {label}: writable")
+        except Exception as exc:
+            print(f"  {label}: NOT WRITABLE — {exc}")
+            print("    A read-only folder makes every save fail with a server error.")
+            print("    Move the project out of Program Files, or fix its permissions.")
+
+    print("\n--- Packages ---")
+    for mod in ("flask", "waitress", "openpyxl"):
+        try:
+            __import__(mod)
+            print(f"  {mod}: installed")
+        except ImportError:
+            print(f"  {mod}: MISSING — run  pip install -r requirements.txt")
+    try:
+        __import__("PIL")
+        print("  Pillow: installed (photos will be resized on upload)")
+    except ImportError:
+        print("  Pillow: not installed — optional. Profile photos still upload,")
+        print("    they are just stored at full size. To add it: pip install Pillow")
+
+    print(f"\n--- Python ---")
+    v = sys.version_info
+    print(f"  {v.major}.{v.minor}.{v.micro}")
+    if v >= (3, 13):
+        print("  This version is very new. Some packages have no prebuilt Windows")
+        print("  build for it yet and will try to compile, which usually fails.")
+        print("  Python 3.12 is the safer choice for this app.")
 
     print("\n--- Network ---")
     port = int(os.environ.get("PORT", 5000))

@@ -12,6 +12,7 @@
       <span class="muted">
         {%- set bits = [] -%}
         {%- if p.building_no %}{% set _ = bits.append(t('Building') ~ ' ' ~ p.building_no) %}{% endif -%}
+        {%- if p.floor_no %}{% set _ = bits.append(t('Floor') ~ ' ' ~ p.floor_no) %}{% endif -%}
         {%- if p.unit_no %}{% set _ = bits.append(t('Flat') ~ ' ' ~ p.unit_no) %}{% endif -%}
         {%- if p.address %}{% set _ = bits.append(p.address) %}{% endif -%}
         {%- if p.area %}{% set _ = bits.append(p.area) %}{% endif -%}
@@ -82,6 +83,8 @@
           <div><dt>{{ t('Type') }}</dt><dd>{{ t(p.prop_type) }}</dd></div>
           {% if p.building_no %}
             <div><dt>{{ t('Building number') }}</dt><dd>{{ p.building_no }}</dd></div>{% endif %}
+          {% if p.floor_no %}
+            <div><dt>{{ t('Floor') }}</dt><dd class="mono">{{ p.floor_no }}</dd></div>{% endif %}
           {% if p.unit_no %}
             <div><dt>{{ t('Flat number') }}</dt><dd class="mono">{{ p.unit_no }}</dd></div>{% endif %}
           <div><dt>{{ t('Size') }}</dt><dd>{{ (p.size_sqm | money) + ' m²' if p.size_sqm else '—' }}</dd></div>
@@ -101,6 +104,16 @@
           <div class="hairline"></div>
           <div class="eyebrow">{{ t('Description') }}</div>
           <p style="white-space:pre-wrap;margin:8px 0 0">{{ p.description }}</p>
+        {% endif %}
+
+        {% if p.extras %}
+          <div class="hairline"></div>
+          <div class="eyebrow">{{ t('Extra rooms') }}</div>
+          <div class="chip-row" style="margin-top:8px">
+            {% for room in p.extras.split(',') %}
+              {% if room.strip() %}<span class="chip on">{{ t(room.strip()) }}</span>{% endif %}
+            {% endfor %}
+          </div>
         {% endif %}
 
         {% if p.features %}
@@ -181,11 +194,40 @@
   </div>
 
   <div class="grid">
+    {% if p.partner_name %}
+    <div class="card">
+      <div class="card-head"><h3>{{ t('Partner') }}</h3></div>
+      <div class="card-body">
+        <div class="inline" style="gap:11px;margin-bottom:10px">
+          <span class="contact-photo" style="width:46px;height:46px;flex:0 0 46px;font-size:15px">
+            {% if p.partner_photo %}
+              <img src="{{ url_for('main.uploaded_file', kind='contacts', filename=p.partner_photo) }}" alt="">
+            {% else %}{{ p.partner_name | initials }}{% endif %}
+          </span>
+          <div><b>{{ p.partner_name }}</b>
+            <div class="small muted">{{ t(p.partner_type) if p.partner_type else '' }}</div></div>
+        </div>
+        <div class="inline">
+          {% if p.partner_phone %}<a class="btn btn-sm" href="tel:{{ p.partner_phone }}">{{ t('Call') }}</a>{% endif %}
+          {% if p.partner_email %}<a class="btn btn-sm" href="mailto:{{ p.partner_email }}">{{ t('Email') }}</a>{% endif %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
     <div class="card">
       <div class="card-head"><h3>{{ t('Owner') }}</h3></div>
       <div class="card-body">
         {% if p.owner_name %}
-          <b>{{ p.owner_name }}</b>
+          <div class="inline" style="gap:11px;margin-bottom:8px">
+            <span class="contact-photo" style="width:46px;height:46px;flex:0 0 46px;font-size:15px">
+              {% if p.owner_photo %}
+                <img src="{{ url_for('main.uploaded_file', kind='contacts', filename=p.owner_photo) }}" alt="">
+              {% else %}{{ p.owner_name | initials }}{% endif %}
+            </span>
+            <div><b>{{ p.owner_name }}</b>
+              {% if p.owner_company %}<div class="small muted">{{ p.owner_company }}</div>{% endif %}</div>
+          </div>
           <div class="stack small muted" style="margin-top:6px">
             {% if p.owner_phone %}<span class="mono">{{ p.owner_phone }}</span>{% endif %}
             {% if p.owner_email %}<span>{{ p.owner_email }}</span>{% endif %}
@@ -261,6 +303,9 @@
           <span class="small faint">{{ t('Change the unit or floor number here, then adjust the rest on the next screen.') }}</span>
         </div>
         <div class="field">
+          <label>{{ t('Floor') }}</label>
+          <input type="text" name="floor_no" value="{{ p.floor_no or '' }}"
+                 placeholder="{{ t('Floor') }}" style="margin-bottom:10px">
           <label>{{ t('Flat number') }}</label>
           <input type="text" name="unit_no" placeholder="{{ t('The new flat number') }}"
                  value="" autofocus>

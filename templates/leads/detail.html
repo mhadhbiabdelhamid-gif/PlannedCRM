@@ -200,7 +200,13 @@
 
         <div class="inline" style="margin-top:14px">
           {% if l.phone %}<a class="btn btn-sm" href="tel:{{ l.phone }}">{{ t('Call') }}</a>{% endif %}
-          {% if l.email %}<a class="btn btn-sm" href="mailto:{{ l.email }}">{{ t('Email') }}</a>{% endif %}
+          {% if l.email %}
+            {% if mail_ready %}
+              <button class="btn btn-sm" onclick="openModal('email-modal')">{{ t('Email') }}</button>
+            {% else %}
+              <a class="btn btn-sm" href="mailto:{{ l.email }}">{{ t('Email') }}</a>
+            {% endif %}
+          {% endif %}
         </div>
 
         {% if l.phone %}
@@ -243,4 +249,40 @@
     </div>
   </div>
 </div>
+
+<div class="modal-back" id="email-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>{{ t('Send an email') }}</h3>
+      <button class="btn btn-quiet btn-sm" onclick="closeModal('email-modal')">{{ t('Close') }}</button>
+    </div>
+    <form method="post" action="{{ url_for('leads.send_email', lid=l.id) }}">
+      <div class="modal-body">
+        <div class="field"><label>{{ t('To') }}</label>
+          <input type="email" name="to" value="{{ l.email or '' }}" required></div>
+        <div class="field"><label>{{ t('Subject') }}</label>
+          <input type="text" name="subject"
+                 value="{% if l.prop_title %}{{ l.prop_title }}{% else %}{{ company }}{% endif %}"></div>
+        <div class="field"><label>{{ t('Message') }}</label>
+          <textarea name="body" style="min-height:190px" required>{{ t('Dear') }} {{ l.full_name }},
+
+{% if l.prop_title %}{{ t('Further to our conversation, here are the details of') }} {{ l.prop_title }}.
+
+{% endif %}{{ t('Please let me know if you would like to arrange a viewing.') }}
+
+{{ t('Kind regards') }},
+{{ user.name }}
+{{ company }}{% if user.phone %}
+{{ user.phone }}{% endif %}</textarea></div>
+        <p class="small faint" style="margin:0">
+          {{ t('Sent from the company mailbox, with your address as the reply-to. A copy is saved to this lead history.') }}</p>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-quiet" type="button" onclick="closeModal('email-modal')">{{ t('Cancel') }}</button>
+        <button class="btn btn-gold" type="submit">{{ t('Send') }}</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 {% endblock %}

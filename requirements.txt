@@ -2,4 +2,8 @@ Flask==3.1.3
 waitress==3.0.2
 gunicorn==23.0.0
 openpyxl==3.1.5
-Pillow==11.1.0
+
+# Optional. Used to shrink uploaded profile photos and to draw the desktop
+# shortcut icon. Everything works without it, photos are just stored at their
+# original size. It has no prebuilt package for Python 3.14 yet, so install it
+# separately if you want it:  pip install Pillow

@@ -1,0 +1,41 @@
+{# Shared photo dialog for owners and partners. #}
+<div class="modal-back" id="owner-photo">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>{{ t('Photo') }} — <span id="photo-who"></span></h3>
+      <button class="btn btn-quiet btn-sm" onclick="closeModal('owner-photo')">{{ t('Close') }}</button>
+    </div>
+    <form method="post" id="photo-form" enctype="multipart/form-data">
+      <div class="modal-body">
+        <div id="photo-current" style="margin-bottom:12px"></div>
+        <p class="small muted" style="margin-top:0">
+          {{ t('This photo stands in on any of their properties that has no picture yet, so the listing still looks complete.') }}
+        </p>
+        <div class="field">
+          <label>{{ t('Photo or company logo') }}</label>
+          <input type="file" name="photo" accept="image/*">
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-danger" type="submit" name="remove" value="1" id="photo-remove">
+          {{ t('Remove photo') }}</button>
+        <button class="btn btn-gold" type="submit">{{ t('Upload') }}</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  function openPhoto(id, action, who, current) {
+    var back = document.getElementById(id);
+    back.querySelector('#photo-form').action = action;
+    back.querySelector('#photo-who').textContent = who;
+    var box = back.querySelector('#photo-current');
+    box.innerHTML = current
+      ? '<img src="/uploads/contacts/' + current + '" style="width:96px;height:96px;' +
+        'object-fit:cover;border-radius:4px;border:1px solid var(--line)">'
+      : '<span class="small faint">{{ t('No photo yet.') }}</span>';
+    back.querySelector('#photo-remove').style.display = current ? '' : 'none';
+    back.classList.add('open');
+  }
+</script>

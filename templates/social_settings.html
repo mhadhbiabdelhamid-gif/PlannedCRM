@@ -1,0 +1,103 @@
+{# Contact details shown on cards, plus Meta publishing credentials. #}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Social settings &middot; Planned Real Estate</title>
+<style>
+  :root { --ink:#17181a; --panel:#1f2124; --line:#33363b; --gold:#c9a227;
+          --text:#e8e6e1; --muted:#9a9691; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:32px 20px; background:var(--ink); color:var(--text);
+         font:15px/1.55 "Segoe UI", system-ui, sans-serif; }
+  .wrap { max-width:640px; margin:0 auto; }
+  a.back { color:var(--muted); font-size:13px; text-decoration:none; }
+  a.back:hover { color:var(--gold); }
+  h1 { font-size:20px; font-weight:600; margin:10px 0 20px; }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.07em;
+       color:var(--muted); font-weight:600; margin:0 0 12px; }
+  .panel { background:var(--panel); border:1px solid var(--line);
+           border-radius:6px; padding:18px; margin-bottom:16px; }
+  label { display:block; font-size:12px; text-transform:uppercase;
+          letter-spacing:.06em; color:var(--muted); margin:14px 0 4px; }
+  label:first-of-type { margin-top:0; }
+  input { width:100%; padding:9px 10px; background:#17181a; color:var(--text);
+          border:1px solid var(--line); border-radius:4px; font:inherit; }
+  input:focus { outline:2px solid var(--gold); outline-offset:1px; }
+  .hint { color:var(--muted); font-size:12px; margin-top:4px; }
+  .status { border-radius:6px; padding:12px 14px; font-size:13px;
+            margin-bottom:16px; }
+  .on { background:#1b2620; border:1px solid #2f5a3f; }
+  .off { background:#2a2318; border:1px solid #5a4a1e; }
+  button { background:var(--gold); color:#17181a; border:0; border-radius:6px;
+           padding:11px 22px; font:600 14px inherit; cursor:pointer;
+           margin-top:18px; }
+  button:focus-visible { outline:2px solid var(--gold); outline-offset:2px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="{{ url_for('social.index') }}">&larr; Back to social posts</a>
+  <h1>Social settings</h1>
+
+  <div class="status {{ 'on' if can_publish else 'off' }}">
+    {% if can_publish %}
+      Direct posting is on. Posts go to the Page and Instagram account below.
+    {% else %}
+      Direct posting is off. Fill in the Meta section to turn it on — all three
+      fields plus the public address are needed.
+    {% endif %}
+  </div>
+
+  <form method="post">
+    <div class="panel">
+      <h2>Contact details on every card</h2>
+
+      <label for="company_phone">Phone</label>
+      <input id="company_phone" name="company_phone" dir="ltr"
+             value="{{ values.company_phone }}" placeholder="+974 ...">
+
+      <label for="company_email">Email</label>
+      <input id="company_email" name="company_email" dir="ltr"
+             value="{{ values.company_email }}">
+
+      <label for="company_website">Website</label>
+      <input id="company_website" name="company_website" dir="ltr"
+             value="{{ values.company_website }}">
+    </div>
+
+    <div class="panel">
+      <h2>Meta publishing</h2>
+
+      <label for="fb_page_id">Facebook Page ID</label>
+      <input id="fb_page_id" name="fb_page_id" dir="ltr"
+             value="{{ values.fb_page_id }}">
+      <div class="hint">Found under About on your Page, or via the Graph API Explorer.</div>
+
+      <label for="ig_user_id">Instagram Business account ID</label>
+      <input id="ig_user_id" name="ig_user_id" dir="ltr"
+             value="{{ values.ig_user_id }}">
+      <div class="hint">A numeric ID, not the @handle. The account must be a
+        Business account linked to the Page above.</div>
+
+      <label for="fb_page_token">Page access token</label>
+      <input id="fb_page_token" name="fb_page_token" dir="ltr"
+             value="" placeholder="{{ values.fb_page_token or 'not set' }}"
+             autocomplete="off">
+      <div class="hint">Leave blank to keep the current token. Use a long-lived
+        token — it lasts about 60 days and then needs replacing.</div>
+
+      <label for="public_base_url">Public address of this CRM</label>
+      <input id="public_base_url" name="public_base_url" dir="ltr"
+             value="{{ values.public_base_url }}"
+             placeholder="https://your-app.onrender.com">
+      <div class="hint">Instagram fetches images by URL, so it must be an
+        address reachable from the internet. localhost will not work.</div>
+    </div>
+
+    <button type="submit">Save settings</button>
+  </form>
+</div>
+</body>
+</html>

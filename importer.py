@@ -14,6 +14,7 @@ from openpyxl import load_workbook
 FIELDS = [
     ("unit_no", "Flat / unit number"),
     ("building_no", "Building"),
+    ("floor_no", "Floor"),
     ("title", "Title or property name"),
     ("prop_type", "Property type"),
     ("bedrooms", "Bedrooms"),
@@ -25,6 +26,7 @@ FIELDS = [
     ("description", "Description or notes"),
     ("map_url", "Map link"),
     ("features", "Features, view, furnishing"),
+    ("extras", "Extra rooms (office, maid's, balcony)"),
 ]
 
 # Words that suggest a column holds a given field. Matched against the header
@@ -34,6 +36,10 @@ SYNONYMS = {
                 "unit #", "unit", "apartment number", "flat number", "door no"],
     "building_no": ["building name", "property name", "building no", "building",
                     "tower", "block", "compound", "project"],
+    "floor_no": ["floor number", "floor no", "floor", "level", "storey", "story",
+                 "flr"],
+    "extras": ["extra rooms", "additional rooms", "extras", "maid room",
+               "maid's room", "additional"],
     "title": ["property", "description of property", "name", "unit type name"],
     "prop_type": ["property type", "apartment type", "type of property", "type",
                   "category"],
@@ -75,34 +81,125 @@ WORD_NUMBERS = {
 }
 
 
+# Every way a partner might write a bedroom count. Longest first so "bedroom"
+# is matched before "bed", and "bdrm" before "bd".
+BED_WORDS = (r"bedrooms?|bed\s*rooms?|bedrms?|bdrms?|bdms?|bdrs?|"
+             r"b\s*/\s*r|bhk|beds?|bds?|brs?|rooms?|غرف(?:ة|تين)?|غرفه")
+
+# Extra rooms that are not bedrooms, so "1 bd + off" is one bedroom, not two.
+EXTRAS = re.compile(
+    r"\+?\s*\b(off(?:ice)?|study|maid[' ]?s?(?:\s*room)?|hall|majlis|store|"
+    r"storage|driver[' ]?s?(?:\s*room)?|laundry|balcony|terrace|garden|"
+    r"pantry|nanny)\b", re.IGNORECASE)
+
+STUDIO_WORDS = re.compile(r"\bstudios?\b|\bstd\b|\bستوديو\b", re.IGNORECASE)
+
+# Units and words that follow a number but have nothing to do with bedrooms.
+# Without these, "50 sqm" was being read as fifty bedrooms.
+NOT_BEDROOMS = re.compile(
+    r"\b(sq\.?\s*m|sqm|sqft|sq\.?\s*ft|m2|m²|ft2|meters?|metres?|"
+    r"qar?|qr|riyals?|aed|usd|k|kw|kwh|"
+    r"floors?|flr|storey?s?|levels?|"
+    r"parking|car\s*parks?|spaces?|years?|months?|days?|"
+    r"units?|shops?|offices?)\b", re.IGNORECASE)
+
+MAX_BEDROOMS = 15          # beyond this it is not a flat, it is a data error
+
+
 def parse_bedrooms(value):
-    """Handles Studio, 1br+Off, 2 BHK, Two Bedrooms, '3 Beds; 5 Baths'."""
-    text = clean(value).lower()
+    """Read a bedroom count out of however the partner wrote it.
+
+    Handles '1 bd+off', '2BHK+Maid', 'Studio', 'Two Bedrooms', '3 Beds; 5 Baths',
+    '1-BR', '2 bdr', '3 R', '2 غرفة' and a plain number. Extra rooms — office,
+    maid's, study — are recognised so they are not counted as bedrooms.
+
+    Returns None when there is genuinely no count, never 0 as a guess, so the
+    review screen can flag it rather than quietly inventing a studio.
+    """
+    text = clean(value)
     if not text:
         return None
-    if "studio" in text:
+
+    if STUDIO_WORDS.search(text):
         return 0
-    m = re.search(r"(\d+)\s*(?:\.\d+)?\s*(?:br|bhk|bed|bedroom|b/r)", text)
+
+    # strip the extras first, so their words cannot be mistaken for a count
+    stripped = EXTRAS.sub(" ", text)
+
+    # a digit attached to a bedroom word: "2BHK", "1 bd", "3-BR", "4 bed rooms"
+    m = re.search(rf"(\d+)\s*[-+/]?\s*(?:{BED_WORDS})\b", stripped, re.IGNORECASE)
     if m:
-        return int(m.group(1))
+        return _sane(int(m.group(1)))
+
+    # the word before the digit: "bedrooms: 3", "BR 2"
+    m = re.search(rf"(?:{BED_WORDS})\s*[:=-]?\s*(\d+)", stripped, re.IGNORECASE)
+    if m:
+        return _sane(int(m.group(1)))
+
+    # spelled out: "Two Bedrooms", "Three bedroom villa", "Two BR"
     for word, n in WORD_NUMBERS.items():
-        if re.search(rf"\b{word}\b.*\bbed", text):
+        if re.search(rf"\b{word}\b\s*[-]?\s*(?:{BED_WORDS})\b", stripped,
+                     re.IGNORECASE):
             return n
-    m = re.match(r"^\s*(\d+)\s*$", text)
+
+    # anything measured in square metres, riyals, floors and so on is not a
+    # bedroom count, however it is written
+    if NOT_BEDROOMS.search(stripped):
+        return None
+
+    # a bare count where the whole cell is a number: "2", "0"
+    m = re.match(r"^\s*(\d{1,2})\s*$", stripped)
     if m:
-        return int(m.group(1))
+        return _sane(int(m.group(1)))
+
+    # "2+1" — the first figure is the bedrooms, the second the living rooms
+    m = re.match(r"^\s*(\d{1,2})\s*\+\s*\d{1,2}\s*$", stripped)
+    if m:
+        return _sane(int(m.group(1)))
+
+    # a lone digit next to nothing else meaningful: "3 R", "4 rm"
+    m = re.match(r"^\s*(\d{1,2})\s*(?:r|rm|rms|غ)?\s*$", stripped, re.IGNORECASE)
+    if m:
+        return _sane(int(m.group(1)))
+
     return None
 
 
+def _sane(n):
+    """A flat with forty bedrooms means the column was the wrong one."""
+    return n if n is not None and 0 <= n <= MAX_BEDROOMS else None
+
+
+def describe_extras(value):
+    """The extra rooms mentioned, so they land in features instead of vanishing."""
+    text = clean(value)
+    if not text:
+        return ""
+    found = []
+    for m in EXTRAS.finditer(text):
+        word = m.group(1).strip().title()
+        word = {"Off": "Office", "Maid": "Maid's room",
+                "Maids": "Maid's room", "Driver": "Driver's room"}.get(word, word)
+        if word not in found:
+            found.append(word)
+    return ", ".join(found)
+
+
+BATH_WORDS = r"bathrooms?|bath\s*rooms?|bathrms?|baths?|washrooms?|wc|w\.c\.|ba\b|حمام(?:ات)?"
+
+
 def parse_bathrooms(value):
-    text = clean(value).lower()
+    text = clean(value)
     if not text:
         return None
-    m = re.search(r"(\d+)\s*(?:bath|ba\b|wc)", text)
+    m = re.search(rf"(\d+)\s*[-+/]?\s*(?:{BATH_WORDS})", text, re.IGNORECASE)
+    if m:
+        return int(m.group(1))
+    m = re.search(rf"(?:{BATH_WORDS})\s*[:=-]?\s*(\d+)", text, re.IGNORECASE)
     if m:
         return int(m.group(1))
     for word, n in WORD_NUMBERS.items():
-        if re.search(rf"\b{word}\b.*\bbath", text):
+        if re.search(rf"\b{word}\b\s*[-]?\s*(?:{BATH_WORDS})", text, re.IGNORECASE):
             return n
     return None
 
@@ -149,6 +246,44 @@ def parse_unit(value):
     if m:
         return m.group(1).replace(" ", "").upper()
     return text[:20]
+
+
+FLOOR_WORDS = {
+    "ground": "G", "gf": "G", "g": "G", "mezzanine": "M", "mezz": "M",
+    "basement": "B", "penthouse": "PH", "roof": "R",
+}
+
+ORDINAL = re.compile(r"^\s*(\d{1,3})\s*(?:st|nd|rd|th)?\s*(?:floor|flr|level)?\s*$",
+                     re.IGNORECASE)
+FLOOR_IN_CODE = re.compile(r"-F(\d{1,3})-", re.IGNORECASE)
+
+
+def parse_floor(value, unit_code=""):
+    """'1st', 'Ground', 'G', 'B1', 'Floor 12', or hidden inside a unit code
+    like ARPQ02-B00-F01-A101, where F01 is the first floor."""
+    text = clean(value)
+    if not text:
+        m = FLOOR_IN_CODE.search(clean(unit_code))
+        return str(int(m.group(1))) if m else ""
+
+    low = text.lower().strip(" .-")
+    if low in FLOOR_WORDS:
+        return FLOOR_WORDS[low]
+    for word, short in FLOOR_WORDS.items():
+        if re.fullmatch(rf"{word}\s*floor", low):
+            return short
+
+    m = ORDINAL.match(text)
+    if m:
+        return str(int(m.group(1)))
+    m = re.search(r"(?:floor|flr|level|storey|story)\s*[:.\-]?\s*(\d{1,3})",
+                  text, re.IGNORECASE)
+    if m:
+        return str(int(m.group(1)))
+    m = re.match(r"^\s*([BM]\s?\d{1,2}|PH\d?)\s*$", text, re.IGNORECASE)
+    if m:
+        return m.group(1).upper().replace(" ", "")
+    return text[:12]
 
 
 STATUS_WORDS = [
@@ -234,6 +369,21 @@ def detect_header_row(ws, limit=20):
         if s > best_score:
             best, best_score = r, s
     return best
+
+
+# Fields where several columns should be joined together rather than one
+# winning. A partner may split an address or a description across columns.
+JOINABLE = {"title", "description", "features", "address", "area",
+            "building_no"}
+
+
+def as_columns(value):
+    """Mapping values may be a single column or several. Always return a list."""
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple, set)):
+        return [int(v) for v in value if str(v).strip().isdigit() and int(v) > 0]
+    return [int(value)] if str(value).strip().isdigit() and int(value) > 0 else []
 
 
 def guess_mapping(headers):
@@ -364,15 +514,38 @@ def extract(sheet, mapping, defaults, fill_down=True, fill_numbers=False):
     out = []
     carried = {}
     seen_in_file = set()
-    inherit = ["building_no", "area", "description", "map_url", "prop_type"]
+    # Structural facts repeat down a list and are safe to carry. A description
+    # belongs to one unit, so it only carries when the fuller option is chosen.
+    inherit = ["building_no", "area", "map_url", "prop_type"]
     if fill_numbers:
-        inherit += ["price", "bedrooms", "bathrooms", "size_sqm"]
+        inherit += ["price", "bedrooms", "bathrooms", "size_sqm", "description"]
 
     def cell(values, field):
-        idx = mapping.get(field)
-        if not idx or idx > len(values):
+        """One field may draw on more than one column.
+
+        Text fields join what they find, so a description split across three
+        columns arrives whole. Everything else takes the first column that
+        actually holds something, so an empty column does not mask a later one.
+        """
+        columns = as_columns(mapping.get(field))
+        picked = []
+        for idx in columns:
+            if idx > len(values):
+                continue
+            value = values[idx - 1]
+            if clean(value):
+                picked.append(value)
+        if not picked:
             return None
-        return values[idx - 1]
+        if field in JOINABLE and len(picked) > 1:
+            seen, parts = set(), []
+            for v in picked:
+                text = clean(v)
+                if text.lower() not in seen:
+                    seen.add(text.lower())
+                    parts.append(text)
+            return " · ".join(parts)
+        return picked[0]
 
     all_links = sheet.get("links") or [[] for _ in sheet["rows"]]
     for index, values in enumerate(sheet["rows"]):
@@ -426,12 +599,29 @@ def extract(sheet, mapping, defaults, fill_down=True, fill_numbers=False):
                                title_text, building,
                                default=defaults.get("prop_type", "Apartment"))
 
-        features = " · ".join(
-            clean(v) for v in (raw.get("features"),) if clean(v))
+        # "1 bd + office" means one bedroom and an office; keep the office
+        # Extra rooms are their own field now, so "1 bd + office" records the
+        # office as a room rather than burying it in the features text.
+        found_extras = [clean(raw.get("extras"))]
+        for source in (raw.get("bedrooms"), title_text, raw.get("prop_type")):
+            more = describe_extras(source)
+            if more:
+                found_extras.append(more)
+        seen, parts = set(), []
+        for chunk in found_extras:
+            for piece in re.split(r"[,;·]", chunk or ""):
+                piece = piece.strip()
+                if piece and piece.lower() not in seen:
+                    seen.add(piece.lower())
+                    parts.append(piece)
+        extras_text = ", ".join(parts)
+        features = clean(raw.get("features"))
 
         listing = {
             "unit_no": unit,
             "building_no": building,
+            "floor_no": parse_floor(raw.get("floor_no"),
+                                    clean(raw.get("unit_no")) or title_text),
             "prop_type": prop_type,
             "bedrooms": beds,
             "bathrooms": parse_bathrooms(raw.get("bathrooms")) or
@@ -443,6 +633,7 @@ def extract(sheet, mapping, defaults, fill_down=True, fill_numbers=False):
             "area": clean(raw.get("area")) or defaults.get("area", ""),
             "description": clean(raw.get("description")),
             "features": features,
+            "extras": extras_text,
             # any column can hold the pin, and it may be a hyperlink rather
             # than visible text
             "map_url": find_map_link(raw.get("map_url"), *row_links, *values),

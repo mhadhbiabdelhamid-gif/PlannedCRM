@@ -1,6 +1,17 @@
+<div class="prop-wrap">
+  <label class="pick" onclick="event.stopPropagation()">
+    <input type="checkbox" name="ids" value="{{ p.id }}" form="bulkform"
+           onchange="bulkChanged()" aria-label="{{ t('Select') }} {{ p.title }}">
+  </label>
 <a class="prop-card" href="{{ url_for('properties.detail', pid=p.id) }}">
-  <div class="prop-thumb" {% if p.cover %}style="background-image:url('{{ url_for('main.uploaded_file', kind='images', filename=p.cover) }}')"{% endif %}>
-    {% if not p.cover %}<span class="ph">{{ p.prop_type[0] }}</span>{% endif %}
+  {% set stand_in = p.owner_photo or p.partner_photo %}
+  <div class="prop-thumb {{ 'is-standin' if not p.cover and stand_in }}"
+       {% if p.cover %}style="background-image:url('{{ url_for('main.uploaded_file', kind='images', filename=p.cover) }}')"
+       {% elif stand_in %}style="background-image:url('{{ url_for('main.uploaded_file', kind='contacts', filename=stand_in) }}')"{% endif %}>
+    {% if not p.cover and not stand_in %}<span class="ph">{{ p.prop_type[0] }}</span>{% endif %}
+    {% if not p.cover and stand_in %}
+      <span class="standin-note">{{ p.owner_name or p.partner_name }}</span>
+    {% endif %}
     <div class="tags">
       <span class="tag tag-{{ 'sale' if p.listing_type == 'Sale' else 'rent' }}">{{ t(p.listing_type) }}</span>
       <span class="tag tag-{{ p.status|lower }}">{{ t(p.status) }}</span>
@@ -11,7 +22,8 @@
     <div class="mono faint">{{ p.ref }}</div>
     <h4>{{ p.title }}</h4>
     <div class="small muted">
-      {%- if p.unit_no %}{{ t('Flat') }} {{ p.unit_no }} · {% endif -%}
+      {%- if p.floor_no %}{{ t('Floor') }} {{ p.floor_no }} · {% endif -%}
+    {%- if p.unit_no %}{{ t('Flat') }} {{ p.unit_no }} · {% endif -%}
       {{ p.area or p.address or '—' }}</div>
     <div class="prop-price">{{ currency }} {{ p.price | money }}</div>
     <div class="prop-meta">
@@ -22,3 +34,4 @@
     </div>
   </div>
 </a>
+</div>

@@ -13,13 +13,13 @@
 <body>
 
 <aside class="rail" id="rail">
-  <a class="rail-brand" href="{{ url_for('main.dashboard') }}">
+  <a class="rail-brand {{ 'big-logo' if logo_exists }}" href="{{ url_for('main.dashboard') }}">
     {% if logo_exists %}
       <img src="{{ logo_url }}" alt="{{ company }}">
     {% else %}
       <span class="rail-mark">P</span>
     {% endif %}
-    <span>
+    <span class="stack-name">
       <b>{{ company.split(' ')[0] }}</b>
       <span>{{ company.split(' ')[1:] | join(' ') or 'Real Estate' }}</span>
     </span>
@@ -60,6 +60,17 @@
       <span class="idx">10</span> {{ t('Team members') }}</a>
     <a class="rail-link {{ 'active' if request.endpoint == 'admin.settings' }}" href="{{ url_for('admin.settings') }}">
       <span class="idx">11</span> {{ t('Settings') }}</a>
+    {% endif %}
+
+    {% if user and user.role == 'admin' %}
+    <div class="rail-group">{{ t('Assistants') }}</div>
+    <a class="rail-link {{ 'active' if request.blueprint == 'intake' }}" href="{{ url_for('intake.index') }}">
+      <span class="idx">12</span> {{ t('Listing intake') }}</a>
+    <a class="rail-link {{ 'active' if request.blueprint == 'social' }}" href="{{ url_for('social.index') }}">
+      <span class="idx">13</span> {{ t('Social posts') }}</a>
+    <a class="rail-link {{ 'active' if request.endpoint == 'social.settings' }}"
+       href="{{ url_for('social.settings') }}" style="padding-left:44px">
+      {{ t('Social settings') }}</a>
     {% endif %}
   </nav>
 

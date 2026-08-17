@@ -6,6 +6,10 @@
   <div class="empty">
     <span class="mark">{{ code }}</span>
     <p>{{ msg }}</p>
+    {% if ref %}
+      <p class="small muted">{{ t('Reference') }} <span class="mono">{{ ref }}</span><br>
+        <span class="faint">{{ t('The details are in instance/server.log on the computer running the CRM.') }}</span></p>
+    {% endif %}
     <a class="btn btn-gold" href="{{ url_for('main.dashboard') }}">{{ t('Back to the dashboard') }}</a>
   </div>
 </div>

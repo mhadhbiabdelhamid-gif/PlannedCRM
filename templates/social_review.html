@@ -1,0 +1,356 @@
+{# Review, edit and publish a generated social post. Image cards are drawn
+   client-side on canvas so there is no server-side imaging dependency. #}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Review post &middot; Planned Real Estate</title>
+<style>
+  :root { --ink:#17181a; --panel:#1f2124; --line:#33363b; --gold:#c9a227;
+          --text:#e8e6e1; --muted:#9a9691; --flag:#d98324; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:32px 20px; background:var(--ink); color:var(--text);
+         font:15px/1.55 "Segoe UI", system-ui, sans-serif; }
+  .wrap { max-width:1000px; margin:0 auto; }
+  a.back { color:var(--muted); font-size:13px; text-decoration:none; }
+  a.back:hover { color:var(--gold); }
+  h1 { font-size:20px; font-weight:600; margin:10px 0 20px; }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.07em;
+       color:var(--muted); font-weight:600; margin:0 0 10px; }
+  .cols { display:grid; grid-template-columns:1fr 360px; gap:24px;
+          align-items:start; }
+  @media (max-width:820px){ .cols{ grid-template-columns:1fr; } }
+  .panel { background:var(--panel); border:1px solid var(--line);
+           border-radius:6px; padding:16px; margin-bottom:16px; }
+  label { display:block; font-size:12px; text-transform:uppercase;
+          letter-spacing:.06em; color:var(--muted); margin:14px 0 4px; }
+  label:first-child { margin-top:0; }
+  textarea, input[type=text] { width:100%; padding:10px; background:#17181a;
+          color:var(--text); border:1px solid var(--line); border-radius:4px;
+          font:inherit; resize:vertical; }
+  textarea:focus, input:focus { outline:2px solid var(--gold); outline-offset:1px; }
+  .count { color:var(--muted); font-size:12px; margin-top:4px; }
+  .count.over { color:var(--flag); }
+  .alert { border-radius:6px; padding:12px 14px; font-size:13px;
+           margin-bottom:16px; }
+  .alert.flag { background:#2a2318; border:1px solid #5a4a1e; }
+  .alert.info { background:#1b2328; border:1px solid #2f4a5a; }
+  .actions { display:flex; gap:12px; flex-wrap:wrap; margin-top:18px; }
+  button { border:0; border-radius:6px; padding:11px 20px;
+           font:600 14px inherit; cursor:pointer; }
+  .save { background:var(--gold); color:#17181a; }
+  .ghost { background:transparent; color:var(--muted);
+           border:1px solid var(--line); }
+  .ghost:hover { color:var(--text); border-color:var(--gold); }
+  .drop:hover { color:#e0685f; border-color:#6a2f2a; }
+  canvas { width:100%; max-width:320px; border-radius:6px; display:block;
+           margin-bottom:10px; background:#000; }
+  .plat { display:flex; align-items:center; gap:8px; margin:8px 0;
+          font-size:14px; }
+  .plat input { accent-color:var(--gold); }
+  button:focus-visible, input:focus-visible, textarea:focus-visible {
+          outline:2px solid var(--gold); outline-offset:2px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <a class="back" href="{{ url_for('social.index') }}">&larr; Back to social posts</a>
+  <h1 dir="auto">{{ content.hook_en or 'Review post' }}</h1>
+
+  {% if content.review_flags %}
+  <div class="alert flag">Check before posting: {{ content.review_flags | join('; ') }}</div>
+  {% endif %}
+  {% if content.best_time_note %}
+  <div class="alert info">{{ content.best_time_note }}</div>
+  {% endif %}
+  {% if post.status == 'posted' %}
+  <div class="alert info">Already posted{% if post.post_urls %} — {{ post.post_urls }}{% endif %}</div>
+  {% endif %}
+
+  <div class="cols">
+    <div>
+      <form method="post" action="{{ url_for('social.save', post_id=post.id) }}" class="panel">
+        <h2>Caption</h2>
+
+        <label for="caption_en">English</label>
+        <textarea id="caption_en" name="caption_en" rows="6" dir="ltr"
+          oninput="count(this,'c_en')">{{ content.caption_en or '' }}</textarea>
+        <div class="count" id="c_en"></div>
+
+        <label for="caption_ar">العربية</label>
+        <textarea id="caption_ar" name="caption_ar" rows="6" dir="rtl"
+          oninput="count(this,'c_ar')">{{ content.caption_ar or '' }}</textarea>
+        <div class="count" id="c_ar"></div>
+
+        <label for="hashtags">Hashtags</label>
+        <input type="text" id="hashtags" name="hashtags" dir="auto"
+               value="{% for h in content.hashtags %}#{{ h }}{% if not loop.last %} {% endif %}{% endfor %}">
+
+        <div class="actions">
+          <button type="submit" class="save">Save changes</button>
+        </div>
+      </form>
+
+      <form method="post" action="{{ url_for('social.publish', post_id=post.id) }}"
+            class="panel" id="pubform">
+        <h2>Publish</h2>
+        {% if can_publish %}
+          <div class="plat">
+            <input type="checkbox" id="fb" name="platform" value="facebook" checked>
+            <label for="fb" style="margin:0;text-transform:none;letter-spacing:0;color:var(--text);font-size:14px">Facebook Page</label>
+          </div>
+          <div class="plat">
+            <input type="checkbox" id="ig" name="platform" value="instagram" checked>
+            <label for="ig" style="margin:0;text-transform:none;letter-spacing:0;color:var(--text);font-size:14px">Instagram</label>
+          </div>
+          <input type="hidden" name="caption_en" id="pub_caption">
+          <div class="actions">
+            <button type="submit" class="save"
+              {% if post.status == 'posted' %}disabled{% endif %}>Post now</button>
+          </div>
+        {% else %}
+          <p style="color:var(--muted);font-size:13px;margin:0">
+            Direct posting isn't configured. Copy the caption and the card
+            images, then post from your phone.</p>
+          <div class="actions">
+            <button type="button" class="ghost" onclick="copyAll()">Copy caption + hashtags</button>
+          </div>
+        {% endif %}
+      </form>
+
+      <form method="post" action="{{ url_for('social.discard', post_id=post.id) }}">
+        <button type="submit" class="ghost drop">Discard this post</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>Images</h2>
+      <div class="plat">
+        <input type="radio" id="st_clean" name="cardstyle" checked onchange="setStyle('clean')">
+        <label for="st_clean" style="margin:0;text-transform:none;letter-spacing:0;color:var(--text);font-size:14px">Photo only</label>
+        <input type="radio" id="st_brand" name="cardstyle" onchange="setStyle('branded')" style="margin-left:14px">
+        <label for="st_brand" style="margin:0;text-transform:none;letter-spacing:0;color:var(--text);font-size:14px">Branded card</label>
+      </div>
+
+      {% for p in properties %}
+        {% if not p.photo_url %}
+        <form method="post" enctype="multipart/form-data"
+              action="{{ url_for('social.upload_photo', post_id=post.id) }}"
+              style="background:#17181a;border:1px dashed var(--line);border-radius:6px;padding:12px;margin-bottom:12px">
+          <input type="hidden" name="property_id" value="{{ p.id }}">
+          <div class="small" style="margin-bottom:8px">
+            {{ p.ref }} has no photo yet.
+          </div>
+          <input type="file" name="photo" accept="image/jpeg,image/png,image/webp"
+                 required style="font-size:13px;width:100%;margin-bottom:8px">
+          <button type="submit" class="ghost">Add photo to this listing</button>
+        </form>
+        {% endif %}
+      {% endfor %}
+
+      <div id="cards"></div>
+      <button type="button" class="ghost" onclick="downloadAll()">Download images</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SLIDES = {{ content.slides | tojson }};
+const PROPS  = {{ properties | tojson }};
+const CONTACT = {{ contact | tojson }};
+
+function count(el, id) {
+  const box = document.getElementById(id);
+  const n = el.value.length;
+  box.textContent = n + ' characters' + (n > 125 ? ' — cut off after 125 on Instagram' : '');
+  box.className = 'count' + (n > 125 ? ' over' : '');
+}
+count(document.getElementById('caption_en'), 'c_en');
+count(document.getElementById('caption_ar'), 'c_ar');
+
+function copyAll() {
+  const tags = document.getElementById('hashtags').value;
+  navigator.clipboard.writeText(
+    document.getElementById('caption_en').value + '\n\n' + tags);
+}
+
+const pubform = document.getElementById('pubform');
+if (pubform) pubform.addEventListener('submit', () => {
+  document.getElementById('pub_caption').value =
+    document.getElementById('caption_en').value;
+});
+
+// ---- Cards are 1080x1350 portrait, Instagram's 4:5 ----
+// "clean" is the house style: the photo alone, no overlay.
+// "branded" adds the gold frame, specs and contact details.
+let cardStyle = 'clean';
+function setStyle(s) { cardStyle = s; redraw(); }
+
+function loadImage(src) {
+  return new Promise(resolve => {
+    if (!src) return resolve(null);
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
+function coverDraw(x, img) {
+  // Fill 1080x1080 without distorting the photo.
+  const scale = Math.max(1080 / img.width, 1350 / img.height);
+  const w = img.width * scale, h = img.height * scale;
+  x.drawImage(img, (1080 - w) / 2, (1350 - h) / 2, w, h);
+}
+
+async function drawCard(slide, prop, i) {
+  const W = 1080, H = 1350;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const x = c.getContext('2d');
+
+  x.fillStyle = '#17181a';
+  x.fillRect(0, 0, W, H);
+
+  const img = await loadImage(prop.photo_url);
+  if (img) coverDraw(x, img);
+
+  if (cardStyle === 'clean') {
+    if (!img) {
+      // No photo to show, so fall back to something legible.
+      x.fillStyle = '#c9a227';
+      x.font = '600 40px Segoe UI, sans-serif';
+      x.fillText(CONTACT.company, 80, H / 2);
+    }
+    return c;
+  }
+
+  if (img) {
+    // Dark gradient so text stays readable over any photo.
+    const g = x.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0,   'rgba(23,24,26,0.45)');
+    g.addColorStop(0.4, 'rgba(23,24,26,0.72)');
+    g.addColorStop(1,   'rgba(23,24,26,0.96)');
+    x.fillStyle = g;
+    x.fillRect(0, 0, W, H);
+  }
+
+  x.strokeStyle = '#c9a227'; x.lineWidth = 6;
+  x.strokeRect(40, 40, W - 80, H - 80);
+
+  x.fillStyle = '#c9a227';
+  x.font = '600 30px Segoe UI, sans-serif';
+  x.fillText((prop.ref || '').toString(), 90, 130);
+
+  if (SLIDES.length > 1) {
+    x.textAlign = 'right';
+    x.fillText((i + 1) + ' / ' + SLIDES.length, W - 90, 130);
+    x.textAlign = 'left';
+  }
+
+  x.fillStyle = '#ffffff';
+  x.font = '700 66px Segoe UI, sans-serif';
+  wrap(x, slide.headline_en || prop.title || '', 90, 300, W - 180, 74);
+
+  x.fillStyle = '#c9a227';
+  x.fillRect(90, 390, 120, 4);
+
+  x.font = '400 40px Segoe UI, sans-serif';
+  let y = 480;
+  (slide.lines || []).slice(0, 5).forEach(line => {
+    x.fillStyle = '#c9a227'; x.fillText('•', 90, y);
+    x.fillStyle = '#ffffff'; x.fillText(line, 130, y);
+    y += 66;
+  });
+
+  if (prop.price) {
+    x.fillStyle = '#c9a227';
+    x.font = '700 76px Segoe UI, sans-serif';
+    x.fillText(Number(prop.price).toLocaleString() + ' QAR', 90, 1090);
+  }
+
+  // Contact footer
+  x.fillStyle = 'rgba(201,162,39,0.9)';
+  x.fillRect(90, 1150, W - 180, 2);
+
+  x.fillStyle = '#ffffff';
+  x.font = '600 32px Segoe UI, sans-serif';
+  x.fillText(CONTACT.company, 90, 1205);
+
+  const bits = [CONTACT.phone, CONTACT.email, CONTACT.website].filter(Boolean);
+  x.fillStyle = '#c9a227';
+  x.font = '400 29px Segoe UI, sans-serif';
+  wrap(x, bits.join('   ·   '), 90, 1255, W - 180, 38);
+
+  return c;
+}
+
+function wrap(ctx, text, x0, y0, maxW, lh) {
+  const words = String(text).split(' ');
+  let line = '', y = y0;
+  words.forEach(w => {
+    if (ctx.measureText(line + w).width > maxW && line) {
+      ctx.fillText(line.trim(), x0, y); line = ''; y += lh;
+    }
+    line += w + ' ';
+  });
+  ctx.fillText(line.trim(), x0, y);
+}
+
+const holder = document.getElementById('cards');
+let canvases = [];
+async function redraw() {
+  holder.innerHTML = '';
+  canvases = [];
+  const slides = SLIDES.length ? SLIDES : [{}];
+  for (let i = 0; i < slides.length; i++) {
+    const c = await drawCard(slides[i], PROPS[i] || PROPS[0] || {}, i);
+    canvases.push(c);
+    holder.appendChild(c);
+  }
+}
+redraw();
+
+function downloadAll() {
+  canvases.forEach((c, i) => {
+    const a = document.createElement('a');
+    a.download = 'post-{{ post.id }}-' + (i + 1) + '.png';
+    a.href = c.toDataURL('image/png');
+    a.click();
+  });
+}
+
+function wrap(ctx, text, x0, y0, maxW, lh) {
+  const words = String(text).split(' ');
+  let line = '', y = y0;
+  words.forEach(w => {
+    if (ctx.measureText(line + w).width > maxW && line) {
+      ctx.fillText(line.trim(), x0, y); line = ''; y += lh;
+    }
+    line += w + ' ';
+  });
+  ctx.fillText(line.trim(), x0, y);
+}
+
+const holder = document.getElementById('cards');
+const canvases = [];
+(SLIDES.length ? SLIDES : [{}]).forEach((s, i) => {
+  const c = drawCard(s, PROPS[i] || PROPS[0] || {}, i);
+  canvases.push(c);
+  holder.appendChild(c);
+});
+
+function downloadAll() {
+  canvases.forEach((c, i) => {
+    const a = document.createElement('a');
+    a.download = 'post-{{ post.id }}-' + (i + 1) + '.png';
+    a.href = c.toDataURL('image/png');
+    a.click();
+  });
+}
+</script>
+</body>
+</html>

@@ -4,10 +4,12 @@ Run locally:   python app.py
 Run in prod:   gunicorn "app:create_app()"
 """
 import os
+import uuid
 from datetime import timedelta
 
 import auth
 import backups
+import mailer
 import views_admin
 import views_deals
 import views_imports
@@ -20,6 +22,9 @@ from db import (LEAD_STAGES, TZ_OFFSET, close_db, get_setting, init_db,
 from flask import Flask, g, redirect, request, session, url_for
 from markupsafe import Markup, escape
 from i18n import LANGS, current_lang, is_rtl, t
+from ai_intake import intake_bp
+from ai_social import social_bp
+from restore import restore_bp
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
@@ -76,6 +81,9 @@ def create_app():
     app.register_blueprint(views_imports.bp)
     app.register_blueprint(views_admin.contacts)
     app.register_blueprint(views_admin.admin)
+    app.register_blueprint(intake_bp)
+    app.register_blueprint(social_bp)
+    app.register_blueprint(restore_bp)
 
     # ------------------------------------------------------- language switch
     @app.route("/language/<code>")
@@ -186,6 +194,7 @@ def create_app():
             langs=LANGS,
             rtl=is_rtl(),
             wa=wa_button,
+            mail_ready=mailer.is_configured(),
             avatar=avatar,
             wa_labels=whatsapp.LABELS,
             tz_label=f"UTC{'+' if offset_hours >= 0 else ''}{offset_hours}",
@@ -198,6 +207,50 @@ def create_app():
             return redirect(url_for("auth.login"))
         return render_template("error.html", code="404",
                                msg=t("That page isn't part of the CRM.")), 404
+
+    @app.errorhandler(500)
+    @app.errorhandler(Exception)
+    def server_error(err):
+        """Write the real cause to instance/server.log and show something useful.
+
+        A bare 'Internal Server Error' tells the person nothing and tells whoever
+        has to fix it even less, so every failure gets a short reference code
+        that appears both on screen and in the log.
+        """
+        from werkzeug.exceptions import HTTPException
+        if isinstance(err, HTTPException) and err.code != 500:
+            return err
+
+        import traceback
+        from flask import render_template
+        ref = uuid.uuid4().hex[:8].upper()
+        when = local_now().strftime("%Y-%m-%d %H:%M:%S")
+        who = g.user["email"] if g.get("user") else "not signed in"
+
+        report = (f"\n{'=' * 70}\n"
+                  f"ERROR {ref}   {when}\n"
+                  f"  page   : {request.method} {request.path}\n"
+                  f"  user   : {who}\n"
+                  f"{'-' * 70}\n"
+                  f"{traceback.format_exc()}"
+                  f"{'=' * 70}\n")
+        print(report)
+        try:
+            log_path = os.path.join(os.path.dirname(app.config["DATABASE"]),
+                                    "server.log")
+            with open(log_path, "a", encoding="utf-8") as fh:
+                fh.write(report)
+        except OSError:
+            pass
+
+        try:
+            return render_template("error.html", code="500", ref=ref, msg=(
+                "Something went wrong at our end and your request was not "
+                "completed. Nothing you were working on has been lost.")), 500
+        except Exception:
+            # the error page itself needs a working layout, so fall back to plain text
+            return (f"<h1>Something went wrong</h1><p>Reference {ref}. "
+                    f"The details are in instance/server.log.</p>"), 500
 
     @app.errorhandler(413)
     def too_large(_e):

@@ -210,25 +210,26 @@ def _date(value):
 
 # ===================================================================== sheets
 def property_sheet(wb, co, name, title, subtitle, records, exported_by, index=None):
-    headers = ["Ref", "Title", "Building", "Flat", "Location", "Map", "Type",
-               "Sale / Rent", "Status", f"Price ({co['currency']})", "Size (m²)",
-               "Beds", "Baths", "Owner", "Agent", "Listed"]
+    headers = ["Ref", "Title", "Building", "Floor", "Flat", "Location", "Map",
+               "Type", "Sale / Rent", "Status", f"Price ({co['currency']})",
+               "Size (m²)", "Beds", "Baths", "Extra rooms", "Owner", "Agent",
+               "Listed"]
     formats = [
         (None, "left"), (None, "left"), (None, "left"), ("@", "center"),
-        (None, "left"), (None, "center"), (None, "center"), (None, "center"),
-        (None, "center"), ("#,##0", "right"), ("#,##0.#", "right"),
-        ("0", "center"), ("0", "center"), (None, "left"), (None, "left"),
-        ("dd mmm yyyy", "center"),
+        ("@", "center"), (None, "left"), (None, "center"), (None, "center"),
+        (None, "center"), (None, "center"), ("#,##0", "right"),
+        ("#,##0.#", "right"), ("0", "center"), ("0", "center"), (None, "left"),
+        (None, "left"), (None, "left"), ("dd mmm yyyy", "center"),
     ]
-    widths = [11, 34, 17, 8, 14, 11, 12, 11, 11, 15, 10, 6, 6, 22, 17, 12]
-    MAP_COL = 6
+    widths = [11, 32, 16, 7, 8, 13, 10, 11, 10, 10, 14, 9, 6, 6, 22, 20, 16, 12]
+    MAP_COL = 7
 
     ws = wb.create_sheet(name) if index is None else wb.create_sheet(name, index)
-    rows = [(r["ref"], r["title"], r["building_no"], r["unit_no"], r["area"],
-             r["map_url"], r["prop_type"], r["listing_type"], r["status"],
-             r["price"], r["size_sqm"], r["bedrooms"], r["bathrooms"],
-             r["owner_name"], r["agent_name"], _date(r["created_at"]))
-            for r in records]
+    rows = [(r["ref"], r["title"], r["building_no"], r["floor_no"], r["unit_no"],
+             r["area"], r["map_url"], r["prop_type"], r["listing_type"],
+             r["status"], r["price"], r["size_sqm"], r["bedrooms"],
+             r["bathrooms"], r["extras"], r["owner_name"], r["agent_name"],
+             _date(r["created_at"])) for r in records]
 
     brand_header(ws, co, title, subtitle.format(n=len(rows)), len(headers), exported_by)
     table_header(ws, headers)
@@ -238,8 +239,8 @@ def property_sheet(wb, co, name, title, subtitle, records, exported_by, index=No
         map_links(ws, MAP_COL, FIRST_DATA, end)
         totals_row(ws, end + 1, len(headers),
                    f"{len(rows)} listing{'' if len(rows) == 1 else 's'}", {
-                       10: (f"=SUM(J{FIRST_DATA}:J{end})", "#,##0"),
-                       11: (f"=SUM(K{FIRST_DATA}:K{end})", "#,##0.#"),
+                       11: (f"=SUM(K{FIRST_DATA}:K{end})", "#,##0"),
+                       12: (f"=SUM(L{FIRST_DATA}:L{end})", "#,##0.#"),
                    })
     else:
         end = FIRST_DATA - 1
