@@ -13,7 +13,7 @@ bp = Blueprint("main", __name__)
 @bp.route('/')
 def index():
     # This tells the server what to show when visiting the main web address
-    return redirect(url_for('main.dashboard'))
+    return redirect(url_for('properties.index'))
 
 @bp.route("/")
 @login_required
