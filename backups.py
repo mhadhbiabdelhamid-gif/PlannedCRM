@@ -15,10 +15,13 @@ import sqlite3
 import threading
 import time
 import zipfile
-from datetime import datetime
+from datetime import datetime, timedelta
 
 KEEP = int(os.environ.get("BACKUP_KEEP", "14"))
 INTERVAL_HOURS = int(os.environ.get("BACKUP_INTERVAL_HOURS", "24"))
+OFFSITE_HOURS = int(os.environ.get("BACKUP_OFFSITE_INTERVAL_HOURS", "168"))
+# Most providers reject a message larger than about 25 MB.
+OFFSITE_MAX_MB = float(os.environ.get("BACKUP_OFFSITE_MAX_MB", "20"))
 
 
 def default_folder(app):
@@ -181,6 +184,90 @@ def build_archive(app, include_uploads=True):
     return buf
 
 
+def send_offsite(app):
+    """Email a copy of the database somewhere that isn't this server.
+
+    Every other backup in this file lands on the same disk as the database it
+    is protecting, which is no help at all if that disk is what goes. Set
+    "Email a weekly copy to" in Settings, with the mail account already
+    configured, and a zip leaves the building once a week.
+
+    Returns (ok, message). Never raises.
+    """
+    from db import get_setting, set_setting
+    import mailer
+
+    to = (get_setting("backup_email", "") or "").strip()
+    if not to:
+        return False, "No off-site address set."
+    if not mailer.is_configured():
+        return False, "Email hasn't been set up, so no copy could be sent."
+
+    # The database alone: uploaded photos and documents make the archive far
+    # too large to email, and they are the part that can be gathered again.
+    archive = build_archive(app, include_uploads=False)
+    payload = archive.getvalue()
+    size_mb = len(payload) / (1024 * 1024)
+    if size_mb > OFFSITE_MAX_MB:
+        return False, (f"The backup is {size_mb:.1f} MB, over the "
+                       f"{OFFSITE_MAX_MB:.0f} MB email limit. Download it from "
+                       "Settings instead.")
+
+    stamp = datetime.now().strftime("%Y-%m-%d")
+    company = get_setting("company_name", "Planned Real Estate")
+    ok, detail = mailer.send(
+        to,
+        f"{company} — CRM backup {stamp}",
+        (f"Attached is the weekly copy of the {company} CRM database, taken "
+         f"{datetime.now().strftime('%d %B %Y at %H:%M')}.\n\n"
+         "Keep it somewhere that isn't the server. Photos and documents are "
+         "not included — only the records themselves.\n\n"
+         "To restore, see READ-ME-FIRST.txt inside the zip.\n"),
+        from_name=company,
+        attachments=[(f"crm-backup-{stamp}.zip", payload)])
+
+    if ok:
+        set_setting("backup_offsite_at", _stamp())
+        return True, f"Backup emailed to {to} ({size_mb:.1f} MB)."
+    return False, detail
+
+
+def _stamp(when=None):
+    return (when or datetime.now()).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _claim_offsite(app):
+    """Take the weekly slot, or report that someone else already has it.
+
+    The server runs several workers and each starts its own scheduler, so a
+    plain "is it due yet" check has them all deciding yes at the same instant
+    and sending the same backup several times over. The claim is a single
+    conditional write, which SQLite serialises, so exactly one worker wins.
+    """
+    from db import get_db
+    cutoff = _stamp(datetime.now() - timedelta(hours=OFFSITE_HOURS))
+    db = get_db()
+    cur = db.execute(
+        "INSERT INTO settings (key, value) VALUES ('backup_offsite_at', ?)"
+        " ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+        "   WHERE settings.value IS NULL OR settings.value = ''"
+        "      OR settings.value < ?",
+        (_stamp(), cutoff))
+    db.commit()
+    claimed = cur.rowcount > 0
+    cur.close()
+    return claimed
+
+
+def _release_offsite(retry_hours=6):
+    """Hand the slot back after a failed send, dated so it retries before the
+    week is out rather than immediately — a misconfigured mail account should
+    not fill the log with the same complaint every half hour."""
+    from db import set_setting
+    set_setting("backup_offsite_at",
+                _stamp(datetime.now() - timedelta(hours=OFFSITE_HOURS - retry_hours)))
+
+
 def start_scheduler(app):
     """Take a backup every INTERVAL_HOURS while the CRM is running.
 
@@ -197,6 +284,14 @@ def start_scheduler(app):
                         path = make_backup(app, "auto")
                         if path:
                             print(f"  Backup saved: {path}")
+                    if _claim_offsite(app):
+                        ok, detail = send_offsite(app)
+                        if not ok:
+                            _release_offsite()
+                        # Only worth a line in the log when it was actually
+                        # meant to happen; an unset address is not a fault.
+                        if ok or "No off-site address" not in detail:
+                            print(f"  Off-site backup: {detail}")
             except Exception as exc:        # never let this kill the CRM
                 print(f"  Backup failed: {exc}")
             time.sleep(1800)                # re-check every 30 minutes

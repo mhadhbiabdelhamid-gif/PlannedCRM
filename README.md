@@ -20,10 +20,16 @@ First run creates the admin account and prints it in the terminal:
 
 | | |
 |---|---|
-| Email | `admin@plannedrealestate.qa` |
-| Password | `Planned@2026` |
+| Email | `admin@plannedrealestate.qa` (or `ADMIN_EMAIL`) |
+| Password | `ADMIN_PASSWORD`, or a random one printed once at start-up |
 
-**Change that password immediately** under My account.
+If `ADMIN_PASSWORD` isn't set, the password is generated and shown **only** in
+that first terminal line — copy it before the window scrolls, or set
+`ADMIN_PASSWORD` before starting. It used to fall back to a fixed password
+written in this file, which meant every deployed copy shipped with publicly
+known admin credentials.
+
+**Change it immediately** under My account.
 
 To try the app with realistic Doha data first:
 

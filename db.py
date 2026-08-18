@@ -147,6 +147,19 @@ CREATE TABLE IF NOT EXISTS deals (
     updated_at    TEXT NOT NULL
 );
 
+-- Who shares a deal's commission. One row per participating agent.
+-- Defined without foreign keys to match what migrate_deals.py created on
+-- machines that ran it by hand, so both end up with the same schema.
+CREATE TABLE IF NOT EXISTS deal_agents (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    deal_id   INTEGER NOT NULL,
+    user_id   INTEGER NOT NULL,
+    role      TEXT    NOT NULL DEFAULT 'lead',
+    share_pct REAL    NOT NULL DEFAULT 100,
+    amount    REAL,
+    UNIQUE (deal_id, user_id)
+);
+
 CREATE TABLE IF NOT EXISTS comments (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     entity_type TEXT NOT NULL,      -- property | lead
@@ -213,6 +226,7 @@ CREATE INDEX IF NOT EXISTS idx_import_when ON imports(created_at);
 CREATE INDEX IF NOT EXISTS idx_lead_agent  ON leads(agent_id);
 CREATE INDEX IF NOT EXISTS idx_comment_ent ON comments(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_notif_user  ON notifications(user_id, is_read);
+CREATE INDEX IF NOT EXISTS idx_deal_agents_user ON deal_agents(user_id);
 """
 
 LEAD_STAGES = ["New", "Contacted", "Qualified", "Viewing", "Offer",
@@ -341,6 +355,13 @@ MIGRATIONS = [
     ("properties", "floor_no", "TEXT"),
     ("properties", "extras", "TEXT"),
     ("properties", "last_verified", "TEXT"),
+    # Flexible commission — these were previously applied by running
+    # migrate_deals.py by hand, which is easy to forget on a deployed copy and
+    # leaves every Deals page erroring on the missing columns.
+    ("deals", "term_months", "INTEGER"),
+    ("deals", "free_months", "REAL"),
+    ("deals", "commission_basis", "TEXT"),
+    ("deals", "commission_on", "TEXT"),
 ]
 
 # How long a listing can go without someone confirming it's still on the
@@ -365,6 +386,30 @@ DEPARTMENTS = ["Sales", "Leasing", "Property Management", "Administration",
                "Marketing", "Finance"]
 
 
+def backfill_deals(con):
+    """Give older deals the commission description the newer code expects.
+
+    Written so running it twice changes nothing: COALESCE only fills columns
+    that are still empty, and the split rows are inserted only where none
+    exist. No existing commission amount is recalculated — historic deals keep
+    exactly the figure they were recorded with.
+    """
+    con.execute(
+        "UPDATE deals SET term_months = COALESCE(term_months, 12),"
+        " free_months = COALESCE(free_months, 0),"
+        " commission_on = COALESCE(commission_on, 'contract'),"
+        " commission_basis = COALESCE(commission_basis,"
+        "   CASE WHEN lower(COALESCE(deal_type,'')) LIKE 'rent%'"
+        "        THEN 'monthly_rent' ELSE 'sale_price' END)")
+
+    # Each existing deal's agent becomes its sole 100% participant.
+    con.execute(
+        "INSERT INTO deal_agents (deal_id, user_id, role, share_pct, amount)"
+        " SELECT d.id, d.agent_id, 'lead', 100, d.commission_amt FROM deals d"
+        " WHERE d.agent_id IS NOT NULL"
+        "   AND NOT EXISTS (SELECT 1 FROM deal_agents da WHERE da.deal_id = d.id)")
+
+
 def init_db(app):
     """Tables, then migrations, then indexes — in that order.
 
@@ -382,6 +427,9 @@ def init_db(app):
     con.commit()
 
     con.executescript(INDEXES)
+    con.commit()
+
+    backfill_deals(con)
     con.commit()
     con.close()
 

@@ -414,6 +414,8 @@ def settings():
                            mail_ready=mailer.is_configured(),
                            backup_keep=backups.KEEP,
                            backup_custom=get_setting('backup_folder', ''),
+                           backup_email=get_setting('backup_email', ''),
+                           backup_offsite_at=get_setting('backup_offsite_at', ''),
                            backup_default=backups.default_folder(current_app))
 
 
@@ -473,6 +475,35 @@ def backup_folder_save():
         flash(f"Backups will now be saved to {result}. A test copy is there already.", "ok")
     else:
         flash(f"Backups will now be saved to {result}.", "ok")
+    return redirect(url_for("admin.settings") + "#backups")
+
+
+@admin.route("/backup/offsite", methods=("POST",))
+@admin_required
+def backup_offsite():
+    """Set the address a weekly copy goes to, and optionally send one now.
+
+    Every other backup sits on the same disk as the database it protects, so
+    this is the only one that survives losing the server itself.
+    """
+    to = request.form.get("backup_email", "").strip()
+    if to and not mailer.valid_address(to):
+        flash(f"{to} doesn't look like an email address.", "error")
+        return redirect(url_for("admin.settings") + "#backups")
+
+    set_setting("backup_email", to)
+    if not to:
+        log(g.user["id"], "Turned off the off-site backup")
+        flash("Weekly off-site copies are off. Nothing now leaves the server "
+              "on its own.", "error")
+        return redirect(url_for("admin.settings") + "#backups")
+
+    log(g.user["id"], "Set the off-site backup address", detail=to)
+    if request.form.get("send_now"):
+        ok, message = backups.send_offsite(current_app)
+        flash(message, "ok" if ok else "error")
+    else:
+        flash(f"A copy of the database will be emailed to {to} once a week.", "ok")
     return redirect(url_for("admin.settings") + "#backups")
 
 

@@ -4,6 +4,8 @@ Run locally:   python app.py
 Run in prod:   gunicorn "app:create_app()"
 """
 import os
+import secrets
+import sqlite3
 import uuid
 from datetime import timedelta
 
@@ -31,6 +33,66 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
 LOGO_EXTS = ("png", "jpg", "jpeg", "webp", "svg", "gif")
 
+# The value this used to fall back to. Anyone who knows it can forge a signed
+# session cookie and sign in as an admin, so it is never used as a real key.
+PLACEHOLDER_KEY = "change-me-before-you-deploy"
+
+
+def resolve_secret_key(data_dir):
+    """The key that signs session cookies.
+
+    SECRET_KEY from the environment wins. Failing that, a key kept beside the
+    database is used, and generated the first time if it isn't there yet.
+
+    The point is that there is no path back to a known constant: forgetting to
+    set SECRET_KEY on a deployed copy used to leave every session cookie
+    forgeable, and nothing on screen said so.
+    """
+    from_env = (os.environ.get("SECRET_KEY") or "").strip()
+    if from_env and from_env != PLACEHOLDER_KEY:
+        return from_env
+
+    key_path = os.path.join(data_dir, "secret_key")
+    try:
+        with open(key_path, "r", encoding="utf-8") as fh:
+            stored = fh.read().strip()
+        if stored:
+            return stored
+    except OSError:
+        pass
+
+    generated = secrets.token_hex(32)
+    try:
+        os.makedirs(data_dir, exist_ok=True)
+        # Created exclusively: the server runs several workers, and each one
+        # calls this at start-up. Without O_EXCL they would each write their
+        # own key, and a cookie signed by one worker would be rejected by the
+        # next — an endless bounce back to the sign-in page.
+        fd = os.open(key_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        with os.fdopen(fd, "w") as fh:
+            fh.write(generated)
+        print(f"  SECRET_KEY was not set, so one was generated and saved to "
+              f"{key_path}.\n"
+              f"  Everyone will need to sign in again. Set SECRET_KEY in the "
+              f"environment to control it yourself.")
+        return generated
+    except FileExistsError:
+        # Another worker got there first; its key is the one that counts.
+        try:
+            with open(key_path, "r", encoding="utf-8") as fh:
+                stored = fh.read().strip()
+            if stored:
+                return stored
+        except OSError:
+            pass
+    except OSError as exc:
+        # A read-only disk still must not fall back to a shared constant. A
+        # key that lasts only until restart costs convenience, not safety.
+        print(f"  SECRET_KEY was not set and could not be saved ({exc}). "
+              f"Using a temporary key — everyone will be signed out whenever "
+              f"the server restarts.")
+    return generated
+
 
 def find_logo():
     """Look for logo.<anything sensible>, case-insensitively.
@@ -52,10 +114,11 @@ def find_logo():
 
 def create_app():
     app = Flask(__name__, instance_relative_config=True)
+    database = os.environ.get("DATABASE_PATH",
+                              os.path.join(BASE_DIR, "instance", "crm.sqlite3"))
     app.config.from_mapping(
-        SECRET_KEY=os.environ.get("SECRET_KEY", "change-me-before-you-deploy"),
-        DATABASE=os.environ.get("DATABASE_PATH",
-                                os.path.join(BASE_DIR, "instance", "crm.sqlite3")),
+        SECRET_KEY=resolve_secret_key(os.path.dirname(database)),
+        DATABASE=database,
         UPLOAD_FOLDER=os.environ.get("UPLOAD_FOLDER",
                                      os.path.join(BASE_DIR, "instance", "uploads")),
         MAX_CONTENT_LENGTH=25 * 1024 * 1024,       # 25 MB per upload
@@ -279,9 +342,22 @@ def create_app():
     with app.app_context():
         if query("SELECT COUNT(*) c FROM users", one=True)["c"] == 0:
             email = os.environ.get("ADMIN_EMAIL", "admin@plannedrealestate.qa")
-            pw = os.environ.get("ADMIN_PASSWORD", "Planned@2026")
-            auth.create_user("Administrator", email, pw, "admin")
-            print(f"  Created first admin: {email} / {pw}  (change it after signing in)")
+            pw = os.environ.get("ADMIN_PASSWORD", "")
+            fallback = not pw
+            pw = pw or secrets.token_urlsafe(12)
+            try:
+                auth.create_user("Administrator", email, pw, "admin")
+            except sqlite3.IntegrityError:
+                # Several workers start together and all see an empty table.
+                # Whichever one got there first has made the account; the rest
+                # would otherwise die here and take the server down with them.
+                pass
+            else:
+                print(f"  Created first admin: {email} / {pw}")
+                if fallback:
+                    print("  That password was generated and is shown only "
+                          "here. Set ADMIN_PASSWORD in the environment, or "
+                          "sign in and change it now.")
 
     return app
 

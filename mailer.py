@@ -73,8 +73,13 @@ def _connect(s):
     return server
 
 
-def send(to, subject, body, from_name=None, reply_to=None, cc=None):
-    """Send one message. Returns (ok, message) — never raises at the caller."""
+def send(to, subject, body, from_name=None, reply_to=None, cc=None,
+         attachments=None):
+    """Send one message. Returns (ok, message) — never raises at the caller.
+
+    attachments: list of (filename, bytes) pairs, used for the off-site
+    backup copy. Mail providers commonly cap a message at around 25 MB.
+    """
     s = settings()
     if not is_configured():
         return False, ("Email hasn't been set up yet. An admin can add the "
@@ -92,6 +97,10 @@ def send(to, subject, body, from_name=None, reply_to=None, cc=None):
     if reply_to and valid_address(reply_to):
         msg["Reply-To"] = reply_to.strip()
     msg.set_content(body or "")
+
+    for filename, payload in (attachments or []):
+        msg.add_attachment(payload, maintype="application",
+                           subtype="octet-stream", filename=filename)
 
     recipients = [to.strip()] + ([cc.strip()] if cc and valid_address(cc) else [])
 

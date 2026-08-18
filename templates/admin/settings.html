@@ -136,6 +136,41 @@
           </div>
           <button class="btn" type="submit">Save folder and test it</button>
         </form>
+
+        <div class="hairline"></div>
+        <div class="eyebrow" style="margin-bottom:6px">Email a weekly copy</div>
+        <p class="small muted" style="margin:0 0 10px">
+          On a hosted server there is no OneDrive folder to point at, and the daily
+          copies sit on the same disk as the database itself — so losing the server
+          loses both. This emails the database out once a week, which is the only
+          copy that survives that. Photos and documents aren't included; they'd be
+          far too large to send.
+        </p>
+        {% if not mail_ready %}
+          <p class="small" style="margin:0 0 10px;color:var(--warn)">
+            Set the mail account up under <a href="#email">Email</a> first — nothing
+            can be sent until that works.
+          </p>
+        {% endif %}
+        <form method="post" action="{{ url_for('admin.backup_offsite') }}">
+          <div class="field">
+            <input type="email" name="backup_email" value="{{ backup_email }}"
+                   placeholder="someone@plannedrealestate.qa">
+            <span class="small faint">
+              {% if backup_offsite_at %}
+                Last copy sent {{ backup_offsite_at }}.
+              {% else %}
+                No copy has been emailed yet.
+              {% endif %}
+              Leave empty to switch this off.
+            </span>
+          </div>
+          <div class="inline">
+            <button class="btn" type="submit">Save address</button>
+            <button class="btn btn-gold" type="submit" name="send_now" value="1">
+              Save and send one now</button>
+          </div>
+        </form>
         <div class="hairline"></div>
 
         {% if backup_list %}
