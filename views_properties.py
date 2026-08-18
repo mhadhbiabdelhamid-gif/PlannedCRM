@@ -8,7 +8,8 @@ from flask import (Blueprint, current_app, flash, g, redirect, render_template,
                    request, url_for)
 from werkzeug.utils import secure_filename
 
-from auth import can_edit, is_admin, login_required
+from auth import (can_edit, can_publish, can_see_listing, is_admin,
+                  login_required, published_only, sees_all)
 from db import (LISTING_TYPES, PROP_STATUS, PROP_TYPES, STALE_DAYS, days_ago,
                 execute, get_setting, log, next_ref, notify, now, paginate, query)
 
@@ -46,6 +47,7 @@ def index():
            " LEFT JOIN users u ON u.id = p.agent_id"
            " LEFT JOIN owners o ON o.id = p.owner_id"
            " LEFT JOIN partners pa ON pa.id = p.partner_id WHERE 1=1")
+    sql += published_only("p")
     args = []
     if f["q"]:
         sql += (" AND (p.title LIKE ? OR p.address LIKE ? OR p.ref LIKE ?"
@@ -175,13 +177,19 @@ def detail(pid):
               " o.phone AS owner_phone, o.email AS owner_email, o.photo AS owner_photo,"
               " o.company AS owner_company, pa.name AS partner_name,"
               " pa.photo AS partner_photo, pa.phone AS partner_phone,"
-              " pa.email AS partner_email, pa.partner_type"
+              " pa.email AS partner_email, pa.partner_type,"
+              " r.name AS reviewed_name, s.name AS submitted_name"
               " FROM properties p LEFT JOIN users u ON u.id = p.agent_id"
               " LEFT JOIN owners o ON o.id = p.owner_id"
               " LEFT JOIN partners pa ON pa.id = p.partner_id"
+              " LEFT JOIN users r ON r.id = p.reviewed_by"
+              " LEFT JOIN users s ON s.id = p.submitted_by"
               " WHERE p.id = ?", (pid,), one=True)
     if p is None:
         flash("That property no longer exists.", "error")
+        return redirect(url_for("properties.index"))
+    if not can_see_listing(p):
+        flash("That listing is still waiting to be published.", "error")
         return redirect(url_for("properties.index"))
     images = query("SELECT * FROM property_images WHERE property_id = ?"
                    " ORDER BY is_cover DESC, id", (pid,))
@@ -244,18 +252,33 @@ def form(pid=None):
 
         if p is None:
             ref = next_ref("PRE-P", "properties")
+            # An admin publishes as they write. Anyone else is proposing a
+            # listing, and it waits where the rest of the office can't see it.
+            waiting = not can_publish()
+            approval = "pending" if waiting else "approved"
             pid = execute(
                 "INSERT INTO properties (title,address,area,prop_type,listing_type,status,"
                 "price,size_sqm,bedrooms,bathrooms,description,features,owner_id,partner_id,"
                 "agent_id,building_no,floor_no,unit_no,extras,map_url,is_own,ref,"
-                "created_at,updated_at,last_verified)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                vals + (ref, now(), now(), now()))
-            log(g.user["id"], "Added listing", "property", pid, f"{ref} — {vals[0]}")
-            if vals[14] and vals[14] != g.user["id"]:
-                notify(vals[14], f"You were assigned the listing {vals[0]}",
-                       url_for("properties.detail", pid=pid))
-            flash("Listing added.", "ok")
+                "created_at,updated_at,last_verified,approval,submitted_by)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                vals + (ref, now(), now(), now(), approval, g.user["id"]))
+            log(g.user["id"],
+                "Submitted listing for approval" if waiting else "Added listing",
+                "property", pid, f"{ref} — {vals[0]}")
+            if waiting:
+                for admin_row in query(
+                        "SELECT id FROM users WHERE role = 'admin' AND is_active = 1"):
+                    notify(admin_row["id"],
+                           f"{g.user['name']} submitted {vals[0]} for approval",
+                           url_for("properties.waiting"))
+                flash("Sent for approval. It stays out of the listings until "
+                      "an admin publishes it.", "ok")
+            else:
+                if vals[14] and vals[14] != g.user["id"]:
+                    notify(vals[14], f"You were assigned the listing {vals[0]}",
+                           url_for("properties.detail", pid=pid))
+                flash("Listing added.", "ok")
         else:
             changes = []
             if float(p["price"] or 0) != vals[6]:
@@ -427,6 +450,119 @@ def verify(pid):
     return redirect(back if back and back.startswith("/") else url_for("properties.detail", pid=pid))
 
 
+@bp.route("/waiting")
+@login_required
+def waiting():
+    """Listings an agent or manager has proposed but nobody has published.
+
+    Admins see everything here and act on it. Everyone else sees only their
+    own, so they can follow what they sent and fix anything sent back.
+    """
+    sql = ("SELECT p.*, u.name AS agent_name, s.name AS submitted_name,"
+           " r.name AS reviewed_name,"
+           " (SELECT filename FROM property_images i WHERE i.property_id = p.id"
+           "   ORDER BY is_cover DESC, id LIMIT 1) AS cover"
+           " FROM properties p"
+           " LEFT JOIN users u ON u.id = p.agent_id"
+           " LEFT JOIN users s ON s.id = p.submitted_by"
+           " LEFT JOIN users r ON r.id = p.reviewed_by"
+           " WHERE COALESCE(p.approval, 'approved') IN ('pending', 'rejected')")
+    args = []
+    if not sees_all():
+        sql += " AND p.submitted_by = ?"
+        args.append(g.user["id"])
+    # Sent-back ones first: someone is waiting on those to be corrected.
+    sql += " ORDER BY CASE p.approval WHEN 'rejected' THEN 0 ELSE 1 END, p.id"
+
+    pager = paginate(sql, args, request.args.get("page", 1), per_page=60)
+    return render_template("properties/waiting.html", rows=pager["rows"],
+                           pager=pager, args={}, can_publish=can_publish())
+
+
+@bp.route("/<int:pid>/approve", methods=("POST",))
+@login_required
+def approve(pid):
+    """Publish a waiting listing so the rest of the office can see it."""
+    if not can_publish():
+        flash("Only an admin can publish a listing.", "error")
+        return redirect(url_for("properties.waiting"))
+    p = query("SELECT * FROM properties WHERE id = ?", (pid,), one=True)
+    if p is None:
+        flash("That listing no longer exists.", "error")
+        return redirect(url_for("properties.waiting"))
+
+    execute("UPDATE properties SET approval='approved', reviewed_by=?,"
+            " reviewed_at=?, review_note=NULL, last_verified=?, updated_at=?"
+            " WHERE id=?", (g.user["id"], now(), now(), now(), pid))
+    log(g.user["id"], "Published listing", "property", pid, p["title"])
+    if p["submitted_by"] and p["submitted_by"] != g.user["id"]:
+        notify(p["submitted_by"], f"{p['title']} is now published",
+               url_for("properties.detail", pid=pid))
+    flash(f"{p['title']} is published.", "ok")
+    return redirect(url_for("properties.waiting"))
+
+
+@bp.route("/<int:pid>/reject", methods=("POST",))
+@login_required
+def reject(pid):
+    """Send a listing back to whoever wrote it, with a note saying why."""
+    if not can_publish():
+        flash("Only an admin can send a listing back.", "error")
+        return redirect(url_for("properties.waiting"))
+    p = query("SELECT * FROM properties WHERE id = ?", (pid,), one=True)
+    if p is None:
+        flash("That listing no longer exists.", "error")
+        return redirect(url_for("properties.waiting"))
+
+    note = request.form.get("note", "").strip()
+    if not note:
+        flash("Say what needs fixing — that note is the whole point of "
+              "sending it back.", "error")
+        return redirect(url_for("properties.waiting"))
+
+    execute("UPDATE properties SET approval='rejected', reviewed_by=?,"
+            " reviewed_at=?, review_note=?, updated_at=? WHERE id=?",
+            (g.user["id"], now(), note, now(), pid))
+    log(g.user["id"], "Sent listing back", "property", pid,
+        f"{p['title']} — {note[:80]}")
+    author = query("SELECT name FROM users WHERE id = ?",
+                   (p["submitted_by"],), one=True) if p["submitted_by"] else None
+    if p["submitted_by"]:
+        notify(p["submitted_by"],
+               f"{p['title']} was sent back: {note[:60]}",
+               url_for("properties.detail", pid=pid))
+    flash(f"{p['title']} went back to {author['name'] if author else 'its author'}.",
+          "ok")
+    return redirect(url_for("properties.waiting"))
+
+
+@bp.route("/<int:pid>/resubmit", methods=("POST",))
+@login_required
+def resubmit(pid):
+    """Put a corrected listing back in front of the admin."""
+    p = query("SELECT * FROM properties WHERE id = ?", (pid,), one=True)
+    if p is None:
+        flash("That listing no longer exists.", "error")
+        return redirect(url_for("properties.waiting"))
+    if not can_edit(p) and p["submitted_by"] != g.user["id"]:
+        flash("That listing belongs to another agent.", "error")
+        return redirect(url_for("properties.waiting"))
+    if (p["approval"] or "approved") != "rejected":
+        flash("That listing isn't waiting to be corrected.", "error")
+        return redirect(url_for("properties.waiting"))
+
+    execute("UPDATE properties SET approval='pending', review_note=NULL,"
+            " updated_at=? WHERE id=?", (now(), pid))
+    log(g.user["id"], "Resubmitted listing", "property", pid, p["title"])
+    for admin_row in query(
+            "SELECT id FROM users WHERE role = 'admin' AND is_active = 1"):
+        notify(admin_row["id"],
+               f"{g.user['name']} resubmitted {p['title']}",
+               url_for("properties.waiting"))
+    flash("Sent back for approval.", "ok")
+    return redirect(url_for("properties.waiting"))
+
+
 @bp.route("/stale")
 @login_required
 def stale():
@@ -440,6 +576,8 @@ def stale():
            "   ORDER BY is_cover DESC, id LIMIT 1) AS cover"
            " FROM properties p LEFT JOIN users u ON u.id = p.agent_id"
            " WHERE p.status IN ('Available','Reserved')"
+           # A listing nobody has published yet isn't stock to chase up.
+           + published_only("p") +
            " AND (p.last_verified IS NULL OR p.last_verified < ?)")
     args = [cutoff]
     if not sees_all():

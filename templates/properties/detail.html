@@ -2,6 +2,19 @@
 {% block title %}{{ p.title }}{% endblock %}
 
 {% block content %}
+{% if (p.approval or 'approved') != 'approved' %}
+  <div class="flash {{ 'error' if p.approval == 'rejected' else '' }}" style="margin-bottom:16px">
+    {% if p.approval == 'rejected' %}
+      <b>{{ t('Sent back') }}{% if p.reviewed_name %} {{ t('by') }} {{ p.reviewed_name }}{% endif %}:</b>
+      {{ p.review_note or t('No note was left.') }}
+      <div class="small" style="margin-top:6px">
+        {{ t('Correct it, then send it for approval again from the waiting list.') }}</div>
+    {% else %}
+      <b>{{ t('Waiting for approval.') }}</b>
+      {{ t('Nobody else can see this listing until an admin publishes it.') }}
+    {% endif %}
+  </div>
+{% endif %}
 <div class="page-head">
   <div>
     <div class="eyebrow">{{ p.ref }} · {{ t(p.prop_type) }}</div>

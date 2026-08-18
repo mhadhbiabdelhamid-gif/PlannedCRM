@@ -273,6 +273,34 @@ AR = {
     "Tick this for your own stock. Exports keep these on a separate sheet from third-party listings.":
         "حدّد هذا لعقاراتكم الخاصة. تُدرج في ورقة منفصلة عن عقارات الأطراف الأخرى عند التصدير.",
     "Stale listings": "عقارات متأخرة المراجعة",
+    "Waiting for approval": "بانتظار الموافقة",
+    "Waiting for approval.": "بانتظار الموافقة.",
+    "Waiting": "بانتظار",
+    "Sent back": "أُعيد للتعديل",
+    "Send back": "إعادة للتعديل",
+    "Send it back": "إعادته للتعديل",
+    "Publish": "نشر",
+    "Open": "فتح",
+    "Edit": "تعديل",
+    "Sent by": "أرسله",
+    "by": "بواسطة",
+    "Unknown": "غير معروف",
+    "Nothing is waiting.": "لا يوجد شيء بانتظار الموافقة.",
+    "Send for approval again": "إعادة الإرسال للموافقة",
+    "What needs fixing?": "ما الذي يحتاج تصحيحاً؟",
+    "e.g. Price looks wrong, and it needs the building name.":
+        "مثال: السعر يبدو غير صحيح، وينقصه اسم المبنى.",
+    "This goes to the person who sent it, so they know what to change.":
+        "تصل هذه الملاحظة لمن أرسل العقار ليعرف ما يجب تغييره.",
+    "No note was left.": "لم تُترك ملاحظة.",
+    "Correct it, then send it for approval again from the waiting list.":
+        "صحّح العقار ثم أعد إرساله للموافقة من قائمة الانتظار.",
+    "Nobody else can see this listing until an admin publishes it.":
+        "لا يمكن لأحد رؤية هذا العقار حتى ينشره المدير.",
+    "Listings your team has added. Nobody else can see them until you publish them.":
+        "عقارات أضافها فريقك. لا يراها أحد حتى تنشرها.",
+    "Listings you have sent for approval. They stay out of the main list until an admin publishes them.":
+        "عقارات أرسلتها للموافقة. تبقى خارج القائمة الرئيسية حتى ينشرها المدير.",
     "Last verified": "آخر تحقق",
     "Never verified": "لم يتم التحقق بعد",
     "Stale": "متأخر",

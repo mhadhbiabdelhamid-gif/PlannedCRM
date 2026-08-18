@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Waiting for approval') }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">02 · {{ t('Listings') }}</div>
+    <h1 class="page-title">{{ t('Waiting for approval') }}</h1>
+  </div>
+  <div class="actions">
+    <a class="btn btn-quiet" href="{{ url_for('properties.index') }}">{{ t('Back to properties') }}</a>
+  </div>
+</div>
+
+<p class="muted small" style="margin:-6px 0 16px">
+  {% if can_publish %}
+    {{ t('Listings your team has added. Nobody else can see them until you publish them.') }}
+  {% else %}
+    {{ t('Listings you have sent for approval. They stay out of the main list until an admin publishes them.') }}
+  {% endif %}
+</p>
+
+{% if not rows %}
+  <div class="card"><div class="empty">
+    <span class="mark">◇</span>
+    {{ t('Nothing is waiting.') }}
+  </div></div>
+{% else %}
+  <div class="grid">
+    {% for p in rows %}
+      <div class="card">
+        <div class="card-head">
+          <h3 style="display:flex;align-items:center;gap:8px">
+            <a href="{{ url_for('properties.detail', pid=p.id) }}">{{ p.title }}</a>
+            {% if p.approval == 'rejected' %}
+              <span class="tag tag-sold">{{ t('Sent back') }}</span>
+            {% else %}
+              <span class="tag tag-reserved">{{ t('Waiting') }}</span>
+            {% endif %}
+          </h3>
+          <span class="price mono" style="color:var(--gold-deep)">
+            {{ currency }} {{ p.price | money }}</span>
+        </div>
+        <div class="card-body">
+          <div class="small muted" style="margin-bottom:10px">
+            <span class="mono faint">{{ p.ref }}</span> ·
+            {{ t(p.prop_type) }} · {{ t(p.listing_type) }}
+            {%- if p.building_no %} · {{ t('Building') }} {{ p.building_no }}{% endif -%}
+            {%- if p.unit_no %} · {{ t('Flat') }} {{ p.unit_no }}{% endif -%}
+            {%- if p.area %} · {{ p.area }}{% endif %}
+          </div>
+          <div class="small muted" style="margin-bottom:12px">
+            {{ t('Sent by') }} <b>{{ p.submitted_name or t('Unknown') }}</b>
+            · {{ p.created_at | nice_date }}
+          </div>
+
+          {% if p.approval == 'rejected' and p.review_note %}
+            <div class="flash error" style="margin-bottom:12px">
+              <b>{{ t('Sent back') }}{% if p.reviewed_name %} {{ t('by') }} {{ p.reviewed_name }}{% endif %}:</b>
+              {{ p.review_note }}
+            </div>
+          {% endif %}
+
+          <div class="inline">
+            <a class="btn btn-sm" href="{{ url_for('properties.detail', pid=p.id) }}">
+              {{ t('Open') }}</a>
+            <a class="btn btn-sm" href="{{ url_for('properties.form', pid=p.id) }}">
+              {{ t('Edit') }}</a>
+
+            {% if can_publish %}
+              <form method="post" action="{{ url_for('properties.approve', pid=p.id) }}">
+                <button class="btn btn-gold btn-sm" type="submit">{{ t('Publish') }}</button>
+              </form>
+              <button class="btn btn-sm" type="button"
+                      onclick="document.getElementById('send-back-{{ p.id }}').hidden = false; this.hidden = true">
+                {{ t('Send back') }}</button>
+            {% elif p.approval == 'rejected' %}
+              <form method="post" action="{{ url_for('properties.resubmit', pid=p.id) }}">
+                <button class="btn btn-gold btn-sm" type="submit">
+                  {{ t('Send for approval again') }}</button>
+              </form>
+            {% endif %}
+          </div>
+
+          {% if can_publish %}
+            <form method="post" action="{{ url_for('properties.reject', pid=p.id) }}"
+                  id="send-back-{{ p.id }}" hidden style="margin-top:12px">
+              <div class="field">
+                <label>{{ t('What needs fixing?') }}</label>
+                <textarea name="note" required style="min-height:60px"
+                  placeholder="{{ t('e.g. Price looks wrong, and it needs the building name.') }}"></textarea>
+                <span class="small faint">
+                  {{ t('This goes to the person who sent it, so they know what to change.') }}</span>
+              </div>
+              <button class="btn btn-danger btn-sm" type="submit">
+                {{ t('Send it back') }}</button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
+{% include "_pager.html" %}
+
+{% endblock %}

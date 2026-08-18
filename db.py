@@ -236,6 +236,9 @@ CLOSED_STAGES = ("Won", "Lost")
 PROP_TYPES = ["Villa", "Apartment", "Commercial", "Office", "Land"]
 PROP_STATUS = ["Available", "Reserved", "Sold", "Rented"]
 LISTING_TYPES = ["Sale", "Rent"]
+# Whether a listing is published. Separate from status, which is about the
+# market (a listing waiting for approval still has a status of Available).
+APPROVAL_STATES = ["pending", "approved", "rejected"]
 LEAD_SOURCES = ["Walk-in", "Website", "Property Finder", "Referral",
                 "Instagram", "WhatsApp", "Phone", "Other"]
 PARTNER_TYPES = ["Developer", "Legal", "Maintenance", "Bank", "Marketing", "Other"]
@@ -355,6 +358,14 @@ MIGRATIONS = [
     ("properties", "floor_no", "TEXT"),
     ("properties", "extras", "TEXT"),
     ("properties", "last_verified", "TEXT"),
+    # Listings added by an agent or manager wait for an admin to publish them.
+    # Everything already in the table predates this and is therefore live, so
+    # the default has to be 'approved' or 171 listings would vanish at once.
+    ("properties", "approval", "TEXT NOT NULL DEFAULT 'approved'"),
+    ("properties", "submitted_by", "INTEGER"),
+    ("properties", "reviewed_by", "INTEGER"),
+    ("properties", "reviewed_at", "TEXT"),
+    ("properties", "review_note", "TEXT"),
     # Flexible commission — these were previously applied by running
     # migrate_deals.py by hand, which is easy to forget on a deployed copy and
     # leaves every Deals page erroring on the missing columns.

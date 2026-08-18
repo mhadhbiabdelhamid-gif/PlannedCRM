@@ -71,6 +71,44 @@ def manager_required(view):
     return wrapped
 
 
+def can_publish():
+    """Only an admin turns a waiting listing into a live one."""
+    return is_admin()
+
+
+def published_only(alias="p"):
+    """SQL fragment keeping unpublished listings out of a query.
+
+    Used by the main list, the search and the exports. A listing waiting for
+    approval is not part of the company's stock yet, so it should not appear
+    where people go to find something to sell — and that includes the admin's
+    own browsing, or the list stops meaning "what we can offer today".
+
+    Listings that predate this feature have no approval value at all, hence
+    the COALESCE: they are live and must stay live.
+    """
+    return f" AND COALESCE({alias}.approval, 'approved') = 'approved'"
+
+
+def can_see_listing(record):
+    """Whether this person may open one listing's own page.
+
+    Wider than the browsing list: the agent who submitted something needs to
+    follow it while it waits, and admins and managers need to review it.
+    """
+    if g.user is None or record is None:
+        return False
+    keys = record.keys()
+    state = (record["approval"] if "approval" in keys else None) or "approved"
+    if state == "approved":
+        return True
+    if sees_all():
+        return True
+    submitted = record["submitted_by"] if "submitted_by" in keys else None
+    agent = record["agent_id"] if "agent_id" in keys else None
+    return g.user["id"] in (submitted, agent)
+
+
 def can_edit(record):
     """Admins and managers edit anything. Agents edit what's theirs or
     unclaimed."""

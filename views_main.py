@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from flask import (Blueprint, current_app, g, jsonify, redirect,
                    render_template, request, send_from_directory, url_for)
 
-from auth import is_admin, login_required, sees_all
+from auth import is_admin, login_required, published_only, sees_all
 from db import execute, local_now, local_today, paginate, query, utc_day_bounds
 
 bp = Blueprint("main", __name__)
@@ -16,9 +16,14 @@ def dashboard():
     mine = "" if sees_all() else " AND agent_id = %d" % g.user["id"]
     day_start, day_end = utc_day_bounds(local_today())
 
-    total_listings = query("SELECT COUNT(*) c FROM properties", one=True)["c"]
-    available = query("SELECT COUNT(*) c FROM properties WHERE status='Available'",
-                      one=True)["c"]
+    # Counts describe the stock we can actually offer, so anything still
+    # waiting to be published is left out.
+    live = published_only("p")
+    total_listings = query(
+        "SELECT COUNT(*) c FROM properties p WHERE 1=1" + live, one=True)["c"]
+    available = query(
+        "SELECT COUNT(*) c FROM properties p WHERE p.status='Available'" + live,
+        one=True)["c"]
     new_leads = query("SELECT COUNT(*) c FROM leads"
                       " WHERE created_at >= ? AND created_at < ?" + mine,
                       (day_start, day_end), one=True)["c"]
@@ -92,9 +97,10 @@ def search():
     if q:
         like = f"%{q}%"
         props = query(
-            "SELECT * FROM properties WHERE title LIKE ? OR address LIKE ?"
-            " OR area LIKE ? OR ref LIKE ? OR building_no LIKE ? OR unit_no LIKE ?"
-            " ORDER BY id DESC LIMIT 25",
+            "SELECT * FROM properties p WHERE (p.title LIKE ? OR p.address LIKE ?"
+            " OR p.area LIKE ? OR p.ref LIKE ? OR p.building_no LIKE ?"
+            " OR p.unit_no LIKE ?)" + published_only("p") +
+            " ORDER BY p.id DESC LIMIT 25",
             (like,) * 6)
         leads = query(
             "SELECT l.*, u.name AS agent_name FROM leads l"

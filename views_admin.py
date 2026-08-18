@@ -14,7 +14,8 @@ import performance
 import whatsapp
 from werkzeug.security import generate_password_hash
 
-from auth import admin_required, create_user, login_required, manager_required
+from auth import (admin_required, create_user, login_required,
+                  manager_required, published_only)
 from db import (DEPARTMENTS, EMPLOYMENT, PARTNER_TYPES, execute, get_setting,
                 log, now, query, set_setting)
 
@@ -608,6 +609,8 @@ def export_workbook():
         "SELECT p.*, o.name AS owner_name, u.name AS agent_name FROM properties p"
         " LEFT JOIN owners o ON o.id = p.owner_id"
         " LEFT JOIN users u ON u.id = p.agent_id"
+        # A listing nobody has published shouldn't reach a client's inbox.
+        " WHERE 1=1" + published_only("p") +
         " ORDER BY CASE WHEN COALESCE(TRIM(p.building_no), '') = '' THEN 1 ELSE 0 END,"
         " p.area, p.building_no, CAST(COALESCE(p.unit_no, '') AS INTEGER),"
         " LENGTH(COALESCE(p.unit_no, '')), p.unit_no, p.id")
@@ -654,7 +657,8 @@ def export_properties():
                  " p.status, p.price, p.size_sqm, p.bedrooms, p.bathrooms,"
                  " o.name AS owner, u.name AS agent, p.created_at FROM properties p"
                  " LEFT JOIN owners o ON o.id = p.owner_id"
-                 " LEFT JOIN users u ON u.id = p.agent_id ORDER BY p.id")
+                 " LEFT JOIN users u ON u.id = p.agent_id"
+                 " WHERE 1=1" + published_only("p") + " ORDER BY p.id")
     return _csv(rows, ["ref", "title", "address", "building_no", "floor_no",
                        "unit_no", "extras", "area",
                        "prop_type", "listing_type",
