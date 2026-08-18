@@ -10,6 +10,8 @@
   <div class="actions">
     <a class="btn {{ 'btn-dark' if view == 'grid' }}" href="{{ url_for('properties.index', view='grid', **f) }}">{{ t('Grid') }}</a>
     <a class="btn {{ 'btn-dark' if view == 'table' }}" href="{{ url_for('properties.index', view='table', **f) }}">{{ t('Table') }}</a>
+    <a class="btn" href="{{ url_for('properties.stale') }}">{{ t('Stale listings') }}
+      {% if stale_count %}<span class="pill">{{ stale_count }}</span>{% endif %}</a>
     {% if user.role == 'admin' %}
       <a class="btn btn-dark" href="{{ url_for('admin.export_workbook') }}">{{ t('Export Excel') }}</a>
       <a class="btn" href="{{ url_for('admin.export_properties') }}">{{ t('Export CSV') }}</a>
@@ -195,7 +197,10 @@
           <td><span class="tag tag-{{ 'sale' if p.listing_type == 'Sale' else 'rent' }}">{{ t(p.listing_type) }}</span>
               <span class="small muted">{{ t(p.prop_type) }}</span></td>
           <td><span class="tag tag-{{ p.status|lower }}">{{ t(p.status) }}</span>
-            {% if p.is_own %}<span class="tag tag-sale">{{ t('Ours') }}</span>{% endif %}</td>
+            {% if p.is_own %}<span class="tag tag-sale">{{ t('Ours') }}</span>{% endif %}
+            {% if p.status in ('Available', 'Reserved') and (not p.last_verified or p.last_verified < stale_cutoff) %}
+              <span class="tag tag-reserved">{{ t('Stale') }}</span>
+            {% endif %}</td>
           <td class="right price">{{ currency }} {{ p.price | money }}</td>
           <td class="muted small">{{ p.agent_name or t('Unassigned') }}</td>
         </tr>

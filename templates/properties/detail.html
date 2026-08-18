@@ -29,6 +29,11 @@
   </div>
   <div class="actions">
     <a class="btn btn-quiet" href="{{ url_for('properties.index') }}">{{ t('Back to list') }}</a>
+    {% if editable %}
+      <form method="post" action="{{ url_for('properties.verify', pid=p.id) }}">
+        <button class="btn" type="submit">{{ t('Mark verified today') }}</button>
+      </form>
+    {% endif %}
     <button class="btn" onclick="openModal('dup-modal')">{{ t('Duplicate') }}</button>
     {% if editable %}<a class="btn btn-gold" href="{{ url_for('properties.form', pid=p.id) }}">{{ t('Edit listing') }}</a>{% endif %}
     {% if user.role == 'admin' %}
@@ -92,6 +97,14 @@
           <div><dt>{{ t('Bathrooms') }}</dt><dd>{{ p.bathrooms or '—' }}</dd></div>
           <div><dt>{{ t('Agent in charge') }}</dt><dd>{{ p.agent_name or t('Unassigned') }}</dd></div>
           <div><dt>{{ t('Listed') }}</dt><dd>{{ p.created_at | nice_date }}</dd></div>
+          <div><dt>{{ t('Last verified') }}</dt>
+            <dd>
+              {% if p.last_verified %}{{ p.last_verified | nice_date }}
+              {% else %}<span class="tag tag-reserved">{{ t('Never verified') }}</span>{% endif %}
+              {% if p.status in ('Available', 'Reserved') and p.last_verified and p.last_verified < cutoff %}
+                <span class="tag tag-reserved">{{ t('Stale') }}</span>
+              {% endif %}
+            </dd></div>
           {% if p.import_source %}
             <div><dt>{{ t('From partner list') }}</dt>
               <dd>{{ p.import_source }}

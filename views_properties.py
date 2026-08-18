@@ -9,16 +9,8 @@ from flask import (Blueprint, current_app, flash, g, redirect, render_template,
 from werkzeug.utils import secure_filename
 
 from auth import can_edit, is_admin, login_required
-
-def delete_image(pid, img_id):
-    prop = query("SELECT * FROM properties WHERE id = ?", (pid,), one=True)
-    if prop is None or not can_edit(prop):
-        flash("That listing belongs to another agent.", "error")
-        return redirect(url_for("properties.index"))
-    execute("DELETE FROM property_images WHERE id = ? AND property_id = ?", (img_id, pid))
-    return redirect(url_for("properties.detail", pid=pid))
-from db import (LISTING_TYPES, PROP_STATUS, PROP_TYPES, execute, get_setting,
-                log, next_ref, notify, now, paginate, query)
+from db import (LISTING_TYPES, PROP_STATUS, PROP_TYPES, STALE_DAYS, days_ago,
+                execute, get_setting, log, next_ref, notify, now, paginate, query)
 
 bp = Blueprint("properties", __name__, url_prefix="/properties")
 
@@ -171,6 +163,7 @@ def index():
                            listing_types=LISTING_TYPES, groups=groups, sort=sort,
                            view=view, pager=pager, args=args_out,
                            bulk_actions=BULK_ACTIONS, floors=floors,
+                           stale_cutoff=days_ago(STALE_DAYS),
                            owners_list=query("SELECT id, name FROM owners ORDER BY name"),
                            partners_list=query("SELECT id, name FROM partners ORDER BY name"))
 
@@ -208,7 +201,7 @@ def detail(pid):
                   " ORDER BY a.id DESC LIMIT 25", (pid,))
     return render_template("properties/detail.html", p=p, images=images, docs=docs,
                            comments=comments, leads=leads, trail=trail,
-                           editable=can_edit(p))
+                           editable=can_edit(p), cutoff=days_ago(STALE_DAYS))
 
 
 @bp.route("/new", methods=("GET", "POST"))
@@ -255,9 +248,9 @@ def form(pid=None):
                 "INSERT INTO properties (title,address,area,prop_type,listing_type,status,"
                 "price,size_sqm,bedrooms,bathrooms,description,features,owner_id,partner_id,"
                 "agent_id,building_no,floor_no,unit_no,extras,map_url,is_own,ref,"
-                "created_at,updated_at)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                vals + (ref, now(), now()))
+                "created_at,updated_at,last_verified)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                vals + (ref, now(), now(), now()))
             log(g.user["id"], "Added listing", "property", pid, f"{ref} — {vals[0]}")
             if vals[14] and vals[14] != g.user["id"]:
                 notify(vals[14], f"You were assigned the listing {vals[0]}",
@@ -343,6 +336,10 @@ def set_cover(pid, img_id):
 @bp.route("/<int:pid>/images/<int:img_id>/delete", methods=("POST",))
 @login_required
 def delete_image(pid, img_id):
+    prop = query("SELECT * FROM properties WHERE id = ?", (pid,), one=True)
+    if prop is None or not can_edit(prop):
+        flash("That listing belongs to another agent.", "error")
+        return redirect(url_for("properties.index"))
     execute("DELETE FROM property_images WHERE id = ? AND property_id = ?", (img_id, pid))
     return redirect(url_for("properties.detail", pid=pid))
 
@@ -369,14 +366,14 @@ def duplicate(pid):
     new_id = execute(
         "INSERT INTO properties (title,address,area,prop_type,listing_type,status,price,"
         "size_sqm,bedrooms,bathrooms,description,features,owner_id,agent_id,building_no,"
-        "floor_no,unit_no,extras,map_url,is_own,ref,created_at,updated_at)"
-        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "floor_no,unit_no,extras,map_url,is_own,ref,created_at,updated_at,last_verified)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (title, src["address"], src["area"], src["prop_type"], src["listing_type"],
          request.form.get("status") or src["status"], src["price"], src["size_sqm"],
          src["bedrooms"], src["bathrooms"], src["description"], src["features"],
          src["owner_id"], src["agent_id"] or g.user["id"], src["building_no"],
          request.form.get("floor_no", "").strip() or src["floor_no"], unit_no,
-         src["extras"], src["map_url"], src["is_own"], ref, now(), now()))
+         src["extras"], src["map_url"], src["is_own"], ref, now(), now(), now()))
 
     copied_images = 0
     if request.form.get("copy_images"):
@@ -410,6 +407,51 @@ def duplicate(pid):
     return redirect(url_for("properties.form", pid=new_id))
 
 
+@bp.route("/<int:pid>/verify", methods=("POST",))
+@login_required
+def verify(pid):
+    """Confirm a listing is still on the market, right now, as told to whoever
+    checked. This is the only thing that resets the staleness clock — editing
+    a field is not the same as someone having actually confirmed it."""
+    p = query("SELECT * FROM properties WHERE id = ?", (pid,), one=True)
+    if p is None:
+        flash("That listing no longer exists.", "error")
+        return redirect(url_for("properties.index"))
+    if not can_edit(p):
+        flash("That listing belongs to another agent.", "error")
+        return redirect(url_for("properties.detail", pid=pid))
+    execute("UPDATE properties SET last_verified = ? WHERE id = ?", (now(), pid))
+    log(g.user["id"], "Verified listing", "property", pid, p["title"])
+    flash("Marked as verified today.", "ok")
+    back = request.form.get("back")
+    return redirect(back if back and back.startswith("/") else url_for("properties.detail", pid=pid))
+
+
+@bp.route("/stale")
+@login_required
+def stale():
+    """Active listings nobody has confirmed are still on the market in a
+    while — the office-admin screen for chasing agents to re-check stock.
+    Sold and rented units are done, so they're left out of this list."""
+    from auth import sees_all
+    cutoff = days_ago(STALE_DAYS)
+    sql = ("SELECT p.*, u.name AS agent_name,"
+           " (SELECT filename FROM property_images i WHERE i.property_id = p.id"
+           "   ORDER BY is_cover DESC, id LIMIT 1) AS cover"
+           " FROM properties p LEFT JOIN users u ON u.id = p.agent_id"
+           " WHERE p.status IN ('Available','Reserved')"
+           " AND (p.last_verified IS NULL OR p.last_verified < ?)")
+    args = [cutoff]
+    if not sees_all():
+        sql += " AND (p.agent_id = ? OR p.agent_id IS NULL)"
+        args.append(g.user["id"])
+    sql += " ORDER BY (p.last_verified IS NULL) DESC, p.last_verified, p.id"
+
+    pager = paginate(sql, args, request.args.get("page", 1), per_page=60)
+    return render_template("properties/stale.html", rows=pager["rows"], pager=pager,
+                           args={}, cutoff=cutoff, stale_days=STALE_DAYS)
+
+
 @bp.route("/<int:pid>/comment", methods=("POST",))
 @login_required
 def comment(pid):
@@ -433,6 +475,7 @@ BULK_ACTIONS = {
     "listing_type": "Change sale or rent",
     "ours": "Mark as our own stock",
     "third_party": "Mark as third-party",
+    "verify": "Mark as verified today",
     "delete": "Delete",
 }
 
@@ -506,6 +549,8 @@ def bulk():
         field, new_value, label = "is_own", 1, "marked as our own stock"
     elif action == "third_party":
         field, new_value, label = "is_own", 0, "marked as third-party"
+    elif action == "verify":
+        field, new_value, label = "last_verified", now(), "marked as verified today"
 
     if field is None:
         flash("That change needs a value choosing.", "error")

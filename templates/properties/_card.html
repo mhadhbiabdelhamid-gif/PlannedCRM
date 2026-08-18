@@ -16,6 +16,9 @@
       <span class="tag tag-{{ 'sale' if p.listing_type == 'Sale' else 'rent' }}">{{ t(p.listing_type) }}</span>
       <span class="tag tag-{{ p.status|lower }}">{{ t(p.status) }}</span>
       {% if p.is_own %}<span class="tag tag-sale">{{ t('Ours') }}</span>{% endif %}
+      {% if p.status in ('Available', 'Reserved') and (not p.last_verified or p.last_verified < stale_cutoff) %}
+        <span class="tag tag-reserved">{{ t('Stale') }}</span>
+      {% endif %}
     </div>
   </div>
   <div class="prop-body">

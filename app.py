@@ -179,7 +179,21 @@ def create_app():
     def inject():
         offset_hours = int(TZ_OFFSET.total_seconds() // 3600)
         logo = find_logo()
+        stale_count = 0
+        if g.get("user") is not None:
+            from db import STALE_DAYS, days_ago
+            from auth import sees_all
+            cutoff = days_ago(STALE_DAYS)
+            sql = ("SELECT COUNT(*) c FROM properties p"
+                   " WHERE p.status IN ('Available','Reserved')"
+                   " AND (p.last_verified IS NULL OR p.last_verified < ?)")
+            args = [cutoff]
+            if not sees_all():
+                sql += " AND (p.agent_id = ? OR p.agent_id IS NULL)"
+                args.append(g.user["id"])
+            stale_count = query(sql, args, one=True)["c"]
         return dict(
+            stale_count=stale_count,
             logo_exists=logo is not None,
             logo_url=(f"{url_for('static', filename=logo[0])}?v={logo[1]}"
                       if logo else None),

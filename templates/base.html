@@ -31,6 +31,10 @@
       <span class="idx">01</span> {{ t('Dashboard') }}</a>
     <a class="rail-link {{ 'active' if request.blueprint == 'properties' }}" href="{{ url_for('properties.index') }}">
       <span class="idx">02</span> {{ t('Properties') }}</a>
+    <a class="rail-link {{ 'active' if request.endpoint == 'properties.stale' }}"
+       href="{{ url_for('properties.stale') }}" style="padding-left:44px">
+      {{ t('Stale listings') }}
+      {% if stale_count %}<span class="pill">{{ stale_count }}</span>{% endif %}</a>
     <a class="rail-link {{ 'active' if request.blueprint == 'imports' }}" href="{{ url_for('imports.upload') }}">
       <span class="idx">03</span> {{ t('Import listings') }}</a>
     <a class="rail-link {{ 'active' if request.endpoint == 'imports.history' }}"

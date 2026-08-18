@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Stale listings') }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">02 · {{ t('Listings') }}</div>
+    <h1 class="page-title">{{ t('Stale listings') }}</h1>
+  </div>
+  <div class="actions">
+    <a class="btn btn-quiet" href="{{ url_for('properties.index') }}">{{ t('Back to properties') }}</a>
+  </div>
+</div>
+
+<p class="muted small" style="margin:-6px 0 16px">
+  {{ t('Available and reserved listings nobody has confirmed are still on the market in the last') }}
+  {{ stale_days }} {{ t('days') }}. {{ t('Sold and rented units are left out — there is nothing to re-check.') }}
+</p>
+
+<form method="post" action="{{ url_for('properties.bulk') }}" id="bulkform">
+  <input type="hidden" name="back" value="{{ request.full_path }}">
+  <input type="hidden" name="action" value="verify">
+</form>
+
+{% if not rows %}
+  <div class="card"><div class="empty">
+    <span class="mark">◇</span>
+    {{ t('Nothing is stale right now — every active listing has been checked in the last') }}
+    {{ stale_days }} {{ t('days') }}.
+  </div></div>
+{% else %}
+  <div class="between" style="margin-bottom:12px">
+    <label class="inline small" style="gap:7px;white-space:nowrap">
+      <input type="checkbox" id="pick-all" onchange="pickAll(this.checked)">
+      <span id="pick-count">0</span> {{ t('selected') }}
+    </label>
+    <button class="btn btn-gold btn-sm" type="submit" form="bulkform" id="bulk-go" disabled>
+      {{ t('Mark selected as verified today') }}</button>
+  </div>
+
+  <div class="card table-scroll">
+    <table class="table">
+      <thead><tr>
+        <th style="width:34px"></th>
+        <th>{{ t('Search') }}</th><th>{{ t('Title') }}</th><th>{{ t('Location') }}</th>
+        <th>{{ t('Status') }}</th><th>{{ t('Agent') }}</th><th>{{ t('Last verified') }}</th><th></th>
+      </tr></thead>
+      <tbody>
+      {% for p in rows %}
+        <tr>
+          <td class="pick"><input type="checkbox" name="ids" value="{{ p.id }}" form="bulkform"
+              onchange="bulkChanged()"></td>
+          <td class="mono faint"><a href="{{ url_for('properties.detail', pid=p.id) }}">{{ p.ref }}</a></td>
+          <td><a href="{{ url_for('properties.detail', pid=p.id) }}"><b>{{ p.title }}</b></a>
+            <div class="small muted">
+              {%- if p.building_no %}{{ t('Building') }} {{ p.building_no }}{% endif -%}
+              {%- if p.unit_no %} · {{ t('Flat') }} {{ p.unit_no }}{% endif -%}
+            </div></td>
+          <td class="muted">{{ p.area or p.address or '—' }}</td>
+          <td><span class="tag tag-{{ p.status|lower }}">{{ t(p.status) }}</span></td>
+          <td class="muted small">{{ p.agent_name or t('Unassigned') }}</td>
+          <td>
+            {% if p.last_verified %}{{ p.last_verified | nice_date }}
+            {% else %}<span class="tag tag-reserved">{{ t('Never verified') }}</span>{% endif %}
+          </td>
+          <td class="right nowrap">
+            <form method="post" action="{{ url_for('properties.verify', pid=p.id) }}">
+              <input type="hidden" name="back" value="{{ request.full_path }}">
+              <button class="btn btn-sm" type="submit">{{ t('Verify') }}</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
+{% include "_pager.html" %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function boxes() {
+    return Array.prototype.slice.call(document.querySelectorAll('input[name="ids"][form="bulkform"]'));
+  }
+  window.bulkChanged = function () {
+    var picked = boxes().filter(function (b) { return b.checked; });
+    var countEl = document.getElementById("pick-count");
+    if (countEl) countEl.textContent = picked.length;
+    var all = document.getElementById("pick-all");
+    if (all) {
+      all.checked = picked.length > 0 && picked.length === boxes().length;
+      all.indeterminate = picked.length > 0 && picked.length < boxes().length;
+    }
+    var go = document.getElementById("bulk-go");
+    if (go) go.disabled = picked.length === 0;
+  };
+  window.pickAll = function (state) {
+    boxes().forEach(function (b) { b.checked = state; });
+    window.bulkChanged();
+  };
+</script>
+{% endblock %}

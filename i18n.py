@@ -272,6 +272,24 @@ AR = {
     "Whose listing": "ملكية العقار",
     "Tick this for your own stock. Exports keep these on a separate sheet from third-party listings.":
         "حدّد هذا لعقاراتكم الخاصة. تُدرج في ورقة منفصلة عن عقارات الأطراف الأخرى عند التصدير.",
+    "Stale listings": "عقارات متأخرة المراجعة",
+    "Last verified": "آخر تحقق",
+    "Never verified": "لم يتم التحقق بعد",
+    "Stale": "متأخر",
+    "Mark verified today": "تأكيد اليوم",
+    "Mark as verified today": "التأكيد كمُحقّق اليوم",
+    "Mark selected as verified today": "تأكيد المحدد اليوم",
+    "Verify": "تحقق",
+    "Verified listing": "تم التحقق من العقار",
+    "Marked as verified today.": "تم التأكيد كمُحقّق منه اليوم.",
+    "Back to properties": "العودة للعقارات",
+    "Available and reserved listings nobody has confirmed are still on the market in the last":
+        "عقارات متاحة أو محجوزة لم يؤكد أحد أنها لا تزال معروضة خلال آخر",
+    "days": "يوماً",
+    "Sold and rented units are left out — there is nothing to re-check.":
+        "الوحدات المباعة أو المؤجرة مستبعدة — لا حاجة لمراجعتها.",
+    "Nothing is stale right now — every active listing has been checked in the last":
+        "لا يوجد شيء متأخر حالياً — تمت مراجعة جميع العقارات النشطة خلال آخر",
     "Export Excel": "تصدير إكسل",
     "Excel workbook": "ملف إكسل",
     "Branded, four sheets, ready to send": "بهوية الشركة، أربع أوراق، جاهز للإرسال",

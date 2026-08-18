@@ -271,6 +271,11 @@ def local_today():
     return local_now().strftime("%Y-%m-%d")
 
 
+def days_ago(n):
+    """UTC timestamp for 'n days before now', for stale/overdue cutoffs."""
+    return (datetime.utcnow() - timedelta(days=n)).strftime(STAMP)
+
+
 def utc_day_bounds(local_date):
     """The UTC range covering one local calendar day."""
     start = datetime.strptime(local_date, "%Y-%m-%d") - TZ_OFFSET
@@ -335,7 +340,12 @@ MIGRATIONS = [
     ("properties", "partner_id", "INTEGER"),
     ("properties", "floor_no", "TEXT"),
     ("properties", "extras", "TEXT"),
+    ("properties", "last_verified", "TEXT"),
 ]
+
+# How long a listing can go without someone confirming it's still on the
+# market before it counts as "stale" on the office-admin screen.
+STALE_DAYS = 30
 
 # Rooms a flat may have besides bedrooms. Kept apart from Key features, which
 # is about the building and the view rather than the rooms themselves.
