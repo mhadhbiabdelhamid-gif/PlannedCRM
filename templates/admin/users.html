@@ -53,6 +53,9 @@
 
       <div class="inline" style="gap:6px">
         <a class="btn btn-sm" href="{{ url_for('admin.profile', uid=u.id) }}">{{ t('Open profile') }}</a>
+        {% if user.role == 'admin' and u.role != 'admin' %}
+          <a class="btn btn-sm" href="{{ url_for('admin.profile', uid=u.id) }}#access">{{ t('Access') }}</a>
+        {% endif %}
         {% if user.role == 'admin' and u.id != user.id %}
           <form method="post" action="{{ url_for('admin.toggle_user', uid=u.id) }}"
                 data-confirm="{{ t('Switch off') }} {{ u.name }}?">

@@ -1,5 +1,6 @@
 """Session-based sign-in and role guards."""
 import functools
+import json
 
 from flask import (Blueprint, flash, g, redirect, render_template, request,
                    session, url_for)
@@ -24,6 +25,107 @@ def load_current_user():
             row = query("SELECT COUNT(*) AS c FROM notifications"
                         " WHERE user_id = ? AND is_read = 0", (uid,), one=True)
             g.unread = row["c"]
+
+
+# --------------------------------------------------------------- permissions
+#
+# A role sets what someone can normally do. An admin can then grant or remove
+# one of these for a single person without changing their role — the common
+# case being one senior agent who is trusted with imports while the rest are
+# not. Overrides live in users.permissions as JSON; anything not mentioned
+# there falls back to the role.
+#
+# key: (label shown to an admin, what it lets someone do, {role: allowed})
+CAPABILITIES = {
+    "import": (
+        "Import listings from Excel",
+        "Upload a spreadsheet to add or update many listings at once, "
+        "including replacing a partner's entire list.",
+        {"admin": True, "manager": False, "agent": False},
+    ),
+    "publish": (
+        "Publish listings",
+        "Approve listings other people have sent, so they appear for "
+        "everyone.",
+        {"admin": True, "manager": False, "agent": False},
+    ),
+    "delete": (
+        "Delete listings",
+        "Remove listings for good, one at a time or in bulk.",
+        {"admin": True, "manager": False, "agent": False},
+    ),
+    "export": (
+        "Export data",
+        "Download the listings, leads and deals as Excel or CSV.",
+        {"admin": True, "manager": True, "agent": False},
+    ),
+}
+
+
+def _overrides(user):
+    if user is None:
+        return {}
+    keys = user.keys()
+    raw = (user["permissions"] if "permissions" in keys else None) or ""
+    try:
+        loaded = json.loads(raw) if raw.strip() else {}
+    except (ValueError, TypeError):
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
+def can(capability, user=None):
+    """Whether this person may do one specific thing.
+
+    An admin always may. Locking an admin out of the very screens used to
+    fix permissions is the kind of mistake that needs a database editor to
+    undo, so it simply isn't possible.
+    """
+    person = user if user is not None else g.get("user")
+    if person is None:
+        return False
+    role = person["role"]
+    if role == "admin":
+        return True
+    spec = CAPABILITIES.get(capability)
+    if spec is None:
+        return False
+    override = _overrides(person).get(capability)
+    if isinstance(override, bool):
+        return override
+    return spec[2].get(role, False)
+
+
+def effective_permissions(user):
+    """Every capability for one person: (allowed, whether it was overridden)."""
+    over = _overrides(user)
+    out = {}
+    for key, spec in CAPABILITIES.items():
+        by_role = spec[2].get(user["role"], False)
+        override = over.get(key)
+        if user["role"] == "admin":
+            out[key] = (True, False)
+        elif isinstance(override, bool):
+            out[key] = (override, override != by_role)
+        else:
+            out[key] = (by_role, False)
+    return out
+
+
+def requires(capability):
+    """Guard a route with one capability."""
+    def wrap(view):
+        @functools.wraps(view)
+        def wrapped(*a, **kw):
+            if g.user is None:
+                return redirect(url_for("auth.login", next=request.path))
+            if not can(capability):
+                flash("You don't have access to that. An admin can change it "
+                      "under Team members.", "error")
+                return redirect(url_for("main.dashboard"))
+            return view(*a, **kw)
+        return wrapped
+    return wrap
 
 
 def login_required(view):
@@ -72,8 +174,8 @@ def manager_required(view):
 
 
 def can_publish():
-    """Only an admin turns a waiting listing into a live one."""
-    return is_admin()
+    """Whether this person may turn a waiting listing into a live one."""
+    return can("publish")
 
 
 def published_only(alias="p"):

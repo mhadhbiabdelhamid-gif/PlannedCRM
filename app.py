@@ -278,6 +278,7 @@ def create_app():
             unread=g.get("unread", 0),
             year=local_now().year,
             t=t,
+            can=__import__('auth').can,
             lang=current_lang(),
             langs=LANGS,
             rtl=is_rtl(),

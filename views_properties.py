@@ -8,7 +8,7 @@ from flask import (Blueprint, current_app, flash, g, redirect, render_template,
                    request, url_for)
 from werkzeug.utils import secure_filename
 
-from auth import (can_edit, can_publish, can_see_listing, is_admin,
+from auth import (can, can_edit, can_publish, can_see_listing, is_admin,
                   login_required, published_only, sees_all)
 from db import (LISTING_TYPES, PROP_STATUS, PROP_TYPES, STALE_DAYS, days_ago,
                 execute, get_setting, log, next_ref, notify, now, paginate, query)
@@ -643,8 +643,8 @@ def bulk():
     blocked = len(rows) - len(allowed)
 
     if action == "delete":
-        if not is_admin():
-            flash("Only admins can delete listings.", "error")
+        if not can("delete"):
+            flash("You don't have access to delete listings.", "error")
             return redirect(back)
         # a bulk delete is the easiest way to lose a lot at once
         try:
@@ -715,8 +715,8 @@ def bulk():
 @bp.route("/<int:pid>/delete", methods=("POST",))
 @login_required
 def delete(pid):
-    if not is_admin():
-        flash("Only admins can delete listings.", "error")
+    if not can("delete"):
+        flash("You don't have access to delete listings.", "error")
         return redirect(url_for("properties.detail", pid=pid))
     p = query("SELECT title FROM properties WHERE id = ?", (pid,), one=True)
     execute("DELETE FROM properties WHERE id = ?", (pid,))

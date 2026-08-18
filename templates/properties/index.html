@@ -12,11 +12,13 @@
     <a class="btn {{ 'btn-dark' if view == 'table' }}" href="{{ url_for('properties.index', view='table', **f) }}">{{ t('Table') }}</a>
     <a class="btn" href="{{ url_for('properties.stale') }}">{{ t('Stale listings') }}
       {% if stale_count %}<span class="pill">{{ stale_count }}</span>{% endif %}</a>
-    {% if user.role == 'admin' %}
+    {% if can('export') %}
       <a class="btn btn-dark" href="{{ url_for('admin.export_workbook') }}">{{ t('Export Excel') }}</a>
       <a class="btn" href="{{ url_for('admin.export_properties') }}">{{ t('Export CSV') }}</a>
     {% endif %}
-    <a class="btn" href="{{ url_for('imports.upload') }}">{{ t('Import from Excel') }}</a>
+    {% if can('import') %}
+      <a class="btn" href="{{ url_for('imports.upload') }}">{{ t('Import from Excel') }}</a>
+    {% endif %}
     <a class="btn btn-gold" href="{{ url_for('properties.form') }}">{{ t('Add listing') }}</a>
   </div>
 </div>
@@ -135,7 +137,7 @@
           style="max-width:210px">
     <option value="">{{ t('Choose an action') }}</option>
     {% for key, label in bulk_actions.items() %}
-      {% if key != 'delete' or user.role == 'admin' %}
+      {% if key != 'delete' or can('delete') %}
         <option value="{{ key }}">{{ t(label) }}</option>
       {% endif %}
     {% endfor %}

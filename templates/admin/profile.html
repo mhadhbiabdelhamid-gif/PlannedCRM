@@ -130,6 +130,50 @@
     </div>
   </div>
 
+  <div class="card" id="access">
+    <div class="card-head">
+      <h3>{{ t('What they can do') }}</h3>
+      <span class="tag tag-{{ 'sale' if person.role == 'admin' else 'plain' }}">
+        {{ t('Admin') if person.role == 'admin' else (t('Manager') if person.role == 'manager' else t('Agent')) }}</span>
+    </div>
+    <div class="card-body">
+      {% if person.role == 'admin' %}
+        <p class="small muted" style="margin:0">
+          {{ t('An admin can do everything. To limit this person, change their role to Manager or Agent first, under Team members.') }}
+        </p>
+      {% elif user.role == 'admin' %}
+        <p class="small muted" style="margin:0 0 12px">
+          {{ t('Ticked is allowed. These start from what their role normally allows — change any of them for this person only.') }}
+        </p>
+        <form method="post" action="{{ url_for('admin.save_access', uid=person.id) }}">
+          {% for key, spec in capabilities.items() %}
+            {% set allowed, overridden = access[key] %}
+            <label class="inline" style="align-items:flex-start;gap:9px;margin-bottom:12px">
+              <input type="checkbox" name="cap" value="{{ key }}"
+                     {{ 'checked' if allowed }} style="margin-top:3px">
+              <span>
+                <b>{{ t(spec[0]) }}</b>
+                {% if overridden %}
+                  <span class="tag tag-reserved">{{ t('Changed for this person') }}</span>
+                {% endif %}
+                <div class="small muted">{{ t(spec[1]) }}</div>
+              </span>
+            </label>
+          {% endfor %}
+          <button class="btn btn-gold btn-sm" type="submit">{{ t('Save access') }}</button>
+        </form>
+      {% else %}
+        <ul class="small muted" style="margin:0;padding-left:18px">
+          {% for key, spec in capabilities.items() %}
+            {% if access[key][0] %}<li>{{ t(spec[0]) }}</li>{% endif %}
+          {% else %}
+            <li>{{ t('Nothing beyond the everyday screens.') }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+  </div>
+
   <div class="card">
     <div class="card-head"><h3>{{ t('Details') }}</h3></div>
     <div class="card-body">

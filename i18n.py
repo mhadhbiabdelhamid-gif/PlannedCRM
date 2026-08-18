@@ -274,6 +274,27 @@ AR = {
         "حدّد هذا لعقاراتكم الخاصة. تُدرج في ورقة منفصلة عن عقارات الأطراف الأخرى عند التصدير.",
     "Stale listings": "عقارات متأخرة المراجعة",
     "Waiting for approval": "بانتظار الموافقة",
+    "What they can do": "الصلاحيات",
+    "Access": "الصلاحيات",
+    "Save access": "حفظ الصلاحيات",
+    "Changed for this person": "معدّل لهذا الشخص",
+    "Import listings from Excel": "استيراد العقارات من إكسل",
+    "Upload a spreadsheet to add or update many listings at once, including replacing a partner's entire list.":
+        "رفع ملف لإضافة أو تحديث عدة عقارات دفعة واحدة، بما في ذلك استبدال قائمة شريك بالكامل.",
+    "Publish listings": "نشر العقارات",
+    "Approve listings other people have sent, so they appear for everyone.":
+        "الموافقة على العقارات التي أرسلها الآخرون لتظهر للجميع.",
+    "Delete listings": "حذف العقارات",
+    "Remove listings for good, one at a time or in bulk.":
+        "حذف العقارات نهائياً، فردياً أو دفعة واحدة.",
+    "Export data": "تصدير البيانات",
+    "Download the listings, leads and deals as Excel or CSV.":
+        "تنزيل العقارات والعملاء والصفقات بصيغة إكسل أو CSV.",
+    "Ticked is allowed. These start from what their role normally allows — change any of them for this person only.":
+        "المحدد مسموح. تبدأ هذه من صلاحيات الدور، ويمكن تغيير أي منها لهذا الشخص فقط.",
+    "An admin can do everything. To limit this person, change their role to Manager or Agent first, under Team members.":
+        "المدير لديه كل الصلاحيات. لتقييده، غيّر دوره إلى مدير فريق أو موظف أولاً من أعضاء الفريق.",
+    "Nothing beyond the everyday screens.": "لا شيء خارج الشاشات اليومية.",
     "Waiting for approval.": "بانتظار الموافقة.",
     "Waiting": "بانتظار",
     "Sent back": "أُعيد للتعديل",

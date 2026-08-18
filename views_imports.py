@@ -14,8 +14,7 @@ from flask import (Blueprint, current_app, flash, g, redirect, render_template,
                    request, url_for)
 
 import importer
-from auth import login_required
-from auth import admin_required
+from auth import admin_required, login_required, requires
 from db import (IMPORT_MODES, LISTING_TYPES, PROP_STATUS, PROP_TYPES, execute,
                 log, next_ref, now, query)
 
@@ -40,7 +39,7 @@ def _path(token):
 
 
 @bp.route("/", methods=("GET", "POST"))
-@login_required
+@requires("import")
 def upload():
     if request.method == "POST":
         fs = request.files.get("workbook")
@@ -65,7 +64,7 @@ def upload():
 
 
 @bp.route("/review/<token>")
-@login_required
+@requires("import")
 def review(token):
     path = _path(token)
     if not path:
@@ -127,7 +126,7 @@ def review(token):
 
 
 @bp.route("/commit/<token>", methods=("POST",))
-@login_required
+@requires("import")
 def commit(token):
     path = _path(token)
     if not path:
@@ -331,7 +330,7 @@ def commit(token):
 
 
 @bp.route("/history")
-@login_required
+@requires("import")
 def history():
     rows = query(
         "SELECT i.*, u.name AS user_name, u.photo AS user_photo,"
@@ -401,7 +400,7 @@ def undo(iid):
 
 
 @bp.route("/discard/<token>", methods=("POST",))
-@login_required
+@requires("import")
 def discard(token):
     path = _path(token)
     if path:

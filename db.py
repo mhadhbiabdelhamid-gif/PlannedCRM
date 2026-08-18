@@ -332,6 +332,8 @@ def execute(sql, args=()):
 
 MIGRATIONS = [
     ("users", "lang", "TEXT DEFAULT 'en'"),
+    # Per-person exceptions to what their role normally allows, as JSON.
+    ("users", "permissions", "TEXT"),
     ("properties", "building_no", "TEXT"),
     ("properties", "unit_no", "TEXT"),
     ("properties", "map_url", "TEXT"),

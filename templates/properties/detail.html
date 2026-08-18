@@ -49,7 +49,7 @@
     {% endif %}
     <button class="btn" onclick="openModal('dup-modal')">{{ t('Duplicate') }}</button>
     {% if editable %}<a class="btn btn-gold" href="{{ url_for('properties.form', pid=p.id) }}">{{ t('Edit listing') }}</a>{% endif %}
-    {% if user.role == 'admin' %}
+    {% if can('delete') %}
       <form method="post" action="{{ url_for('properties.delete', pid=p.id) }}"
             data-confirm="Delete {{ p.title }} for good? Its images, documents and notes go too.">
         <button class="btn btn-danger" type="submit">{{ t('Delete') }}</button>

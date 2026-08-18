@@ -1,6 +1,7 @@
 """Owners and partners directories, plus the admin area: users, settings, exports."""
 import csv
 import io
+import json
 import os
 import uuid
 from datetime import datetime
@@ -14,10 +15,11 @@ import performance
 import whatsapp
 from werkzeug.security import generate_password_hash
 
-from auth import (admin_required, create_user, login_required,
-                  manager_required, published_only)
+from auth import (CAPABILITIES, admin_required, can, create_user,
+                  effective_permissions, login_required, manager_required,
+                  published_only, requires)
 from db import (DEPARTMENTS, EMPLOYMENT, PARTNER_TYPES, execute, get_setting,
-                log, now, query, set_setting)
+                log, notify, now, query, set_setting)
 
 contacts = Blueprint("contacts", __name__, url_prefix="/directory")
 admin = Blueprint("admin", __name__, url_prefix="/admin")
@@ -247,6 +249,8 @@ def profile(uid):
                            managers=managers, employment=EMPLOYMENT,
                            departments=DEPARTMENTS,
                            can_edit=(g.user["role"] == "admin" or g.user["id"] == uid),
+                           capabilities=CAPABILITIES,
+                           access=effective_permissions(person),
                            may_see_numbers=may_see_numbers)
 
 
@@ -368,6 +372,49 @@ def save_user():
         log(g.user["id"], "Added team member", "user", new_id, f"{name} ({role})")
         flash("Team member added.", "ok")
     return redirect(url_for("admin.users"))
+
+
+@admin.route("/users/<int:uid>/access", methods=("POST",))
+@admin_required
+def save_access(uid):
+    """Change what one person is allowed to do, without changing their role.
+
+    Only differences from the role are stored, so someone left entirely on
+    their role's defaults keeps following those defaults if the defaults ever
+    change. An admin's boxes are fixed on, because an admin who removed their
+    own access to this screen could not put it back.
+    """
+    person = query("SELECT * FROM users WHERE id = ?", (uid,), one=True)
+    if person is None:
+        flash("That team member no longer exists.", "error")
+        return redirect(url_for("admin.users"))
+    if person["role"] == "admin":
+        flash("Admins already have every permission — there is nothing to "
+              "change here. Change their role first if you want to limit them.",
+              "error")
+        return redirect(url_for("admin.profile", uid=uid))
+
+    granted = set(request.form.getlist("cap"))
+    overrides, changed = {}, []
+    for key, spec in CAPABILITIES.items():
+        by_role = spec[2].get(person["role"], False)
+        wanted = key in granted
+        if wanted != by_role:
+            overrides[key] = wanted
+        if wanted != can(key, person):
+            changed.append(f"{spec[0]}: {'on' if wanted else 'off'}")
+
+    execute("UPDATE users SET permissions = ? WHERE id = ?",
+            (json.dumps(overrides) if overrides else None, uid))
+    log(g.user["id"], "Changed what a team member can do", "user", uid,
+        "; ".join(changed) or "no change")
+    if changed:
+        notify(uid, "An admin changed what you can do in the CRM",
+               url_for("admin.profile", uid=uid))
+        flash(f"Access updated for {person['name']}.", "ok")
+    else:
+        flash("Nothing changed.", "ok")
+    return redirect(url_for("admin.profile", uid=uid))
 
 
 @admin.route("/users/<int:uid>/toggle", methods=("POST",))
@@ -602,7 +649,7 @@ def _csv(rows, headers, filename):
 
 
 @admin.route("/export/workbook.xlsx")
-@manager_required
+@requires("export")
 def export_workbook():
     """The full branded workbook: our listings, other listings, leads, deals."""
     properties = query(
@@ -636,7 +683,7 @@ def export_workbook():
 
 
 @admin.route("/export/leads.csv")
-@manager_required
+@requires("export")
 def export_leads():
     rows = query("SELECT l.ref, l.full_name, l.phone, l.email, l.source, l.status,"
                  " l.budget, u.name AS agent, p.title AS property_of_interest,"
@@ -649,7 +696,7 @@ def export_leads():
 
 
 @admin.route("/export/properties.csv")
-@manager_required
+@requires("export")
 def export_properties():
     rows = query("SELECT p.ref, p.title, p.address, p.building_no, p.floor_no,"
                  " p.unit_no, p.extras, p.area,"
@@ -667,7 +714,7 @@ def export_properties():
 
 
 @admin.route("/export/deals.csv")
-@manager_required
+@requires("export")
 def export_deals():
     rows = query("SELECT d.ref, d.deal_type, d.status, d.value, d.commission_pct,"
                  " d.commission_amt, p.title AS property, l.full_name AS client,"
@@ -681,7 +728,7 @@ def export_deals():
 
 
 @admin.route("/export/owners.csv")
-@manager_required
+@requires("export")
 def export_owners():
     rows = query("SELECT name, phone, email, company, notes, created_at FROM owners"
                  " ORDER BY name")
