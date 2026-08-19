@@ -68,8 +68,14 @@
     {% if user and user.role == 'admin' %}
     <a class="rail-link {{ 'active' if request.endpoint == 'admin.users' }}" href="{{ url_for('admin.users') }}">
       <span class="idx">10</span> {{ t('Team members') }}</a>
+    {% endif %}
+    {% if user and user.role in ('admin', 'manager') %}
+    <a class="rail-link {{ 'active' if request.blueprint == 'reports' }}" href="{{ url_for('reports.index') }}">
+      <span class="idx">11</span> {{ t('Agent reports') }}</a>
+    {% endif %}
+    {% if user and user.role == 'admin' %}
     <a class="rail-link {{ 'active' if request.endpoint == 'admin.settings' }}" href="{{ url_for('admin.settings') }}">
-      <span class="idx">11</span> {{ t('Settings') }}</a>
+      <span class="idx">12</span> {{ t('Settings') }}</a>
     {% endif %}
 
     {% if user and user.role == 'admin' %}

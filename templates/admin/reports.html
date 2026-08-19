@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Agent reports') }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">{{ t('Team') }}</div>
+    <h1 class="page-title">{{ t('Agent reports') }}</h1>
+  </div>
+  <div class="actions">
+    {% if agents %}
+    <form method="get" class="inline" style="gap:8px">
+      <input type="hidden" name="period_type" value="{{ period_type }}">
+      {% if report %}<input type="hidden" name="ref" value="{{ report.period.start.isoformat() }}">{% endif %}
+      <select name="agent" onchange="this.form.submit()" style="min-width:190px">
+        {% for a in agents %}
+          <option value="{{ a.id }}" {{ 'selected' if agent and agent.id == a.id }}>{{ a.name }}</option>
+        {% endfor %}
+      </select>
+    </form>
+    {% if agent %}
+      <a class="btn btn-gold" href="{{ url_for('reports.export', agent=agent.id, period_type=period_type, ref=report.period.start.isoformat()) }}">
+        {{ t('Export to Excel') }}</a>
+    {% endif %}
+    {% endif %}
+  </div>
+</div>
+
+{% if not agents %}
+  <div class="card"><div class="empty">
+    <span class="mark">◇</span>{{ t('Add a team member first — reports appear here once there is someone to report on.') }}
+  </div></div>
+{% else %}
+
+<div class="between" style="margin-bottom:14px;flex-wrap:wrap;gap:10px">
+  <div class="chip-row">
+    {% for key, label in period_types %}
+      <a class="chip {{ 'on' if period_type == key }}"
+         href="{{ url_for('reports.index', agent=agent.id, period_type=key, ref=report.period.start.isoformat()) }}">
+        {{ t(label) }}</a>
+    {% endfor %}
+  </div>
+  <div class="inline" style="gap:8px">
+    <a class="btn btn-quiet btn-sm" href="{{ url_for('reports.index', agent=agent.id, period_type=period_type, ref=report.period.prev) }}">‹</a>
+    <b class="mono" style="min-width:180px;text-align:center;display:inline-block">{{ report.period.label }}</b>
+    <a class="btn btn-quiet btn-sm" href="{{ url_for('reports.index', agent=agent.id, period_type=period_type, ref=report.period.next) }}">›</a>
+    {% if not report.period.is_current %}
+      <a class="btn btn-quiet btn-sm" href="{{ url_for('reports.index', agent=agent.id, period_type=period_type) }}">{{ t('Today') }}</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="who" style="margin-bottom:14px">
+  {{ avatar(agent, 48) }}
+  <div>
+    <a href="{{ url_for('admin.profile', uid=agent.id) }}"><b>{{ agent.name }}</b></a>
+    <div class="small faint">{{ agent.job_title or (t('Manager') if agent.role == 'manager' else t('Agent')) }}
+      {% if agent.department %} · {{ agent.department }}{% endif %}</div>
+  </div>
+</div>
+
+<div class="eyebrow" style="margin:18px 0 8px">{{ t('Deals') }}</div>
+<div class="metrics">
+  <div class="metric">
+    <div class="label">{{ t('Deals closed') }}</div>
+    <div class="value">{{ report.deals.count }}</div>
+    <div class="foot">{{ currency }} {{ report.deals.value | money }} {{ t('in value') }}</div>
+  </div>
+  <div class="metric">
+    <div class="label">{{ t('Commission earned') }}</div>
+    <div class="value" style="font-size:30px">{{ currency }} {{ report.deals.commission | money }}</div>
+    <div class="foot">{{ currency }} {{ report.deals.collected | money }} {{ t('collected') }}</div>
+  </div>
+  <div class="metric">
+    <div class="label">{{ t('Deals opened') }}</div>
+    <div class="value">{{ report.deals.opened }}</div>
+    <div class="foot">{{ t('agreed / created in this period') }}</div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div class="card-head"><h3>{{ t('Deals closed in this period') }}</h3>
+    <span class="mono faint">{{ report.deals.rows|length }}</span></div>
+  {% if report.deals.rows %}
+  <div class="table-scroll"><table class="table">
+    <thead><tr><th>{{ t('Deal') }}</th><th>{{ t('Property') }}</th><th>{{ t('Client') }}</th>
+      <th class="right">{{ t('Deal value') }}</th><th class="right">{{ t('Commission') }}</th>
+      <th>{{ t('Status') }}</th></tr></thead>
+    <tbody>
+    {% for d in report.deals.rows %}
+      <tr>
+        <td class="mono faint">{{ d.ref }}<div class="small">{{ d.closed_at | nice_date }}</div></td>
+        <td class="small">{{ d.prop_title or '—' }}</td>
+        <td class="small">{{ d.lead_name or '—' }}</td>
+        <td class="right price">{{ d.value | money }}</td>
+        <td class="right price">{{ d.commission_amt | money }}</td>
+        <td><span class="tag tag-{{ 'available' if d.status == 'Collected' else 'reserved' }}">{{ t(d.status) }}</span></td>
+      </tr>
+    {% endfor %}
+    </tbody></table></div>
+  {% else %}
+    <div class="empty"><span class="mark">◇</span>{{ t('No deals closed in this period.') }}</div>
+  {% endif %}
+</div>
+
+<div class="grid g-4" style="margin-top:20px">
+  <div class="eyebrow" style="grid-column:1/-1;margin:0">{{ t('Tasks') }}</div>
+  <div class="card"><div class="card-body">
+    <div class="eyebrow">{{ t('Follow-ups due') }}</div>
+    <div class="metric" style="padding:0;border:none">
+      <div class="value" style="font-size:30px">{{ report.tasks.due_followups }}</div>
+      <div class="foot">{{ report.tasks.handled_followups }} {{ t('handled in period') }}</div>
+    </div>
+  </div></div>
+  <div class="card"><div class="card-body">
+    <div class="eyebrow">{{ t('Viewings scheduled') }}</div>
+    <div class="metric" style="padding:0;border:none">
+      <div class="value" style="font-size:30px">{{ report.tasks.viewings_scheduled }}</div>
+      <div class="foot">{{ report.tasks.viewings_done }} {{ t('completed') }}</div>
+    </div>
+  </div></div>
+  {% if 'overdue_now' in report.tasks %}
+  <a class="card" href="{{ url_for('leads.index', due='overdue') }}"><div class="card-body">
+    <div class="eyebrow">{{ t('Overdue follow-ups') }}</div>
+    <div class="metric" style="padding:0;border:none">
+      <div class="value" style="font-size:30px;{{ 'color:var(--bad)' if report.tasks.overdue_now }}">{{ report.tasks.overdue_now }}</div>
+      <div class="foot">{{ t('right now') }}</div>
+    </div>
+  </div></a>
+  {% endif %}
+</div>
+
+<div class="eyebrow" style="margin:20px 0 8px">{{ t('Work') }}</div>
+<div class="metrics">
+  <div class="metric">
+    <div class="label">{{ t('New leads') }}</div>
+    <div class="value">{{ report.work.new_leads }}</div>
+    <div class="foot">{{ report.work.contacts_logged }} {{ t('contacts logged') }}</div>
+  </div>
+  <div class="metric">
+    <div class="label">{{ t('New listings') }}</div>
+    <div class="value">{{ report.work.new_listings }}</div>
+    <div class="foot">{{ t('added in this period') }}</div>
+  </div>
+  <div class="metric">
+    <div class="label">{{ t('Won / Lost') }}</div>
+    <div class="value" style="font-size:30px">{{ report.work.won }} / {{ report.work.lost }}</div>
+    <div class="foot">{{ t('leads settled') }}</div>
+  </div>
+  <div class="metric">
+    <div class="label">{{ t('Activity logged') }}</div>
+    <div class="value">{{ report.work.activity_total }}</div>
+    <div class="foot">{{ t('entries this period') }}</div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div class="card-head"><h3>{{ t('Activity in this period') }}</h3>
+    <a class="btn btn-quiet btn-sm" href="{{ url_for('main.activity') }}">{{ t('Full log') }}</a></div>
+  <div class="card-body" style="padding-top:4px">
+    {% if report.work.activity %}
+      {% for a in report.work.activity %}
+      <div class="feed-item">
+        <span class="feed-dot"></span>
+        <div class="stack">
+          <div>{{ t(a.action) }}</div>
+          {% if a.detail %}<div class="small muted">{{ a.detail }}</div>{% endif %}
+          <div class="mono faint">{{ a.created_at | nice_time }}</div>
+        </div>
+      </div>
+      {% endfor %}
+      {% if report.work.activity_total > report.work.activity|length %}
+        <div class="small faint" style="margin-top:6px">
+          {{ t('Showing the most recent') }} {{ report.work.activity|length }} {{ t('of') }} {{ report.work.activity_total }}.</div>
+      {% endif %}
+    {% else %}
+      <div class="empty"><span class="mark">◇</span>{{ t('No logged activity in this period.') }}</div>
+    {% endif %}
+  </div>
+</div>
+
+{% endif %}
+{% endblock %}

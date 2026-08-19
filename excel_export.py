@@ -311,6 +311,98 @@ def deals_sheet(wb, co, records, exported_by):
     finish(ws, co, len(headers), widths, end)
 
 
+def agent_summary_sheet(wb, co, agent, period, deals, tasks, work, exported_by):
+    """Key figures for one agent's period, as a compact metric : value table —
+    the same numbers the on-screen report shows, in a form that pastes
+    cleanly into another spreadsheet or email."""
+    headers = ["Metric", "Value"]
+    formats = [(None, "left"), (None, "right")]
+    widths = [36, 20]
+
+    rows = [
+        ("Deals closed", deals["count"]),
+        (f"Deal value ({co['currency']})", deals["value"]),
+        (f"Commission earned ({co['currency']})", deals["commission"]),
+        (f"Commission collected ({co['currency']})", deals["collected"]),
+        ("Deals opened in period", deals["opened"]),
+        ("Follow-ups due", tasks["due_followups"]),
+        ("Follow-ups handled", tasks["handled_followups"]),
+        ("Viewings scheduled", tasks["viewings_scheduled"]),
+        ("Viewings completed", tasks["viewings_done"]),
+        ("New leads", work["new_leads"]),
+        ("Contacts logged", work["contacts_logged"]),
+        ("New listings added", work["new_listings"]),
+        ("Leads won", work["won"]),
+        ("Leads lost", work["lost"]),
+        ("Activity log entries", work["activity_total"]),
+    ]
+    if "overdue_now" in tasks:
+        rows.append(("Overdue follow-ups (as of now)", tasks["overdue_now"]))
+
+    ws = wb.create_sheet("Summary")
+    brand_header(ws, co, f"Agent Report — {agent['name']}",
+                 f"{period['label']} · {agent['job_title'] or agent['role'].title()}",
+                 len(headers), exported_by)
+    table_header(ws, headers)
+    end = write_rows(ws, rows, formats)
+    finish(ws, co, len(headers), widths, end)
+
+
+def agent_deals_sheet(wb, co, agent, period, records, exported_by):
+    headers = ["Ref", "Property", "Client", "Type",
+               f"Deal value ({co['currency']})", "Comm. %",
+               f"Commission ({co['currency']})", "Status", "Closed on"]
+    formats = [
+        (None, "left"), (None, "left"), (None, "left"),
+        (None, "center"), ("#,##0", "right"), ("0.00%", "center"),
+        ("#,##0.00", "right"), (None, "center"), ("dd mmm yyyy", "center"),
+    ]
+    widths = [11, 34, 21, 10, 17, 10, 17, 12, 13]
+
+    ws = wb.create_sheet("Deals")
+    rows = [(r["ref"], r["prop_title"], r["lead_name"], r["deal_type"], r["value"],
+             (r["commission_pct"] or 0) / 100.0, r["commission_amt"], r["status"],
+             _date(r["closed_at"] or r["created_at"])) for r in records]
+
+    brand_header(ws, co, "Deals closed in period",
+                 f"{agent['name']} · {period['label']} · {len(rows)} records",
+                 len(headers), exported_by)
+    table_header(ws, headers)
+    if rows:
+        end = write_rows(ws, rows, formats)
+        totals_row(ws, end + 1, len(headers), f"{len(rows)} deals", {
+            5: (f"=SUM(E{FIRST_DATA}:E{end})", "#,##0"),
+            7: (f"=SUM(G{FIRST_DATA}:G{end})", "#,##0.00"),
+        })
+    else:
+        end = FIRST_DATA - 1
+        empty_note(ws, len(headers), "No deals closed in this period.")
+    finish(ws, co, len(headers), widths, end)
+
+
+def agent_report_workbook(report, agent, exported_by):
+    """One agent's tasks/work/deals report (see reports.py) as a two-sheet
+    workbook: a Summary of every figure, and the Deals that made up the
+    period's closed total."""
+    co = company()
+    wb = Workbook()
+    wb.remove(wb.active)
+
+    period = report["period"]
+    agent_summary_sheet(wb, co, agent, period, report["deals"], report["tasks"],
+                        report["work"], exported_by)
+    agent_deals_sheet(wb, co, agent, period, report["deals"]["rows"], exported_by)
+
+    wb.properties.title = f"{co['name']} — {agent['name']} report"
+    wb.properties.creator = co["name"]
+    wb.properties.created = datetime.now()
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+
+
 def build_workbook(properties, leads, deals, exported_by):
     """The whole workbook, in memory, ready to send to the browser."""
     co = company()

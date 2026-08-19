@@ -18,6 +18,7 @@ import views_imports
 import views_leads
 import views_main
 import views_properties
+import views_reports
 import whatsapp
 from db import (LEAD_STAGES, TZ_OFFSET, close_db, get_setting, init_db,
                 local_now, query, to_local)
@@ -144,6 +145,7 @@ def create_app():
     app.register_blueprint(views_imports.bp)
     app.register_blueprint(views_admin.contacts)
     app.register_blueprint(views_admin.admin)
+    app.register_blueprint(views_reports.bp)
     app.register_blueprint(intake_bp)
     app.register_blueprint(social_bp)
     app.register_blueprint(restore_bp)
