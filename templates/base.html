@@ -25,10 +25,13 @@
     </span>
   </a>
 
+  {% set is_accountant = user and user.role == 'accountant' %}
+  {% set sees_finance = user and user.role in ('admin', 'manager', 'accountant') %}
   <nav class="rail-nav">
     <div class="rail-group">{{ t('Daily') }}</div>
     <a class="rail-link {{ 'active' if request.endpoint == 'main.dashboard' }}" href="{{ url_for('main.dashboard') }}">
       <span class="idx">01</span> {{ t('Dashboard') }}</a>
+    {% if not is_accountant %}
     <a class="rail-link {{ 'active' if request.blueprint == 'properties' }}" href="{{ url_for('properties.index') }}">
       <span class="idx">02</span> {{ t('Properties') }}</a>
     <a class="rail-link {{ 'active' if request.endpoint == 'properties.waiting' }}"
@@ -48,34 +51,41 @@
     {% endif %}
     <a class="rail-link {{ 'active' if request.blueprint == 'leads' }}" href="{{ url_for('leads.board') }}">
       <span class="idx">04</span> {{ t('Leads') }}</a>
+    {% endif %}
 
     <div class="rail-group">{{ t('Money') }}</div>
     <a class="rail-link {{ 'active' if request.blueprint == 'deals' }}" href="{{ url_for('deals.index') }}">
       <span class="idx">05</span> {{ t('Deals') }}</a>
+    {% if sees_finance %}
+    <a class="rail-link {{ 'active' if request.blueprint == 'finance' }}" href="{{ url_for('finance.index') }}">
+      <span class="idx">06</span> {{ t('Financial') }}</a>
+    {% endif %}
 
+    {% if not is_accountant %}
     <div class="rail-group">{{ t('Directory') }}</div>
     <a class="rail-link {{ 'active' if request.endpoint == 'contacts.owners' }}" href="{{ url_for('contacts.owners') }}">
-      <span class="idx">06</span> {{ t('Owners') }}</a>
+      <span class="idx">07</span> {{ t('Owners') }}</a>
     <a class="rail-link {{ 'active' if request.endpoint == 'contacts.partners' }}" href="{{ url_for('contacts.partners') }}">
-      <span class="idx">07</span> {{ t('Partners') }}</a>
+      <span class="idx">08</span> {{ t('Partners') }}</a>
+    {% endif %}
 
     <div class="rail-group">{{ t('Team') }}</div>
     <a class="rail-link {{ 'active' if request.endpoint == 'main.notifications' }}" href="{{ url_for('main.notifications') }}">
-      <span class="idx">08</span> {{ t('Notifications') }}
+      <span class="idx">09</span> {{ t('Notifications') }}
       {% if unread %}<span class="pill">{{ unread }}</span>{% endif %}</a>
     <a class="rail-link {{ 'active' if request.endpoint == 'main.activity' }}" href="{{ url_for('main.activity') }}">
-      <span class="idx">09</span> {{ t('Activity log') }}</a>
+      <span class="idx">10</span> {{ t('Activity log') }}</a>
     {% if user and user.role == 'admin' %}
     <a class="rail-link {{ 'active' if request.endpoint == 'admin.users' }}" href="{{ url_for('admin.users') }}">
-      <span class="idx">10</span> {{ t('Team members') }}</a>
+      <span class="idx">11</span> {{ t('Team members') }}</a>
     {% endif %}
     {% if user and user.role in ('admin', 'manager') %}
     <a class="rail-link {{ 'active' if request.blueprint == 'reports' }}" href="{{ url_for('reports.index') }}">
-      <span class="idx">11</span> {{ t('Agent reports') }}</a>
+      <span class="idx">12</span> {{ t('Agent reports') }}</a>
     {% endif %}
     {% if user and user.role == 'admin' %}
     <a class="rail-link {{ 'active' if request.endpoint == 'admin.settings' }}" href="{{ url_for('admin.settings') }}">
-      <span class="idx">12</span> {{ t('Settings') }}</a>
+      <span class="idx">13</span> {{ t('Settings') }}</a>
     {% endif %}
 
     {% if user and user.role == 'admin' %}
@@ -124,7 +134,7 @@
 
     <a class="userchip" href="{{ url_for('auth.account') }}">
       {{ avatar(user, 34) }}
-      <span class="who"><b>{{ user.name }}</b><em>{{ t('Admin') if user.role == 'admin' else t('Agent') }}</em></span>
+      <span class="who"><b>{{ user.name }}</b><em>{{ user.role | role_label }}</em></span>
     </a>
 
     <a class="btn btn-quiet btn-sm" href="{{ url_for('auth.logout') }}">{{ t('Sign out') }}</a>

@@ -7,7 +7,7 @@
     {{ avatar(person, 88) }}
     <div>
       <div class="eyebrow">
-        {{ t('Admin') if person.role == 'admin' else (t('Manager') if person.role == 'manager' else t('Agent')) }}
+        {{ person.role | role_label }}
         {% if person.department %} · {{ person.department }}{% endif %}
       </div>
       <h1 class="page-title">{{ person.name }}</h1>
@@ -134,7 +134,7 @@
     <div class="card-head">
       <h3>{{ t('What they can do') }}</h3>
       <span class="tag tag-{{ 'sale' if person.role == 'admin' else 'plain' }}">
-        {{ t('Admin') if person.role == 'admin' else (t('Manager') if person.role == 'manager' else t('Agent')) }}</span>
+        {{ person.role | role_label }}</span>
     </div>
     <div class="card-body">
       {% if person.role == 'admin' %}

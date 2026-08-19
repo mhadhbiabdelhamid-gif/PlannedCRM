@@ -668,6 +668,55 @@ AR = {
     "No logged activity in this period.": "لا يوجد نشاط مسجل خلال هذه الفترة.",
     "Add a team member first — reports appear here once there is someone to report on.":
         "أضف عضو فريق أولاً — ستظهر التقارير هنا بمجرد وجود شخص لإعداد تقرير عنه.",
+
+    # ---- financial section / accountant role
+    "Accountant": "محاسب",
+    "Financial": "المالية",
+    "Commission payouts": "دفعات العمولة",
+    "Commission earned": "العمولة المكتسبة",
+    "Paid out": "المدفوع",
+    "Outstanding": "المتبقي",
+    "Rows": "السجلات",
+    "unpaid / partial / paid": "غير مدفوعة / جزئية / مدفوعة",
+    "Unpaid": "غير مدفوعة",
+    "Partially paid": "مدفوعة جزئياً",
+    "Paid": "مدفوعة",
+    "All agents": "كل الوكلاء",
+    "Deal ref, agent or property": "مرجع الصفقة أو الوكيل أو العقار",
+    "Earned": "المكتسب",
+    "Record payment": "تسجيل دفعة",
+    "Deal · Agent": "الصفقة · الوكيل",
+    "Amount paid": "المبلغ المدفوع",
+    "Payment date": "تاريخ الدفع",
+    "Note": "ملاحظة",
+    "Save payment": "حفظ الدفعة",
+    "If this is a partial payment, enter just that amount — the balance stays outstanding and you can record another payment later.":
+        "إذا كانت هذه دفعة جزئية، أدخل هذا المبلغ فقط — يبقى الرصيد المتبقي معلقاً ويمكنك تسجيل دفعة أخرى لاحقاً.",
+    "No commission to pay out with these filters.": "لا توجد عمولة لدفعها وفق هذه الفلاتر.",
+    "Import from Excel": "استيراد من إكسل",
+    "Import payouts": "استيراد الدفعات",
+    "Import payouts from Excel": "استيراد الدفعات من إكسل",
+    "Back to payouts": "العودة للدفعات",
+    "Upload a spreadsheet of payments already made outside the CRM and this matches each row to the deal and agent it belongs to, then records it as a payment — nothing is created, only existing commission is marked paid.":
+        "ارفع جدول بيانات للدفعات التي تمت خارج النظام، وسيتم مطابقة كل سطر بالصفقة والوكيل الخاص به ثم تسجيله كدفعة — لا يتم إنشاء أي شيء جديد، فقط تحديد العمولة الحالية كمدفوعة.",
+    "Payouts spreadsheet": "جدول بيانات الدفعات",
+    "Import payments": "استيراد الدفعات",
+    "File format": "صيغة الملف",
+    "One header row, any order, with at least these three columns:":
+        "صف عناوين واحد، بأي ترتيب، يحتوي على هذه الأعمدة الثلاثة على الأقل:",
+    "Deal Ref": "مرجع الصفقة",
+    "Agent Email": "بريد الوكيل الإلكتروني",
+    "e.g. PRE-D-0012, matching the deal in the CRM": "مثال: PRE-D-0012، مطابق للصفقة في النظام",
+    "the agent's login email": "البريد الإلكتروني لتسجيل دخول الوكيل",
+    "Optional: Paid Date and Note. A row that can't be matched to a deal and agent is listed after import so you can fix it and re-upload just that row.":
+        "اختياري: تاريخ الدفع وملاحظة. أي سطر لا يمكن مطابقته بصفقة ووكيل يُعرض بعد الاستيراد لتصحيحه وإعادة رفعه فقط.",
+    "Import result": "نتيجة الاستيراد",
+    "Payments recorded": "الدفعات المسجّلة",
+    "Not matched": "غير مطابقة",
+    "Rows skipped": "سجلات تم تخطيها",
+    "Deal ref / agent email — not found": "مرجع الصفقة / بريد الوكيل — غير موجود",
+    "sees every deal and the Financial section only — no listings or leads.":
+        "يرى جميع الصفقات وقسم المالية فقط — بدون عقارات أو عملاء محتملين.",
 }
 
 

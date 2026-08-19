@@ -29,14 +29,14 @@
         {{ avatar(u, 52) }}
         <div style="min-width:0">
           <a href="{{ url_for('admin.profile', uid=u.id) }}"><b>{{ u.name }}</b></a>
-          <div class="role">{{ u.job_title or (t('Admin') if u.role == 'admin' else t('Agent')) }}</div>
+          <div class="role">{{ u.job_title or (u.role | role_label) }}</div>
           <div class="small faint">{{ u.department or '' }}</div>
         </div>
       </div>
 
       <div class="inline" style="gap:6px">
         <span class="tag tag-{{ 'sale' if u.role == 'admin' else 'plain' }}">
-          {{ t('Admin') if u.role == 'admin' else (t('Manager') if u.role == 'manager' else t('Agent')) }}</span>
+          {{ u.role | role_label }}</span>
         {% if s.overdue %}<span class="tag tag-sold">{{ s.overdue }} {{ t('overdue') }}</span>{% endif %}
         {% if s.due_today %}<span class="tag tag-reserved">{{ s.due_today }} {{ t('today') }}</span>{% endif %}
       </div>
@@ -72,6 +72,7 @@
   <div class="card-body small muted">
     <b>{{ t('Admin') }}</b> {{ t('sees every listing, lead and report, manages the team and exports data.') }}
     <b>{{ t('Agent') }}</b> {{ t('sees all listings plus their own leads and anything still in the shared pool.') }}
+    <b>{{ t('Accountant') }}</b> {{ t('sees every deal and the Financial section only — no listings or leads.') }}
     {{ t('Figures cover') }} <b>{{ t(dict(ranges)[period]) }}</b>{{ t(', except leads, listings and follow-ups, which show the position right now.') }}
   </div>
 </div>
@@ -94,6 +95,7 @@
             <select name="role">
               <option value="agent">{{ t('Agent') }}</option>
               <option value="manager">{{ t('Manager') }}</option>
+              <option value="accountant">{{ t('Accountant') }}</option>
               <option value="admin">{{ t('Admin') }}</option>
             </select></div>
         </div>

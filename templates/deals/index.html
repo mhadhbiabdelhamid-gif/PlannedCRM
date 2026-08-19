@@ -12,7 +12,11 @@
       <a class="btn btn-dark" href="{{ url_for('admin.export_workbook') }}">{{ t('Export Excel') }}</a>
       <a class="btn" href="{{ url_for('admin.export_deals') }}">{{ t('Export CSV') }}</a>
     {% endif %}
-    <a class="btn btn-gold" href="{{ url_for('deals.form') }}">{{ t('Record a deal') }}</a>
+    {% if user.role == 'accountant' %}
+      <a class="btn btn-gold" href="{{ url_for('finance.index') }}">{{ t('Commission payouts') }}</a>
+    {% else %}
+      <a class="btn btn-gold" href="{{ url_for('deals.form') }}">{{ t('Record a deal') }}</a>
+    {% endif %}
   </div>
 </div>
 
@@ -92,7 +96,9 @@
         <td><span class="tag tag-{{ 'available' if d.status == 'Collected' else ('sold' if d.status == 'Cancelled' else 'reserved') }}">{{ t(d.status) }}</span>
           {% if d.closed_at %}<div class="small faint">{{ d.closed_at | nice_date }}</div>{% endif %}</td>
         <td class="right nowrap">
+          {% if user.role != 'accountant' %}
           <a class="btn btn-quiet btn-sm" href="{{ url_for('deals.form', did=d.id) }}">{{ t('Edit') }}</a>
+          {% endif %}
           {% if d.status in ('Agreed', 'Signed') %}
           <form method="post" action="{{ url_for('deals.collect', did=d.id) }}" style="display:inline">
             <button class="btn btn-quiet btn-sm" type="submit">{{ t('Mark collected') }}</button></form>

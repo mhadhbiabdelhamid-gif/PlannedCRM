@@ -14,6 +14,7 @@ import backups
 import mailer
 import views_admin
 import views_deals
+import views_finance
 import views_imports
 import views_leads
 import views_main
@@ -146,6 +147,7 @@ def create_app():
     app.register_blueprint(views_admin.contacts)
     app.register_blueprint(views_admin.admin)
     app.register_blueprint(views_reports.bp)
+    app.register_blueprint(views_finance.bp)
     app.register_blueprint(intake_bp)
     app.register_blueprint(social_bp)
     app.register_blueprint(restore_bp)
@@ -183,6 +185,16 @@ def create_app():
     def nice_time(value):
         dt = to_local(value)
         return dt.strftime("%d %b %Y, %H:%M") if dt else "—"
+
+    ROLE_LABELS = {"admin": "Admin", "manager": "Manager",
+                   "accountant": "Accountant", "agent": "Agent"}
+
+    @app.template_filter("role_label")
+    def role_label(role):
+        """One place for 'what do we call this role on screen', so a new
+        role (like accountant) only needs adding here, not in every template
+        that used to spell out admin/manager/agent by hand."""
+        return t(ROLE_LABELS.get(role, "Agent"))
 
     @app.template_filter("local_input")
     def local_input(value):

@@ -173,6 +173,28 @@ def manager_required(view):
     return wrapped
 
 
+def sees_finance():
+    """Whether this person may see commission payouts and every deal,
+    regardless of who's on it: admins and managers (who already see
+    everything, see sees_all()) plus the accountant role, which exists
+    specifically to follow deals and record payouts without the rest of
+    the CRM's management screens."""
+    return g.user is not None and g.user["role"] in ("admin", "manager", "accountant")
+
+
+def finance_required(view):
+    """Guard for the Financial section."""
+    @functools.wraps(view)
+    def wrapped(*a, **kw):
+        if g.user is None:
+            return redirect(url_for("auth.login", next=request.path))
+        if not sees_finance():
+            flash("That area is limited to admins, managers and accountants.", "error")
+            return redirect(url_for("main.dashboard"))
+        return view(*a, **kw)
+    return wrapped
+
+
 def can_publish():
     """Whether this person may turn a waiting listing into a live one."""
     return can("publish")

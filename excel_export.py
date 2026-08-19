@@ -403,6 +403,55 @@ def agent_report_workbook(report, agent, exported_by):
     return buf
 
 
+def payouts_workbook(rows, totals, exported_by):
+    """Commission payouts: what each agent earned on a live deal versus what
+    they've actually been paid, for the accountant to reconcile."""
+    co = company()
+    headers = ["Deal", "Property", "Agent", "Deal status",
+               f"Earned ({co['currency']})", f"Paid ({co['currency']})",
+               "Payout status", "Paid on", "Note"]
+    formats = [
+        (None, "left"), (None, "left"), (None, "left"), (None, "center"),
+        ("#,##0.00", "right"), ("#,##0.00", "right"), (None, "center"),
+        ("dd mmm yyyy", "center"), (None, "left"),
+    ]
+    widths = [11, 30, 20, 12, 16, 16, 14, 13, 26]
+
+    wb = Workbook()
+    wb.remove(wb.active)
+    ws = wb.create_sheet("Payouts")
+    data = [(r["ref"], r["prop_title"], r["agent_name"], r["deal_status"],
+             r["amount"], r["paid_amount"], r["payout_status"].title(),
+             _date(r["paid_at"]), r["payout_note"]) for r in rows]
+
+    brand_header(ws, co, "Commission Payouts",
+                 f"Earned {co['currency']} {totals['earned']:,.0f} · "
+                 f"Paid {co['currency']} {totals['paid']:,.0f} · "
+                 f"Outstanding {co['currency']} {totals['outstanding']:,.0f} · "
+                 f"{len(data)} records",
+                 len(headers), exported_by)
+    table_header(ws, headers)
+    if data:
+        end = write_rows(ws, data, formats)
+        totals_row(ws, end + 1, len(headers), f"{len(data)} payouts", {
+            5: (f"=SUM(E{FIRST_DATA}:E{end})", "#,##0.00"),
+            6: (f"=SUM(F{FIRST_DATA}:F{end})", "#,##0.00"),
+        })
+    else:
+        end = FIRST_DATA - 1
+        empty_note(ws, len(headers), "No commission payouts recorded yet.")
+    finish(ws, co, len(headers), widths, end)
+
+    wb.properties.title = f"{co['name']} — Commission payouts"
+    wb.properties.creator = co["name"]
+    wb.properties.created = datetime.now()
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+
+
 def build_workbook(properties, leads, deals, exported_by):
     """The whole workbook, in memory, ready to send to the browser."""
     co = company()

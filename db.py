@@ -227,6 +227,7 @@ CREATE INDEX IF NOT EXISTS idx_lead_agent  ON leads(agent_id);
 CREATE INDEX IF NOT EXISTS idx_comment_ent ON comments(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_notif_user  ON notifications(user_id, is_read);
 CREATE INDEX IF NOT EXISTS idx_deal_agents_user ON deal_agents(user_id);
+CREATE INDEX IF NOT EXISTS idx_deal_agents_payout ON deal_agents(payout_status);
 """
 
 LEAD_STAGES = ["New", "Contacted", "Qualified", "Viewing", "Offer",
@@ -243,6 +244,14 @@ LEAD_SOURCES = ["Walk-in", "Website", "Property Finder", "Referral",
                 "Instagram", "WhatsApp", "Phone", "Other"]
 PARTNER_TYPES = ["Developer", "Legal", "Maintenance", "Bank", "Marketing", "Other"]
 DEAL_STATUS = ["Agreed", "Signed", "Collected", "Cancelled"]
+PAYOUT_STATUS = [
+    ("unpaid", "Unpaid"),
+    ("partial", "Partially paid"),
+    ("paid", "Paid"),
+]
+# admin/manager/agent already existed as free-text role values; accountant is
+# the fourth, added for the Financial section (see auth.sees_finance()).
+ROLES = ["agent", "manager", "accountant", "admin"]
 
 # Qatar has no daylight saving, so a fixed offset is correct all year.
 TZ_OFFSET = timedelta(hours=int(os.environ.get("TZ_OFFSET_HOURS", "3")))
@@ -375,6 +384,14 @@ MIGRATIONS = [
     ("deals", "free_months", "REAL"),
     ("deals", "commission_basis", "TEXT"),
     ("deals", "commission_on", "TEXT"),
+    # Commission payouts — what's actually been paid to each agent on a deal,
+    # as opposed to deal_agents.amount, which is what they earned. Tracked
+    # per deal_agents row so a split deal pays out per person, not per deal.
+    ("deal_agents", "payout_status", "TEXT NOT NULL DEFAULT 'unpaid'"),
+    ("deal_agents", "paid_amount", "REAL NOT NULL DEFAULT 0"),
+    ("deal_agents", "paid_at", "TEXT"),
+    ("deal_agents", "payout_note", "TEXT"),
+    ("deal_agents", "recorded_by", "INTEGER"),
 ]
 
 # How long a listing can go without someone confirming it's still on the

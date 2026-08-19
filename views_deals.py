@@ -4,7 +4,7 @@ import json
 from flask import (Blueprint, flash, g, redirect, render_template, request,
                    url_for)
 
-from auth import admin_required, can_edit, login_required, sees_all
+from auth import admin_required, can_edit, login_required, sees_all, sees_finance
 from commission import (AGENT_ROLES, BASES, ON_CHOICES, check_shares,
                         commission_amount, split_amounts)
 from db import (DEAL_STATUS, LISTING_TYPES, execute, get_setting, local_now,
@@ -14,8 +14,10 @@ bp = Blueprint("deals", __name__, url_prefix="/deals")
 
 
 def _scope(prefix="d"):
-    """Agents see deals they are on, not only ones they lead."""
-    if sees_all():
+    """Agents see deals they are on, not only ones they lead. Accountants
+    see every deal too — they hold no share of any of them, so without this
+    they'd see none at all, defeating the point of the role."""
+    if sees_finance():
         return "", []
     return (f" AND ({prefix}.agent_id = ? OR EXISTS (SELECT 1 FROM deal_agents da"
             f" WHERE da.deal_id = {prefix}.id AND da.user_id = ?))",
@@ -66,7 +68,7 @@ def index():
 
     # What this person personally earned, when they aren't seeing everything.
     mine = None
-    if not sees_all():
+    if not sees_finance():
         row = query("SELECT COALESCE(SUM(da.amount),0) a,"
                     " COALESCE(SUM(CASE WHEN d.status='Collected'"
                     "   THEN da.amount ELSE 0 END),0) c"
@@ -85,6 +87,14 @@ def index():
 @bp.route("/<int:did>/edit", methods=("GET", "POST"))
 @login_required
 def form(did=None):
+    if g.user["role"] == "accountant":
+        # Accountants follow deals and record commission payouts, but
+        # recording/changing the deal itself (value, split, property) is an
+        # agent/manager job — see finance.py and views_finance.py for theirs.
+        flash("Accountants record commission payouts from the Financial "
+              "section, not deal details.", "error")
+        return redirect(url_for("finance.index"))
+
     d = query("SELECT * FROM deals WHERE id = ?", (did,), one=True) if did else None
     if did and d is None:
         flash("That deal no longer exists.", "error")

@@ -54,7 +54,7 @@
   {{ avatar(agent, 48) }}
   <div>
     <a href="{{ url_for('admin.profile', uid=agent.id) }}"><b>{{ agent.name }}</b></a>
-    <div class="small faint">{{ agent.job_title or (t('Manager') if agent.role == 'manager' else t('Agent')) }}
+    <div class="small faint">{{ agent.job_title or (agent.role | role_label) }}
       {% if agent.department %} · {{ agent.department }}{% endif %}</div>
   </div>
 </div>

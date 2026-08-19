@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Import payouts') }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">{{ t('Money') }}</div>
+    <h1 class="page-title">{{ t('Import payouts from Excel') }}</h1>
+  </div>
+  <div class="actions">
+    <a class="btn btn-quiet" href="{{ url_for('finance.index') }}">{{ t('Back to payouts') }}</a>
+  </div>
+</div>
+
+<div class="grid g-main">
+  <form method="post" enctype="multipart/form-data" class="card">
+    <div class="card-body">
+      <p class="muted" style="margin-top:0">
+        {{ t('Upload a spreadsheet of payments already made outside the CRM and this matches each row to the deal and agent it belongs to, then records it as a payment — nothing is created, only existing commission is marked paid.') }}
+      </p>
+      <div class="field">
+        <label>{{ t('Payouts spreadsheet') }}</label>
+        <input type="file" name="file" accept=".xlsx,.xlsm" required>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-gold" type="submit">{{ t('Import payments') }}</button>
+    </div>
+  </form>
+
+  <div class="card">
+    <div class="card-head"><h3>{{ t('File format') }}</h3></div>
+    <div class="card-body small muted">
+      <p style="margin-top:0">{{ t('One header row, any order, with at least these three columns:') }}</p>
+      <ul style="margin:0 0 10px;padding-left:18px">
+        <li><b>{{ t('Deal Ref') }}</b> — {{ t('e.g. PRE-D-0012, matching the deal in the CRM') }}</li>
+        <li><b>{{ t('Agent Email') }}</b> — {{ t("the agent's login email") }}</li>
+        <li><b>{{ t('Amount Paid') }}</b></li>
+      </ul>
+      <p style="margin:0">{{ t('Optional: Paid Date and Note. A row that can\'t be matched to a deal and agent is listed after import so you can fix it and re-upload just that row.') }}</p>
+    </div>
+  </div>
+</div>
+
+{% if results %}
+<div class="card" style="margin-top:16px">
+  <div class="card-head"><h3>{{ t('Import result') }}</h3></div>
+  <div class="card-body">
+    <div class="metrics" style="border:none">
+      <div class="metric">
+        <div class="label">{{ t('Payments recorded') }}</div>
+        <div class="value" style="font-size:28px">{{ results.updated }}</div>
+      </div>
+      <div class="metric">
+        <div class="label">{{ t('Not matched') }}</div>
+        <div class="value" style="font-size:28px;{{ 'color:var(--bad)' if results.not_found }}">
+          {{ results.not_found | length }}</div>
+      </div>
+      <div class="metric">
+        <div class="label">{{ t('Rows skipped') }}</div>
+        <div class="value" style="font-size:28px">{{ results.skipped }}</div>
+      </div>
+    </div>
+    {% if results.not_found %}
+      <div class="hairline"></div>
+      <div class="eyebrow">{{ t('Deal ref / agent email — not found') }}</div>
+      <ul class="small mono" style="margin:8px 0 0;padding-left:18px">
+        {% for line in results.not_found %}<li>{{ line }}</li>{% endfor %}
+      </ul>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}

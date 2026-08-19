@@ -4,7 +4,7 @@
 {% block content %}
 <div class="page-head">
   <div>
-    <div class="eyebrow">{{ t('Today') }} · {{ t('Admin') if user.role == 'admin' else t('Agent') }}</div>
+    <div class="eyebrow">{{ t('Today') }} · {{ user.role | role_label }}</div>
     <h1 class="page-title">{{ t('Good to see you') }}, {{ user.name.split(' ')[0] }}</h1>
   </div>
   <div class="actions">

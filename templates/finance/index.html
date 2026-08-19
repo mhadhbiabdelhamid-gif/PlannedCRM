@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Financial') }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">{{ t('Money') }}</div>
+    <h1 class="page-title">{{ t('Commission payouts') }}</h1>
+  </div>
+  <div class="actions">
+    <a class="btn" href="{{ url_for('finance.import_payouts') }}">{{ t('Import from Excel') }}</a>
+    <a class="btn btn-gold"
+       href="{{ url_for('finance.export', status=status, agent=agent_id, q=q) }}">{{ t('Export to Excel') }}</a>
+  </div>
+</div>
+
+<div class="metrics">
+  <div class="metric">
+    <div class="label">{{ t('Commission earned') }}</div>
+    <div class="value" style="font-size:30px">{{ currency }} {{ totals.earned | money }}</div>
+  </div>
+  <div class="metric">
+    <div class="label">{{ t('Paid out') }}</div>
+    <div class="value" style="font-size:30px">{{ currency }} {{ totals.paid | money }}</div>
+  </div>
+  <div class="metric">
+    <div class="label">{{ t('Outstanding') }}</div>
+    <div class="value" style="font-size:30px;{{ 'color:var(--bad)' if totals.outstanding }}">
+      {{ currency }} {{ totals.outstanding | money }}</div>
+  </div>
+  <div class="metric">
+    <div class="label">{{ t('Rows') }}</div>
+    <div class="value" style="font-size:30px">{{ totals.unpaid }} / {{ totals.partial }} / {{ totals.paid_count }}</div>
+    <div class="foot">{{ t('unpaid / partial / paid') }}</div>
+  </div>
+</div>
+
+<form method="get" class="card" style="margin:16px 0">
+  <div class="card-body inline" style="flex-wrap:wrap;gap:10px">
+    <div class="chip-row">
+      <a class="chip {{ 'on' if not status }}"
+         href="{{ url_for('finance.index', agent=agent_id, q=q) }}">{{ t('All') }}</a>
+      {% for key, label in payout_status %}
+        <a class="chip {{ 'on' if status == key }}"
+           href="{{ url_for('finance.index', status=key, agent=agent_id, q=q) }}">{{ t(label) }}</a>
+      {% endfor %}
+    </div>
+    <select name="agent" onchange="this.form.submit()" style="max-width:190px">
+      <option value="">{{ t('All agents') }}</option>
+      {% for a in agents %}
+        <option value="{{ a.id }}" {{ 'selected' if agent_id == a.id }}>{{ a.name }}</option>
+      {% endfor %}
+    </select>
+    <input type="text" name="q" value="{{ q }}" placeholder="{{ t('Deal ref, agent or property') }}"
+           style="max-width:240px">
+    <button class="btn btn-dark" type="submit">{{ t('Search') }}</button>
+    {% if status or agent_id or q %}
+      <a class="btn btn-quiet" href="{{ url_for('finance.index') }}">{{ t('Clear') }}</a>
+    {% endif %}
+    <input type="hidden" name="status" value="{{ status }}">
+  </div>
+</form>
+
+{% if rows %}
+<div class="card table-scroll">
+  <table class="table">
+    <thead><tr>
+      <th>{{ t('Deal') }}</th><th>{{ t('Property') }}</th><th>{{ t('Agent') }}</th>
+      <th class="right">{{ t('Earned') }}</th><th class="right">{{ t('Paid') }}</th>
+      <th>{{ t('Status') }}</th><th></th>
+    </tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td class="mono faint">{{ r.ref }}<div class="small">{{ t(r.deal_status) }}</div></td>
+        <td class="small">{{ r.prop_title or '—' }}</td>
+        <td>{{ r.agent_name }}</td>
+        <td class="right price">{{ r.amount | money }}</td>
+        <td class="right price">{{ r.paid_amount | money }}
+          {% if r.paid_at %}<div class="small faint">{{ r.paid_at | nice_date }}</div>{% endif %}</td>
+        <td><span class="tag tag-{{ 'available' if r.payout_status == 'paid' else ('reserved' if r.payout_status == 'partial' else 'sold') }}">
+          {{ t(dict(payout_status)[r.payout_status]) }}</span></td>
+        <td class="right nowrap">
+          {% if r.payout_status != 'paid' %}
+          <button class="btn btn-quiet btn-sm" onclick='openModal("pay-modal", {{ {
+            "deal_agent_id": r.id, "amount": ((r.amount - r.paid_amount) | round(2)),
+            "context": r.ref ~ " · " ~ r.agent_name} | tojson }})'>{{ t('Record payment') }}</button>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+  <div class="card"><div class="empty"><span class="mark">◇</span>
+    {{ t('No commission to pay out with these filters.') }}</div></div>
+{% endif %}
+
+<div class="modal-back" id="pay-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>{{ t('Record payment') }}</h3>
+      <button class="btn btn-quiet btn-sm" onclick="closeModal('pay-modal')">{{ t('Close') }}</button>
+    </div>
+    <form method="post" action="{{ url_for('finance.pay') }}">
+      <div class="modal-body">
+        <input type="hidden" name="deal_agent_id">
+        <div class="field"><label>{{ t('Deal · Agent') }}</label>
+          <input type="text" name="context" readonly></div>
+        <div class="form-grid">
+          <div class="field"><label>{{ t('Amount paid') }} ({{ currency }})</label>
+            <input type="number" step="0.01" min="0.01" name="amount" required></div>
+          <div class="field"><label>{{ t('Payment date') }}</label>
+            <input type="date" name="paid_at" value="{{ today }}"></div>
+        </div>
+        <div class="field"><label>{{ t('Note') }}</label>
+          <input type="text" name="note" placeholder="{{ t('e.g. bank transfer, cheque number...') }}"></div>
+        <p class="small faint" style="margin:8px 0 0">
+          {{ t('If this is a partial payment, enter just that amount — the balance stays outstanding and you can record another payment later.') }}
+        </p>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-quiet" type="button" onclick="closeModal('pay-modal')">{{ t('Cancel') }}</button>
+        <button class="btn btn-gold" type="submit">{{ t('Save payment') }}</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
