@@ -2,8 +2,10 @@ Flask==3.1.3
 waitress==3.0.2
 gunicorn==23.0.0
 openpyxl==3.1.5
+Pillow>=10.4
 
-# Optional. Used to shrink uploaded profile photos and to draw the desktop
-# shortcut icon. Everything works without it, photos are just stored at their
-# original size. It has no prebuilt package for Python 3.14 yet, so install it
-# separately if you want it:  pip install Pillow
+# Pillow is used to shrink uploaded profile photos, draw the desktop shortcut
+# icon, and embed the company logo in Excel exports. Everything except the
+# logo still works without it. It has no prebuilt package for Python 3.14 yet
+# — if `pip install` fails to find a wheel on your machine, drop this line
+# locally (Render's build image runs an older Python that has one).

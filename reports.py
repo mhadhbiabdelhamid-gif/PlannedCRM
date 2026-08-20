@@ -11,6 +11,7 @@ activity log) so nothing has to be logged twice.
 from datetime import date, datetime, timedelta
 
 from db import local_now, now, query, utc_day_bounds
+from i18n import t
 
 PERIOD_TYPES = [
     ("day", "Day"),
@@ -18,6 +19,17 @@ PERIOD_TYPES = [
     ("month", "Month"),
     ("year", "Year"),
 ]
+
+# strftime's %a/%b/%B come out in whatever locale the server process happens
+# to have (usually English, regardless of the CRM's own language setting), so
+# the period label is built from these fixed English tokens and translated
+# through t() instead — that way an Arabic export gets an Arabic month name,
+# not just an Arabic screen wrapped around an English one.
+_MONTHS_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+_MONTHS_FULL = ["January", "February", "March", "April", "May", "June",
+               "July", "August", "September", "October", "November", "December"]
+_WEEKDAYS_ABBR = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 
 def _parse_ref(ref):
@@ -52,15 +64,17 @@ def period_range(period_type, ref):
 
 def period_label(period_type, start, end):
     if period_type == "day":
-        return start.strftime("%a, %d %b %Y")
+        return (f"{t(_WEEKDAYS_ABBR[start.weekday()])}, "
+                f"{start.day:02d} {t(_MONTHS_ABBR[start.month - 1])} {start.year}")
     if period_type == "week":
         last = end - timedelta(days=1)
         if start.month == last.month:
-            return f"{start.day}–{last.day} {start.strftime('%b %Y')}"
-        return f"{start.strftime('%d %b')} – {last.strftime('%d %b %Y')}"
+            return f"{start.day}–{last.day} {t(_MONTHS_ABBR[start.month - 1])} {start.year}"
+        return (f"{start.day:02d} {t(_MONTHS_ABBR[start.month - 1])} – "
+                f"{last.day:02d} {t(_MONTHS_ABBR[last.month - 1])} {last.year}")
     if period_type == "year":
         return str(start.year)
-    return start.strftime("%B %Y")
+    return f"{t(_MONTHS_FULL[start.month - 1])} {start.year}"
 
 
 def period_nav(period_type, ref):
