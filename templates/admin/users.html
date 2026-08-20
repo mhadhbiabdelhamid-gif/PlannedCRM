@@ -53,6 +53,10 @@
 
       <div class="inline" style="gap:6px">
         <a class="btn btn-sm" href="{{ url_for('admin.profile', uid=u.id) }}">{{ t('Open profile') }}</a>
+        {% if user.role == 'admin' %}
+          <button class="btn btn-sm" type="button"
+                  onclick='openModal("user-modal", {{ {"id": u.id, "name": u.name, "email": u.email, "phone": u.phone or "", "role": u.role} | tojson }})'>{{ t('Edit') }}</button>
+        {% endif %}
         {% if user.role == 'admin' and u.role != 'admin' %}
           <a class="btn btn-sm" href="{{ url_for('admin.profile', uid=u.id) }}#access">{{ t('Access') }}</a>
         {% endif %}
@@ -77,11 +81,34 @@
   </div>
 </div>
 
+{% if user.role == 'admin' and inactive %}
+<div class="card" style="margin-top:16px">
+  <div class="card-head"><h3>{{ t('Switched off') }}</h3></div>
+  <div class="table-scroll"><table class="table">
+    <thead><tr><th>{{ t('Name') }}</th><th>{{ t('Email') }}</th><th>{{ t('Role') }}</th><th></th></tr></thead>
+    <tbody>
+    {% for u in inactive %}
+      <tr>
+        <td>{{ u.name }}</td>
+        <td class="small">{{ u.email }}</td>
+        <td><span class="tag tag-plain">{{ u.role | role_label }}</span></td>
+        <td class="right">
+          <form method="post" action="{{ url_for('admin.toggle_user', uid=u.id) }}">
+            <button class="btn btn-sm btn-quiet" type="submit">{{ t('Re-enable') }}</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endif %}
+
 {% if user.role == 'admin' %}
 <div class="modal-back" id="user-modal">
   <div class="modal">
     <div class="modal-head">
-      <h3>{{ t('Add team member') }}</h3>
+      <h3 data-title="{{ t('Add team member') }}" data-edit-title="{{ t('Edit team member') }}">{{ t('Add team member') }}</h3>
       <button class="btn btn-quiet btn-sm" onclick="closeModal('user-modal')">{{ t('Close') }}</button>
     </div>
     <form method="post" action="{{ url_for('admin.save_user') }}">
@@ -102,7 +129,7 @@
         <div class="field">
           <label>{{ t('Password') }}</label>
           <input type="password" name="password" autocomplete="new-password"
-                 placeholder="{{ t('At least 8 characters') }}">
+                 placeholder="{{ t('At least 8 characters — leave blank to keep it unchanged') }}">
         </div>
         <p class="small faint" style="margin:0">
           {{ t('Photo, job title and the rest are added on their profile afterwards.') }}</p>

@@ -205,8 +205,15 @@ def users():
         period = "this_month"
     rows = performance.team_stats(period)
     managers = query("SELECT id, name FROM users WHERE is_active = 1 ORDER BY name")
+    # A switched-off account otherwise vanishes with no way back: team_stats()
+    # only looks at is_active=1, so once someone is off, nobody -- not even an
+    # admin -- has a control left anywhere to re-enable them. Admins alone get
+    # a look at the switched-off list here, purely so that door stays open.
+    inactive = (query("SELECT * FROM users WHERE is_active = 0 ORDER BY name")
+                if g.user["role"] == "admin" else [])
     return render_template("admin/users.html", rows=rows, period=period,
                            ranges=performance.RANGES, managers=managers,
+                           inactive=inactive,
                            employment=EMPLOYMENT, departments=DEPARTMENTS)
 
 
