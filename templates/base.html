@@ -73,9 +73,9 @@
     <a class="rail-link {{ 'active' if request.endpoint == 'main.notifications' }}" href="{{ url_for('main.notifications') }}">
       <span class="idx">09</span> {{ t('Notifications') }}
       {% if unread %}<span class="pill">{{ unread }}</span>{% endif %}</a>
+    {% if user and user.role == 'admin' %}
     <a class="rail-link {{ 'active' if request.endpoint == 'main.activity' }}" href="{{ url_for('main.activity') }}">
       <span class="idx">10</span> {{ t('Activity log') }}</a>
-    {% if user and user.role == 'admin' %}
     <a class="rail-link {{ 'active' if request.endpoint == 'admin.users' }}" href="{{ url_for('admin.users') }}">
       <span class="idx">11</span> {{ t('Team members') }}</a>
     {% endif %}
