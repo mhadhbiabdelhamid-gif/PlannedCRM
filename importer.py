@@ -381,33 +381,71 @@ def find_column_blocks(ws, gap=2, scan_rows=60, max_col=60, max_block_width=25):
     the second table's own header is read as a data row — its fields never
     get mapped, so most of it goes missing.
 
-    Detects that by columns: a run of `gap` or more columns that are blank
-    across every one of the first `scan_rows` rows is treated as a divider
-    between separate tables (a single blank spacer column inside one table
-    is normal and doesn't split anything). A normal single-table sheet
-    always returns one block spanning the whole width, so this changes
-    nothing for the common case.
+    Two independent signals catch that, since either can show up on its own:
+
+    1. Columns: a run of `gap` or more columns that are blank across every
+       one of the first `scan_rows` rows is a divider between tables (a
+       single blank spacer column inside one table is normal and doesn't
+       split anything on its own).
+    2. Headers: the header row's own labels starting over — the same first
+       heading ("Floor", "Unit No.", ...) appearing again further across the
+       same row — is the tell for two tables separated by only a single
+       spacer column, which the blank-run check alone wouldn't catch (seen
+       in real partner files: a "Studio" block and a "One Bedroom" block,
+       each headed Floor/Unit No./Rate/Status, one column apart).
+
+    A normal single-table sheet trips neither signal and returns one block
+    spanning the whole width, so this changes nothing for the common case.
     """
     ncols = min(ws.max_column, max_col)
     if ncols < 1:
         return [(1, 1)]
     last_row = min(ws.max_row, scan_rows) or 1
+
+    # Signal 1: which columns fall inside a run of `gap`-or-more blank ones —
+    # those columns belong to neither table and are carved out entirely.
     empty = [all(not clean(ws.cell(row=r, column=c).value)
                  for r in range(1, last_row + 1))
              for c in range(1, ncols + 1)]
-
-    blocks = []
+    in_gap = [False] * ncols
     col = 1
-    cur_start = None
     for is_empty, group in itertools.groupby(empty):
         length = sum(1 for _ in group)
-        if is_empty:
-            if length >= gap and cur_start is not None:
-                blocks.append((cur_start, col - 1))
-                cur_start = None
-        elif cur_start is None:
-            cur_start = col
+        if is_empty and length >= gap:
+            for c in range(col, col + length):
+                in_gap[c - 1] = True
         col += length
+
+    # Signal 2: columns where the header row's own labels start over — a new
+    # table's header beginning, even a single column after the last one ends.
+    header_row = detect_header_row(ws, col_range=(1, ncols))
+    headers = [clean(ws.cell(row=header_row, column=c).value).lower()
+               for c in range(1, ncols + 1)]
+    repeat_starts = set()
+    first = headers[0] if headers else ""
+    second = headers[1] if len(headers) > 1 else ""
+    if first:
+        for i in range(2, len(headers)):
+            if headers[i] != first:
+                continue
+            nxt = headers[i + 1] if i + 1 < len(headers) else ""
+            if second and nxt and second != nxt:
+                continue                          # looks coincidental
+            repeat_starts.add(i + 1)              # 1-based column of the repeat
+
+    blocks = []
+    cur_start = None
+    for c in range(1, ncols + 1):
+        if in_gap[c - 1]:
+            if cur_start is not None:
+                blocks.append((cur_start, c - 1))
+                cur_start = None
+            continue
+        if c in repeat_starts and cur_start is not None:
+            blocks.append((cur_start, c - 1))
+            cur_start = c
+        elif cur_start is None:
+            cur_start = c
     if cur_start is not None:
         blocks.append((cur_start, ncols))
     if not blocks:
