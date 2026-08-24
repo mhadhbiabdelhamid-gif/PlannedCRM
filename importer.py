@@ -6,6 +6,7 @@ rents written as "9000 qrs", sizes as "113 sqm". This module works out the
 layout, guesses which column is which, and pulls out clean values. Nothing is
 saved until a person has looked at the preview and agreed.
 """
+import itertools
 import re
 
 from openpyxl import load_workbook
@@ -360,15 +361,66 @@ def score_header_row(cells):
     return score
 
 
-def detect_header_row(ws, limit=20):
+def detect_header_row(ws, limit=20, col_range=None):
+    c_start, c_end = col_range or (1, min(ws.max_column, 25))
     best, best_score = 1, -99
     for r in range(1, min(ws.max_row, limit) + 1):
         cells = [ws.cell(row=r, column=c).value
-                 for c in range(1, min(ws.max_column, 25) + 1)]
+                 for c in range(c_start, c_end + 1)]
         s = score_header_row(cells)
         if s > best_score:
             best, best_score = r, s
     return best
+
+
+def find_column_blocks(ws, gap=2, scan_rows=60, max_col=60, max_block_width=25):
+    """Partners sometimes paste two buildings' lists side by side on one
+    sheet instead of stacking them, so the second table's columns start
+    partway across the row rather than at column A. Treated as one table,
+    that column offset gets read as extra columns of the first table and
+    the second table's own header is read as a data row — its fields never
+    get mapped, so most of it goes missing.
+
+    Detects that by columns: a run of `gap` or more columns that are blank
+    across every one of the first `scan_rows` rows is treated as a divider
+    between separate tables (a single blank spacer column inside one table
+    is normal and doesn't split anything). A normal single-table sheet
+    always returns one block spanning the whole width, so this changes
+    nothing for the common case.
+    """
+    ncols = min(ws.max_column, max_col)
+    if ncols < 1:
+        return [(1, 1)]
+    last_row = min(ws.max_row, scan_rows) or 1
+    empty = [all(not clean(ws.cell(row=r, column=c).value)
+                 for r in range(1, last_row + 1))
+             for c in range(1, ncols + 1)]
+
+    blocks = []
+    col = 1
+    cur_start = None
+    for is_empty, group in itertools.groupby(empty):
+        length = sum(1 for _ in group)
+        if is_empty:
+            if length >= gap and cur_start is not None:
+                blocks.append((cur_start, col - 1))
+                cur_start = None
+        elif cur_start is None:
+            cur_start = col
+        col += length
+    if cur_start is not None:
+        blocks.append((cur_start, ncols))
+    if not blocks:
+        blocks = [(1, ncols)]
+
+    # A sliver with almost nothing in it is stray notes, not a second table.
+    real = []
+    for s, e in blocks:
+        filled = sum(1 for r in range(1, last_row + 1) for c in range(s, e + 1)
+                     if clean(ws.cell(row=r, column=c).value))
+        if filled >= 3:
+            real.append((s, min(e, s + max_block_width - 1)))
+    return real or blocks
 
 
 # Fields where several columns should be joined together rather than one
@@ -449,13 +501,15 @@ STRONG = ("building", "tower", "compound", "block", "project")
 WEAK = ("residence", "villa", "apartments", "gardens", "plaza")
 
 
-def guess_context(ws, header_row):
+def guess_context(ws, header_row, col_range=None):
     """Partners often name the building in a title row above the table rather
     than giving it a column. Rows nearest the table win, and a line saying
     'Building' beats a general banner."""
+    c_start, c_end = col_range or (1, min(ws.max_column, 8))
+    c_end = min(c_end, c_start + 7)
     best, best_score = "", 0
     for r in range(header_row - 1, 0, -1):
-        for c in range(1, min(ws.max_column, 8) + 1):
+        for c in range(c_start, c_end + 1):
             text = clean(ws.cell(row=r, column=c).value)
             if not text or len(text) < 4 or len(text) > 60:
                 continue
@@ -476,16 +530,16 @@ def guess_context(ws, header_row):
     return best
 
 
-def read_sheet(ws, header_row=None):
+def read_sheet(ws, header_row=None, col_range=None):
     """Everything we know about one sheet, before any decisions are made."""
-    header_row = header_row or detect_header_row(ws)
-    ncols = min(ws.max_column, 25)
+    c_start, c_end = col_range or (1, min(ws.max_column, 25))
+    header_row = header_row or detect_header_row(ws, col_range=(c_start, c_end))
     headers = [clean(ws.cell(row=header_row, column=c).value)
-               for c in range(1, ncols + 1)]
+               for c in range(c_start, c_end + 1)]
     rows, links = [], []
     for r in range(header_row + 1, ws.max_row + 1):
         values, targets = [], []
-        for c in range(1, ncols + 1):
+        for c in range(c_start, c_end + 1):
             cell = ws.cell(row=r, column=c)
             values.append(cell.value)
             # A partner often writes "Compound - Google Maps" with the real
@@ -498,7 +552,28 @@ def read_sheet(ws, header_row=None):
     mapping = infer_from_values(headers, rows, guess_mapping(headers))
     return {"header_row": header_row, "headers": headers, "rows": rows,
             "links": links, "mapping": mapping,
-            "context": guess_context(ws, header_row)}
+            "context": guess_context(ws, header_row, col_range=(c_start, c_end)),
+            "col_range": (c_start, c_end)}
+
+
+def read_sheet_blocks(ws, header_row=None):
+    """Like read_sheet, but first checks whether the sheet actually holds more
+    than one table placed side by side (see find_column_blocks) and reads
+    each as its own table, with its own header row and column mapping, so a
+    second table's data isn't dropped or blended into the first table's
+    rows. Returns a list of infos — almost every sheet yields exactly one,
+    identical to what read_sheet(ws) would have returned on its own.
+
+    A header row chosen by hand only ever applies to the first table; later
+    tables keep using their own auto-detected header, since there is no way
+    for a single override to mean two different rows.
+    """
+    blocks = find_column_blocks(ws)
+    if len(blocks) <= 1:
+        return [read_sheet(ws, header_row=header_row)]
+    infos = [read_sheet(ws, header_row=header_row, col_range=blocks[0])]
+    infos += [read_sheet(ws, col_range=b) for b in blocks[1:]]
+    return infos
 
 
 # ------------------------------------------------------------- extraction

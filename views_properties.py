@@ -2,6 +2,7 @@
 import os
 import uuid
 
+import areas
 import maps
 
 from flask import (Blueprint, current_app, flash, g, redirect, render_template,
@@ -59,8 +60,15 @@ def index():
             sql += f" AND p.{col} = ?"
             args.append(f[col])
     if f["area"]:
-        sql += " AND p.area LIKE ?"
-        args.append(f"%{f['area']}%")
+        # A district shows up in listings under several spellings — English,
+        # Arabic, or an alternate transliteration ("Lusail" / "لوسيل" /
+        # "sadd"). A plain substring match only ever finds the one spelling
+        # someone actually typed, so widen the search to every spelling on
+        # record for that place. Unrecognised text (a custom location not in
+        # areas.py) just falls back to the old plain substring match.
+        spellings = areas.variants(f["area"]) or [f["area"]]
+        sql += " AND (" + " OR ".join(["p.area LIKE ?"] * len(spellings)) + ")"
+        args += [f"%{s}%" for s in spellings]
     if f["agent"]:
         sql += " AND p.agent_id = ?"
         args.append(f["agent"])

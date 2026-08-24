@@ -398,6 +398,8 @@ AR = {
     "Update it from the file": "تحديثها من الملف",
     "listings found": "عقار تم العثور عليه",
     "header at row": "العناوين في الصف",
+    "more table(s) found further across this sheet — read separately and included automatically":
+        "جداول إضافية تم رصدها في هذه الصفحة — قُرئت كل واحدة بشكل منفصل وأُضيفت تلقائيًا",
     "Header is on row": "صف العناوين",
     "Building, if the file has no column for it": "المبنى، إذا لم يكن في الملف عمود له",
     "Blank cells": "الخلايا الفارغة",

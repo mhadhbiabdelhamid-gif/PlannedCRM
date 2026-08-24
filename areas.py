@@ -131,3 +131,20 @@ def canonical(text):
 
 def all_names():
     return sorted(AREAS)
+
+
+def variants(text):
+    """Every spelling on record for an area — English name, Arabic name, and
+    every alias — so a search for one spelling can be widened to match a
+    listing saved under any of the others. Empty list if the name isn't
+    recognised, so callers can fall back to a plain match on the raw text.
+    """
+    hit = lookup(text)
+    if not hit:
+        return []
+    ar, aliases = AREAS[hit["en"]]
+    seen = []
+    for name in [hit["en"], ar] + list(aliases):
+        if name not in seen:
+            seen.append(name)
+    return seen

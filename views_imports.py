@@ -77,9 +77,16 @@ def review(token):
         ws = wb[name]
         if ws.max_row < 2:
             continue
-        info = importer.read_sheet(ws)
-        listings = importer.extract(info, info["mapping"],
-                                    {"listing_type": "Rent"})
+        # A sheet is usually one table, but a partner sometimes pastes two
+        # buildings' lists side by side instead of stacking them — read
+        # each as its own table so the second one isn't dropped or blended
+        # into the first (see importer.find_column_blocks).
+        infos = importer.read_sheet_blocks(ws)
+        listings = []
+        for info in infos:
+            listings += importer.extract(info, info["mapping"],
+                                         {"listing_type": "Rent"})
+        primary = infos[0]
         flagged = [l for l in listings if l.get("issues")]
         summary = {}
         for l in flagged:
@@ -90,13 +97,14 @@ def review(token):
             "issue_summary": ", ".join(f"{n} {k}" for k, n in
                                        sorted(summary.items(), key=lambda x: -x[1])),
             "name": name,
-            "header_row": info["header_row"],
-            "headers": info["headers"],
-            "mapping": info["mapping"],
-            "context": info["context"],
+            "header_row": primary["header_row"],
+            "headers": primary["headers"],
+            "mapping": primary["mapping"],
+            "context": primary["context"],
             "count": len(listings),
             "preview": listings[:MAX_PREVIEW],
-            "total_rows": len(info["rows"]),
+            "total_rows": sum(len(i["rows"]) for i in infos),
+            "extra_tables": len(infos) - 1,
         })
 
     owners = query("SELECT id, name FROM owners ORDER BY name")
@@ -160,7 +168,13 @@ def commit(token):
             continue
         ws = wb[name]
         header_row = int(d.get(f"header__{name}") or 0) or None
-        info = importer.read_sheet(ws, header_row=header_row)
+        # As in review(): a sheet can hold more than one table side by side.
+        # The reviewer only ever sees and corrects the first table's column
+        # mapping on screen, so that override applies to the first table
+        # only — later tables keep their own auto-detected mapping, since
+        # applying a first-table override to a second table's differently
+        # positioned columns would scramble it rather than fix it.
+        infos = importer.read_sheet_blocks(ws, header_row=header_row)
 
         # whatever the reviewer chose on screen wins over the guess
         mapping = {}
@@ -176,10 +190,13 @@ def commit(token):
             "prop_type": d.get("prop_type", "Apartment"),
             "status": d.get("status", "Available"),
         }
-        listings = importer.extract(
-            info, mapping, defaults,
-            fill_down=bool(d.get(f"filldown__{name}")),
-            fill_numbers=bool(d.get(f"fillnumbers__{name}")))
+        listings = []
+        for i, info in enumerate(infos):
+            use_mapping = mapping if i == 0 and mapping else info["mapping"]
+            listings += importer.extract(
+                info, use_mapping, defaults,
+                fill_down=bool(d.get(f"filldown__{name}")),
+                fill_numbers=bool(d.get(f"fillnumbers__{name}")))
 
         owner_id = int(d["owner_id"]) if d.get("owner_id") else None
         agent_id = int(d["agent_id"]) if d.get("agent_id") else None
