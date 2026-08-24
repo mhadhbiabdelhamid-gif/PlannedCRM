@@ -96,6 +96,9 @@
       {%- if sheet.extra_tables %} · {{ sheet.extra_tables }}
         {{ t('more table(s) found further across this sheet — read separately and included automatically') }}
       {%- endif %}
+      {%- if sheet.banner_labels %} · {{ t('bedrooms inferred from the heading above') }}
+        ({{ sheet.banner_labels | join(', ') }})
+      {%- endif %}
     </span>
   </div>
 

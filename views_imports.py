@@ -83,9 +83,18 @@ def review(token):
         # into the first (see importer.find_column_blocks).
         infos = importer.read_sheet_blocks(ws)
         listings = []
+        banner_labels = []
         for info in infos:
-            listings += importer.extract(info, info["mapping"],
-                                         {"listing_type": "Rent"})
+            block_defaults = {"listing_type": "Rent"}
+            # A block's own section heading ('Studio', 'One Bedroom') fills in
+            # the bedroom count when no column in that block gives one — see
+            # importer.guess_banner_bedrooms. Only that block's rows get it;
+            # a heading over one table never leaks into another table's rows.
+            if info.get("banner_bedrooms") is not None:
+                block_defaults["bedrooms"] = info["banner_bedrooms"]
+                if info["banner_bedrooms_label"] not in banner_labels:
+                    banner_labels.append(info["banner_bedrooms_label"])
+            listings += importer.extract(info, info["mapping"], block_defaults)
         primary = infos[0]
         flagged = [l for l in listings if l.get("issues")]
         summary = {}
@@ -105,6 +114,7 @@ def review(token):
             "preview": listings[:MAX_PREVIEW],
             "total_rows": sum(len(i["rows"]) for i in infos),
             "extra_tables": len(infos) - 1,
+            "banner_labels": banner_labels,
         })
 
     owners = query("SELECT id, name FROM owners ORDER BY name")
@@ -193,8 +203,14 @@ def commit(token):
         listings = []
         for i, info in enumerate(infos):
             use_mapping = mapping if i == 0 and mapping else info["mapping"]
+            # As in review(): a block's own section heading ('Studio', 'One
+            # Bedroom') fills in the bedroom count for that block's rows only,
+            # when nothing in the row itself gives one.
+            block_defaults = defaults
+            if info.get("banner_bedrooms") is not None:
+                block_defaults = dict(defaults, bedrooms=info["banner_bedrooms"])
             listings += importer.extract(
-                info, use_mapping, defaults,
+                info, use_mapping, block_defaults,
                 fill_down=bool(d.get(f"filldown__{name}")),
                 fill_numbers=bool(d.get(f"fillnumbers__{name}")))
 

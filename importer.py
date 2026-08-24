@@ -568,6 +568,44 @@ def guess_context(ws, header_row, col_range=None):
     return best
 
 
+BANNER_SKIP_WORDS = ("list", "availability", "rates", "including", "coming soon",
+                     "updated", "note", "free", "promotion", "prorated",
+                     "applicable")
+
+
+def guess_banner_bedrooms(ws, header_row, col_range, scan_rows=6):
+    """Some lists group units under a section heading that names the bedroom
+    count instead of giving each row its own bedrooms column — 'Studio' or
+    'One Bedroom' sitting above a block of otherwise identical Floor / Unit
+    No. / Rate / Status columns (seen in a real partner file: Retaj La
+    Plage). When a row's own cells give no bedroom count, this is the
+    fallback for that whole block: look up from the header, within this
+    block's own columns, for a short label that itself reads as a bedroom
+    count.
+
+    Only short labels count, and only the row nearest the header wins — a
+    long promotional line two rows further up ('One Month Free - One
+    Bedroom Apartments Only - Prorated Applicable') mentions a bedroom
+    count too, but it is a whole-sheet note, not a heading for this
+    specific block, so it is skipped even though a nearer, shorter label
+    would have matched.
+    """
+    c_start, c_end = col_range
+    top = max(header_row - scan_rows, 0)
+    for r in range(header_row - 1, top, -1):
+        for c in range(c_start, c_end + 1):
+            text = clean(ws.cell(row=r, column=c).value)
+            if not text or len(text) > 30:
+                continue
+            low = text.lower()
+            if any(w in low for w in BANNER_SKIP_WORDS):
+                continue
+            beds = parse_bedrooms(text)
+            if beds is not None:
+                return beds, text
+    return None, ""
+
+
 def read_sheet(ws, header_row=None, col_range=None):
     """Everything we know about one sheet, before any decisions are made."""
     c_start, c_end = col_range or (1, min(ws.max_column, 25))
@@ -588,10 +626,12 @@ def read_sheet(ws, header_row=None, col_range=None):
             rows.append(values)
             links.append(targets)
     mapping = infer_from_values(headers, rows, guess_mapping(headers))
+    banner_beds, banner_label = guess_banner_bedrooms(ws, header_row, (c_start, c_end))
     return {"header_row": header_row, "headers": headers, "rows": rows,
             "links": links, "mapping": mapping,
             "context": guess_context(ws, header_row, col_range=(c_start, c_end)),
-            "col_range": (c_start, c_end)}
+            "col_range": (c_start, c_end),
+            "banner_bedrooms": banner_beds, "banner_bedrooms_label": banner_label}
 
 
 def read_sheet_blocks(ws, header_row=None):
@@ -686,6 +726,12 @@ def extract(sheet, mapping, defaults, fill_down=True, fill_numbers=False):
             beds = parse_bedrooms(raw.get("prop_type"))
         if beds is None:
             beds = parse_bedrooms(title_text)
+        if beds is None:
+            # Nothing in the row itself says the bedroom count — fall back to
+            # a section heading above this block, if one was found ('Studio',
+            # 'One Bedroom'; see guess_banner_bedrooms). Still None when the
+            # file has neither, so the review screen flags it as before.
+            beds = defaults.get("bedrooms")
         size = parse_number(raw.get("size_sqm"))
 
         # A row with no unit, no price and no size is a section heading or a
