@@ -673,6 +673,21 @@ AR = {
     "Add a team member first — reports appear here once there is someone to report on.":
         "أضف عضو فريق أولاً — ستظهر التقارير هنا بمجرد وجود شخص لإعداد تقرير عنه.",
 
+    # ---- employee report: client & property overview
+    "Client & property overview": "نظرة عامة على العملاء والعقارات",
+    "Total clients added": "إجمالي العملاء المضافين",
+    "Total properties added": "إجمالي العقارات المضافة",
+    "Clients & deal history": "العملاء وسجل الصفقات",
+    "Current stage": "المرحلة الحالية",
+    "Notes & deal history": "الملاحظات وسجل الصفقات",
+    "entries": "إدخالات",
+    "latest": "آخر تحديث",
+    "No notes logged yet.": "لا توجد ملاحظات مسجلة بعد.",
+    "No clients assigned to this agent yet.": "لا يوجد عملاء مسندون لهذا الموظف بعد.",
+    "Captured lead": "تمت إضافة العميل",
+    "Moved lead": "تم نقل مرحلة العميل",
+    "Updated lead": "تم تعديل بيانات العميل",
+
     # ---- financial section / accountant role
     "Accountant": "محاسب",
     "Financial": "المالية",

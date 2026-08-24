@@ -40,8 +40,10 @@ def index():
     agents = _agents()
     agent = _pick_agent(agents)
     report = reports.agent_report(agent["id"], period_type, ref) if agent else None
+    overview = reports.agent_overview(agent["id"]) if agent else None
     return render_template("admin/reports.html", agents=agents, agent=agent,
-                           report=report, period_types=reports.PERIOD_TYPES,
+                           report=report, overview=overview,
+                           period_types=reports.PERIOD_TYPES,
                            period_type=period_type)
 
 

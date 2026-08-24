@@ -204,3 +204,82 @@ def agent_report(user_id, period_type, ref):
         " AND created_at >= ? AND created_at < ?", (user_id, u_start, u_end))
 
     return {"period": period, "deals": deals, "tasks": tasks, "work": work}
+
+
+# Activity actions that represent a change to a lead's own record (creation,
+# a pipeline move, a field edit) as opposed to a contact being logged — those
+# already show up as a "note" timeline entry via `comments`, so including
+# them here too would show the same call or message twice.
+_LEAD_STAGE_ACTIONS = ("Captured lead", "Moved lead", "Updated lead")
+
+
+def _lead_timelines(lead_ids):
+    """Notes, stage moves and deal records for a set of leads, merged into one
+    chronological (newest-first) timeline per lead.
+
+    Built entirely from records the team already creates elsewhere —
+    `comments` (every call/message/note logged on the lead), `activity`
+    (pipeline moves) and `deals` (what was actually closed) — so the employee
+    report needs nothing logged twice. Queried in three batched IN(...)
+    calls rather than once per lead, so a roster of a hundred clients still
+    costs three queries, not hundreds.
+    """
+    if not lead_ids:
+        return {}
+    placeholders = ",".join("?" * len(lead_ids))
+    timeline = {lid: [] for lid in lead_ids}
+
+    for c in query(
+        f"SELECT c.*, u.name AS user_name FROM comments c"
+        f" LEFT JOIN users u ON u.id = c.user_id"
+        f" WHERE c.entity_type = 'lead' AND c.entity_id IN ({placeholders})",
+        lead_ids):
+        timeline[c["entity_id"]].append({
+            "kind": "note", "at": c["created_at"],
+            "who": c["user_name"], "text": c["body"],
+        })
+
+    for a in query(
+        f"SELECT * FROM activity WHERE entity_type = 'lead'"
+        f"   AND entity_id IN ({placeholders})"
+        f"   AND action IN ({','.join('?' * len(_LEAD_STAGE_ACTIONS))})",
+        lead_ids + list(_LEAD_STAGE_ACTIONS)):
+        timeline[a["entity_id"]].append({
+            "kind": "stage", "at": a["created_at"],
+            "text": t(a["action"]), "detail": a["detail"],
+        })
+
+    for d in query(
+        f"SELECT * FROM deals WHERE lead_id IN ({placeholders})", lead_ids):
+        timeline[d["lead_id"]].append({
+            "kind": "deal", "at": d["created_at"], "ref": d["ref"],
+            "id": d["id"], "value": d["value"], "status": d["status"],
+            "text": f"{t(d['deal_type'])} · {t(d['status'])}",
+        })
+
+    for items in timeline.values():
+        items.sort(key=lambda item: item["at"] or "", reverse=True)
+    return timeline
+
+
+def agent_overview(user_id):
+    """All-time roster for one agent, independent of any period filter:
+    total clients and properties ever assigned to them, and every one of
+    their leads with its linked property, current pipeline stage, and a
+    merged notes + stage-change + deal history for the employee report page.
+    """
+    totals = {
+        "leads": _n("SELECT COUNT(*) n FROM leads WHERE agent_id = ?", (user_id,)),
+        "properties": _n(
+            "SELECT COUNT(*) n FROM properties WHERE agent_id = ?", (user_id,)),
+    }
+
+    lead_rows = query(
+        "SELECT l.*, p.title AS prop_title, p.ref AS prop_ref FROM leads l"
+        " LEFT JOIN properties p ON p.id = l.property_id"
+        " WHERE l.agent_id = ? ORDER BY l.updated_at DESC", (user_id,))
+
+    timelines = _lead_timelines([l["id"] for l in lead_rows])
+    leads = [{"lead": l, "timeline": timelines.get(l["id"], [])} for l in lead_rows]
+
+    return {"totals": totals, "leads": leads}

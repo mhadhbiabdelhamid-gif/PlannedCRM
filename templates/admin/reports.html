@@ -59,6 +59,87 @@
   </div>
 </div>
 
+<div class="eyebrow" style="margin:18px 0 8px">{{ t('Client & property overview') }}</div>
+<div class="metrics">
+  <div class="metric">
+    <div class="label">{{ t('Total clients added') }}</div>
+    <div class="value">{{ overview.totals.leads }}</div>
+    <div class="foot">{{ t('All time') }}</div>
+  </div>
+  <div class="metric">
+    <div class="label">{{ t('Total properties added') }}</div>
+    <div class="value">{{ overview.totals.properties }}</div>
+    <div class="foot">{{ t('All time') }}</div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div class="card-head"><h3>{{ t('Clients & deal history') }}</h3>
+    <span class="mono faint">{{ overview.leads|length }}</span></div>
+  {% if overview.leads %}
+  <div class="table-scroll"><table class="table">
+    <thead><tr>
+      <th>{{ t('Client') }}</th>
+      <th>{{ t('Property') }}</th>
+      <th>{{ t('Current stage') }}</th>
+      <th>{{ t('Notes & deal history') }}</th>
+    </tr></thead>
+    <tbody>
+    {% for row in overview.leads %}
+      {% set l = row.lead %}
+      <tr>
+        <td>
+          <a href="{{ url_for('leads.detail', lid=l.id) }}"><b>{{ l.full_name }}</b></a>
+          {% if l.phone %}<div class="small muted mono">{{ l.phone }}</div>{% endif %}
+          {% if l.email %}<div class="small muted">{{ l.email }}</div>{% endif %}
+        </td>
+        <td class="small">
+          {% if l.property_id %}
+            <a href="{{ url_for('properties.detail', pid=l.property_id) }}">{{ l.prop_ref or l.prop_title }}</a>
+            {% if l.prop_ref and l.prop_title %}<div class="small muted">{{ l.prop_title }}</div>{% endif %}
+          {% else %}<span class="faint">—</span>{% endif %}
+        </td>
+        <td><span class="tag tag-stage-{{ l.status | lower }}">{{ t(l.status) }}</span></td>
+        <td style="min-width:220px">
+          {% if row.timeline %}
+          <details>
+            <summary class="small" style="cursor:pointer">
+              {{ row.timeline|length }} {{ t('entries') }} · {{ t('latest') }} {{ row.timeline[0].at | ago }}
+            </summary>
+            <div class="stack" style="margin-top:8px;gap:10px">
+              {% for item in row.timeline %}
+                <div class="feed-item">
+                  <span class="feed-dot"></span>
+                  <div class="stack">
+                    {% if item.kind == 'note' %}
+                      <div class="small"><b>{{ item.who or t('Note') }}</b></div>
+                      <div class="small" style="white-space:pre-wrap">{{ item.text }}</div>
+                    {% elif item.kind == 'stage' %}
+                      <div class="small">{{ item.text }}{% if item.detail %} — {{ item.detail }}{% endif %}</div>
+                    {% elif item.kind == 'deal' %}
+                      <div class="small">
+                        <a href="{{ url_for('deals.form', did=item.id) }}">{{ item.ref }}</a>
+                        — {{ item.text }} — {{ currency }} {{ item.value | money }}
+                      </div>
+                    {% endif %}
+                    <div class="mono faint">{{ item.at | nice_date }}</div>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </details>
+          {% else %}
+            <span class="small faint">{{ t('No notes logged yet.') }}</span>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody></table></div>
+  {% else %}
+    <div class="empty"><span class="mark">◇</span>{{ t('No clients assigned to this agent yet.') }}</div>
+  {% endif %}
+</div>
+
 <div class="eyebrow" style="margin:18px 0 8px">{{ t('Deals') }}</div>
 <div class="metrics">
   <div class="metric">

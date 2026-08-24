@@ -579,6 +579,17 @@ main { padding: 26px; flex: 1; max-width: 1480px; width: 100%; }
 .tag-rented    { background: rgba(74,90,110,.11); color: var(--cool); border-color: rgba(74,90,110,.28); }
 .tag-plain     { background: var(--line-soft); color: var(--muted); border-color: var(--line); }
 
+/* Lead pipeline stages — used on the employee report's client roster so the
+   current stage reads at a glance instead of as plain text. */
+.tag-stage-new         { background: var(--line-soft); color: var(--muted); border-color: var(--line); }
+.tag-stage-contacted   { background: rgba(74,90,110,.11); color: var(--cool); border-color: rgba(74,90,110,.28); }
+.tag-stage-qualified   { background: rgba(200,162,74,.16); color: var(--gold-deep); border-color: rgba(200,162,74,.34); }
+.tag-stage-viewing     { background: rgba(180,119,42,.11); color: var(--warn); border-color: rgba(180,119,42,.28); }
+.tag-stage-offer       { background: var(--ink); color: var(--gold); border-color: var(--ink); }
+.tag-stage-negotiation { background: rgba(180,119,42,.18); color: var(--warn); border-color: rgba(180,119,42,.36); }
+.tag-stage-won         { background: rgba(63,125,92,.11); color: var(--ok); border-color: rgba(63,125,92,.28); }
+.tag-stage-lost        { background: rgba(138,58,58,.10); color: var(--bad); border-color: rgba(138,58,58,.26); }
+
 /* ---------------------------------------------------------------- table */
 .table { width: 100%; border-collapse: collapse; }
 
