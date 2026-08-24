@@ -160,6 +160,7 @@ AR = {
     "Studio": "استوديو",
     "Order by": "ترتيب حسب",
     "Building, then flat": "المبنى ثم الشقة",
+    "Location, then building": "المنطقة ثم المبنى",
     "Newest first": "الأحدث أولاً",
     "Oldest first": "الأقدم أولاً",
     "Price, low to high": "السعر من الأقل للأعلى",

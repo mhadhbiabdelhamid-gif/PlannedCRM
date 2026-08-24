@@ -37,7 +37,7 @@ def _save(file_storage, kind):
 @login_required
 def index():
     f = {k: request.args.get(k, "").strip() for k in
-         ("q", "prop_type", "status", "listing_type", "area", "agent",
+         ("q", "prop_type", "status", "listing_type", "area", "agent", "owner",
           "min_price", "max_price", "beds", "owned", "floor")}
     sql = ("SELECT p.*, u.name AS agent_name,"
            " o.name AS owner_name, o.photo AS owner_photo, o.company AS owner_company,"
@@ -72,6 +72,9 @@ def index():
     if f["agent"]:
         sql += " AND p.agent_id = ?"
         args.append(f["agent"])
+    if f["owner"]:
+        sql += " AND p.owner_id = ?"
+        args.append(f["owner"])
     if f["min_price"]:
         sql += " AND p.price >= ?"
         args.append(float(f["min_price"]))

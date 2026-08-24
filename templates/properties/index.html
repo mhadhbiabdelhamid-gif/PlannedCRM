@@ -97,6 +97,14 @@
           {% endfor %}
         </select>
       </div>
+      <div class="field">
+        <label>{{ t('Owner') }}</label>
+        <select name="owner"><option value="">{{ t('Any') }}</option>
+          {% for o in owners_list %}
+            <option value="{{ o.id }}" {{ 'selected' if f.owner == o.id|string }}>{{ o.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
       <div class="field inline">
         <button class="btn btn-dark" type="submit">{{ t('Apply') }}</button>
         <a class="btn btn-quiet" href="{{ url_for('properties.index', view=view) }}">{{ t('Clear') }}</a>
@@ -119,6 +127,7 @@
     <select name="sort" onchange="this.form.submit()" style="max-width:210px">
       <option value="company" {{ 'selected' if sort == 'company' }}>{{ t('Company, then building') }}</option>
       <option value="building" {{ 'selected' if sort == 'building' }}>{{ t('Building, then flat') }}</option>
+      <option value="area" {{ 'selected' if sort == 'area' }}>{{ t('Location, then building') }}</option>
       <option value="newest" {{ 'selected' if sort == 'newest' }}>{{ t('Newest first') }}</option>
       <option value="oldest" {{ 'selected' if sort == 'oldest' }}>{{ t('Oldest first') }}</option>
       <option value="price_asc" {{ 'selected' if sort == 'price_asc' }}>{{ t('Price, low to high') }}</option>
