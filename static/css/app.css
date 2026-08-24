@@ -1030,6 +1030,26 @@ input[type=file] { font-size: 13px; font-family: var(--mono); }
   .rail, .topbar, .actions, .btn { display: none !important; }
   .shell { margin-left: 0; }
   body { background: #fff; }
+
+  /* Belt-and-suspenders alongside app.js's beforeprint handler: if JS
+     didn't run for any reason, this still forces a closed <details>'
+     content to render (overriding the browser's own UA rule that hides
+     it) so the employee report's per-client notes/deal history is never
+     silently missing from the printed page. */
+  details:not([open]) > *:not(summary) { display: block !important; }
+  details summary::-webkit-details-marker { display: none; }
+  details summary { list-style: none; }
+
+  /* Colored badges (lead stage, property status) use rgba backgrounds,
+     which most browsers otherwise drop when printing unless the reader
+     happens to tick "Background graphics" — force them to keep their
+     color regardless. */
+  .tag { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  /* Never split a single table row or timeline entry across a page
+     break — the table/card themselves are still free to flow over
+     multiple pages, which is what a long client roster needs. */
+  tr, .feed-item { break-inside: avoid; }
 }
 
 /* ==========================================================================

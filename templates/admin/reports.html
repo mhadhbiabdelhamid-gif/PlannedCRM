@@ -19,6 +19,7 @@
       </select>
     </form>
     {% if agent %}
+      <button type="button" class="btn" onclick="window.print()">{{ t('Print') }}</button>
       <a class="btn btn-gold" href="{{ url_for('reports.export', agent=agent.id, period_type=period_type, ref=report.period.start.isoformat()) }}">
         {{ t('Export to Excel') }}</a>
     {% endif %}

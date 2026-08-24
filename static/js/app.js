@@ -186,6 +186,27 @@
       if (s) { e.preventDefault(); s.focus(); }
     }
   });
+
+  /* ------------------------------------- expand <details> for printing
+     A closed <details> (e.g. a client's collapsed notes/deal history on
+     the employee report) renders no content at all when printed, with or
+     without the CSS fallback in app.css — so before the print dialog
+     opens, force every one open, and put back whichever ones the reader
+     had closed once printing is done. Fires for Ctrl+P and the browser's
+     own print menu too, not just a page's own "Print" button, since
+     beforeprint/afterprint fire regardless of how printing was started. */
+  var printOpened = [];
+  window.addEventListener("beforeprint", function () {
+    printOpened = [];
+    document.querySelectorAll("details:not([open])").forEach(function (d) {
+      d.open = true;
+      printOpened.push(d);
+    });
+  });
+  window.addEventListener("afterprint", function () {
+    printOpened.forEach(function (d) { d.open = false; });
+    printOpened = [];
+  });
 })();
 
 /* ---------------------------------------------- bulk selection on listings */

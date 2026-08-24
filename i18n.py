@@ -687,6 +687,7 @@ AR = {
     "Captured lead": "تمت إضافة العميل",
     "Moved lead": "تم نقل مرحلة العميل",
     "Updated lead": "تم تعديل بيانات العميل",
+    "Print": "طباعة",
 
     # ---- financial section / accountant role
     "Accountant": "محاسب",
