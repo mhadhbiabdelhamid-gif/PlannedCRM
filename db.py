@@ -498,8 +498,26 @@ def paginate(sql, args, page, per_page=PER_PAGE):
 
 
 def next_ref(prefix, table):
-    row = query(f"SELECT COUNT(*) AS c FROM {table}", one=True)
-    return f"{prefix}-{(row['c'] + 1):04d}"
+    """The next unused reference number for a table, formatted PREFIX-0001.
+
+    Based on the highest number actually in use for this prefix, not a row
+    count — a row count breaks the moment anything with that prefix is ever
+    deleted (a rejected lead, a removed listing, ...): the count then
+    undershoots and reissues a number that's still on an existing row,
+    which fails the column's UNIQUE constraint with a 500 on save.
+    """
+    row = query(
+        f"SELECT MAX(CAST(SUBSTR(ref, LENGTH(?) + 2) AS INTEGER)) AS n"
+        f" FROM {table} WHERE ref LIKE ?",
+        (prefix, f"{prefix}-%"), one=True)
+    n = (row["n"] or 0) + 1
+    ref = f"{prefix}-{n:04d}"
+    # Belt and suspenders: two people finishing a form in the same instant
+    # could still land on the same number before either has saved.
+    while query(f"SELECT 1 FROM {table} WHERE ref = ?", (ref,), one=True):
+        n += 1
+        ref = f"{prefix}-{n:04d}"
+    return ref
 
 
 def log(user_id, action, entity_type=None, entity_id=None, detail=None):
