@@ -781,20 +781,33 @@ main { padding: 26px; flex: 1; max-width: 1480px; width: 100%; }
 }
 
 /* --------------------------------------------------------------- kanban */
+/* The pipeline is only useful if all eight stages are visible at once —
+   a board you have to scroll sideways hides the very columns (Won, Lost)
+   people are looking for. Two things make that possible: the columns are
+   narrow enough that 8 of them fit inside main's 1480px cap, and the board
+   page opts out of that cap so a wide monitor gets wider columns rather
+   than empty margins. Where :has() is unsupported the cap simply stays and
+   the board still fits, just more snugly. */
+main:has(.board) { max-width: none; }
+
 .board {
   display: grid;
-  grid-template-columns: repeat(8, minmax(196px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(8, minmax(126px, 1fr));
+  gap: 8px;
   align-items: start;
   overflow-x: auto;
   padding-bottom: 10px;
 }
 
 .col {
+  /* Without this a long Arabic stage name ("تم التواصل") is treated as an
+     unbreakable minimum and pushes the whole board wider than the screen —
+     which is exactly the sideways scroll all of this exists to remove. */
+  min-width: 0;
   background: #F1EFEA;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  min-height: 180px;
+  min-height: 120px;
   display: flex;
   flex-direction: column;
 }
@@ -803,23 +816,26 @@ main { padding: 26px; flex: 1; max-width: 1480px; width: 100%; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 12px;
+  gap: 6px;
+  padding: 7px 9px;
   border-bottom: 1px solid var(--line);
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: .1em;
+  letter-spacing: .06em;
   text-transform: uppercase;
   color: var(--muted);
 }
 
-.col-head b { color: var(--text); font-size: 13px; font-weight: 700; }
+.col-head b { color: var(--text); font-size: 12px; font-weight: 700;
+  min-width: 0; overflow-wrap: anywhere; }
+.col-head [data-count] { flex: none; }
 .col[data-stage="Won"] .col-head { color: var(--ok); }
 .col[data-stage="Lost"] .col-head { color: var(--bad); }
 .col[data-stage="Won"] { background: rgba(63,125,92,.06); }
 .col[data-stage="Lost"] { background: rgba(138,58,58,.05); }
 
-.col-body { padding: 10px; display: flex; flex-direction: column; gap: 9px; flex: 1; }
+.col-body { padding: 7px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
 
 .col.drop-target { background: var(--gold-tint); border-color: var(--gold); }
 
@@ -828,17 +844,48 @@ main { padding: 26px; flex: 1; max-width: 1480px; width: 100%; }
   border: 1px solid var(--line);
   border-left: 3px solid var(--gold);
   border-radius: var(--radius);
-  padding: 11px 12px;
+  padding: 7px 9px;
   cursor: grab;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 3px;
 }
 
 .lead-card:hover { border-color: var(--gold); box-shadow: var(--shadow); }
 .lead-card.dragging { opacity: .4; }
-.lead-card b { font-size: 15px; font-weight: 700; }
-.lead-card .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.lead-card b { font-size: 13px; font-weight: 700; line-height: 1.3; }
+/* wrap, or a source tag and a budget together overflow a narrow card and
+   drag the whole board wider than the screen */
+.lead-card .row { display: flex; justify-content: space-between;
+  align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+
+/* A card is a glance, not a document: everything inside it steps down a size
+   so eight columns of them fit without the text becoming unreadable. */
+.lead-card .small { font-size: 11.5px; line-height: 1.35; }
+.lead-card .mono { font-size: 10.5px; }
+/* Tags are nowrap everywhere else, which is right — but "Overdue 25 Aug 2026"
+   is wider than a board card, and one unbreakable chip is enough to push the
+   entire pipeline off the screen. Inside a card they wrap instead. */
+.lead-card .tag { font-size: 9.5px; padding: 1px 5px;
+  white-space: normal; overflow-wrap: anywhere; text-align: start; }
+.lead-card .btn-sm { height: 22px; padding: 0 7px; font-size: 11.5px; }
+
+/* A long name must wrap rather than push the timestamp out of the card */
+.lead-card .row b { overflow-wrap: anywhere; }
+
+/* On a smaller laptop the eight columns only fit if they give up a little
+   more: the rail costs a fixed 268px, so what is left at 1366px is about
+   1046px for the whole pipeline. Below the width where the rail collapses
+   (860px) this stops mattering and the board scrolls, which is the right
+   behaviour on a phone. */
+@media (max-width: 1420px) {
+  .board { grid-template-columns: repeat(8, minmax(118px, 1fr)); gap: 6px; }
+  .col-head { padding: 6px 7px; font-size: 10px; letter-spacing: .03em; }
+  .col-head b { font-size: 11px; }
+  .col-body { padding: 5px; gap: 5px; }
+  .lead-card { padding: 6px 7px; }
+  .lead-card b { font-size: 12px; }
+}
 
 /* -------------------------------------------------------------- forms */
 .field { margin-bottom: 14px; }
