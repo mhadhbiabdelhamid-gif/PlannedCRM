@@ -5,8 +5,14 @@ Complements performance.py, which gives the whole team's month/quarter/year
 figures on one screen. This module answers a narrower question for one
 agent at a time — "what did they actually do in this specific period?" —
 at any granularity down to a single day, built entirely from records the
-team already creates (deals, leads, follow-ups, viewings, comments, the
-activity log) so nothing has to be logged twice.
+team already creates (deals, leads, follow-ups, viewings, comments) so
+nothing has to be logged twice.
+
+The audit trail is intentionally left out. It is a separate, admin-only
+screen answering a different question, and putting its counts on a person's
+report made the page read as surveillance rather than as a record of the
+clients they hold and the deals they closed. The one exception is inside a
+client's own timeline, where a stage change is part of that client's story.
 """
 from datetime import date, datetime, timedelta
 
@@ -195,13 +201,10 @@ def agent_report(user_id, period_type, ref):
             "SELECT COUNT(*) n FROM leads WHERE agent_id = ? AND status = 'Lost'"
             " AND updated_at >= ? AND updated_at < ?", (user_id, u_start, u_end)),
     }
-    work["activity"] = query(
-        "SELECT * FROM activity WHERE user_id = ?"
-        " AND created_at >= ? AND created_at < ? ORDER BY id DESC LIMIT 30",
-        (user_id, u_start, u_end))
-    work["activity_total"] = _n(
-        "SELECT COUNT(*) n FROM activity WHERE user_id = ?"
-        " AND created_at >= ? AND created_at < ?", (user_id, u_start, u_end))
+    # The audit trail is deliberately not part of this report. It answers a
+    # different question ("who touched what"), it lives at /activity for
+    # admins only, and counting it here made the report look like a
+    # surveillance sheet rather than a record of clients and deals.
 
     return {"period": period, "deals": deals, "tasks": tasks, "work": work}
 

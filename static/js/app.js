@@ -16,6 +16,24 @@
     });
   }
 
+  /* ------------------------------------------ one nav section at a time
+     The sections in the left rail are <details name="railsec">, and a shared
+     name is all a current browser needs to close the others when one opens.
+     Older browsers ignore the attribute and would let every section sit open
+     at once, which is the pile-up the grouping exists to avoid — so where the
+     attribute isn't supported, do the same thing by hand. */
+  if (!("name" in document.createElement("details"))) {
+    var sections = document.querySelectorAll(".rail-sec[name]");
+    sections.forEach(function (sec) {
+      sec.addEventListener("toggle", function () {
+        if (!sec.open) return;
+        sections.forEach(function (other) {
+          if (other !== sec) other.open = false;
+        });
+      });
+    });
+  }
+
   /* -------------------------------------------------- metric hairlines */
   var metrics = document.querySelectorAll(".metric");
   metrics.forEach(function (m, i) {
@@ -198,7 +216,7 @@
   var printOpened = [];
   window.addEventListener("beforeprint", function () {
     printOpened = [];
-    document.querySelectorAll("details:not([open])").forEach(function (d) {
+    document.querySelectorAll("details:not([open]):not(.rail-sec)").forEach(function (d) {
       d.open = true;
       printOpened.push(d);
     });

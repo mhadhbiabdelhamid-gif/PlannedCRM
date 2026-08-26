@@ -229,36 +229,6 @@
     <div class="value" style="font-size:30px">{{ report.work.won }} / {{ report.work.lost }}</div>
     <div class="foot">{{ t('leads settled') }}</div>
   </div>
-  <div class="metric">
-    <div class="label">{{ t('Activity logged') }}</div>
-    <div class="value">{{ report.work.activity_total }}</div>
-    <div class="foot">{{ t('entries this period') }}</div>
-  </div>
-</div>
-
-<div class="card" style="margin-top:16px">
-  <div class="card-head"><h3>{{ t('Activity in this period') }}</h3>
-    <a class="btn btn-quiet btn-sm" href="{{ url_for('main.activity') }}">{{ t('Full log') }}</a></div>
-  <div class="card-body" style="padding-top:4px">
-    {% if report.work.activity %}
-      {% for a in report.work.activity %}
-      <div class="feed-item">
-        <span class="feed-dot"></span>
-        <div class="stack">
-          <div>{{ t(a.action) }}</div>
-          {% if a.detail %}<div class="small muted">{{ a.detail }}</div>{% endif %}
-          <div class="mono faint">{{ a.created_at | nice_time }}</div>
-        </div>
-      </div>
-      {% endfor %}
-      {% if report.work.activity_total > report.work.activity|length %}
-        <div class="small faint" style="margin-top:6px">
-          {{ t('Showing the most recent') }} {{ report.work.activity|length }} {{ t('of') }} {{ report.work.activity_total }}.</div>
-      {% endif %}
-    {% else %}
-      <div class="empty"><span class="mark">◇</span>{{ t('No logged activity in this period.') }}</div>
-    {% endif %}
-  </div>
 </div>
 
 {% endif %}

@@ -66,6 +66,8 @@ AR = {
     "Directory": "الدليل",
     "Team": "الفريق",
     "Money": "المالية",
+    "Clients": "العملاء",
+    "Assistants": "المساعدون",
     "Sign in": "تسجيل الدخول",
     "Sign out": "تسجيل الخروج",
     "My account": "حسابي",

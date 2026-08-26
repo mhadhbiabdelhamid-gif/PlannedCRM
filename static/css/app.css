@@ -1,12 +1,18 @@
 /* ==========================================================================
    Planned Real Estate — CRM
-   Palette drawn from the logo: gold on black, set on a warm paper canvas.
+   Palette drawn from the logo: gold on a warm dark, set on a paper canvas.
+
+   The dark used to be a near-black #0B0B0D. It is now a warm charcoal, which
+   is the same colour the eye reads as "the brand dark" but stops the rail,
+   the avatars and the login panel from sitting on the page as hard black
+   rectangles. Everything dark derives from these three, so softening them
+   softens the whole application at once.
    ========================================================================== */
 
 :root {
-  --ink:        #0B0B0D;
-  --ink-soft:   #17171C;
-  --ink-line:   #2A2A31;
+  --ink:        #26241F;
+  --ink-soft:   #332F28;
+  --ink-line:   #433E35;
 
   --gold:       #C8A24A;
   --gold-lift:  #E0C173;
@@ -73,7 +79,7 @@ a:hover { color: var(--gold-deep); }
 }
 
 /* keyboard users get a visible target; mouse users are not distracted by it */
-.btn:focus-visible, .rail-link:focus-visible {
+.btn:focus-visible, .rail-link:focus-visible, .rail-sec > summary:focus-visible {
   outline-offset: 3px;
 }
 
@@ -210,6 +216,54 @@ h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -.015em;
   color: #8F8A7D;
 }
 
+/* ---- collapsible nav sections
+   One <details> per business area. The shared name="railsec" in the template
+   is what closes the others when one opens; nothing here depends on JS. */
+.rail-sec { border-bottom: 1px solid rgba(255,255,255,.035); }
+.rail-sec[open] { background: rgba(0,0,0,.15); }
+
+.rail-sec > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 20px 11px 21px;
+  font-family: var(--ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: #9C9689;
+  border-left: 3px solid transparent;
+  transition: color .12s, background .12s;
+  user-select: none;
+}
+
+/* Safari draws its own triangle unless this is switched off */
+.rail-sec > summary::-webkit-details-marker { display: none; }
+
+.rail-sec > summary:hover { color: #EDE9DF; background: rgba(200,162,74,.06); }
+.rail-sec[open] > summary { color: #fff; }
+
+/* the chevron: a rotated corner, so no image or icon font is needed */
+.rail-sec > summary::after {
+  content: "";
+  margin-inline-start: auto;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg) translate(-2px, -2px);
+  opacity: .65;
+  transition: transform .18s ease;
+}
+.rail-sec[open] > summary::after { transform: rotate(-135deg); }
+
+@media (prefers-reduced-motion: reduce) {
+  .rail-sec > summary::after { transition: none; }
+}
+
 .rail-link {
   position: relative;
   display: flex;
@@ -222,6 +276,18 @@ h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -.015em;
   letter-spacing: -.005em;
   border-left: 3px solid transparent;
   transition: color .12s, background .12s;
+}
+
+/* Indent for a link inside a section. Written as a logical property, and with
+   enough specificity to beat the [dir="rtl"] .rail-link padding shorthand
+   further down the file — this used to be an inline padding-left, which no
+   RTL rule could reach, so in Arabic the sub-items indented the wrong way. */
+.rail-nav .rail-link.sub { padding-inline-start: 42px; }
+
+/* Dashboard, Notifications, Settings: no section, so no indent either */
+.rail-nav .rail-link.rail-solo {
+  font-weight: 500;
+  padding-block: 11px;
 }
 
 .rail-link:hover { color: #fff; background: rgba(200,162,74,.07); }
@@ -570,7 +636,7 @@ main { padding: 26px; flex: 1; max-width: 1480px; width: 100%; }
   white-space: nowrap;
 }
 
-.tag-sale { background: var(--ink); color: var(--gold); }
+.tag-sale { background: var(--gold-tint); color: var(--gold-deep); border-color: rgba(126,98,32,.40); }
 .tag-rent { background: var(--gold); color: var(--ink); }
 
 .tag-available { background: rgba(63,125,92,.11); color: var(--ok); border-color: rgba(63,125,92,.28); }
@@ -585,7 +651,7 @@ main { padding: 26px; flex: 1; max-width: 1480px; width: 100%; }
 .tag-stage-contacted   { background: rgba(74,90,110,.11); color: var(--cool); border-color: rgba(74,90,110,.28); }
 .tag-stage-qualified   { background: rgba(200,162,74,.16); color: var(--gold-deep); border-color: rgba(200,162,74,.34); }
 .tag-stage-viewing     { background: rgba(180,119,42,.11); color: var(--warn); border-color: rgba(180,119,42,.28); }
-.tag-stage-offer       { background: var(--ink); color: var(--gold); border-color: var(--ink); }
+.tag-stage-offer       { background: rgba(200,162,74,.26); color: var(--gold-deep); border-color: rgba(126,98,32,.45); font-weight: 700; }
 .tag-stage-negotiation { background: rgba(180,119,42,.18); color: var(--warn); border-color: rgba(180,119,42,.36); }
 .tag-stage-won         { background: rgba(63,125,92,.11); color: var(--ok); border-color: rgba(63,125,92,.28); }
 .tag-stage-lost        { background: rgba(138,58,58,.10); color: var(--bad); border-color: rgba(138,58,58,.26); }
@@ -639,20 +705,26 @@ main { padding: 26px; flex: 1; max-width: 1480px; width: 100%; }
   box-shadow: var(--shadow);
 }
 
+/* A listing with no photo used to show a dark slab. Most of the stock has no
+   photo, so a page of them read as a wall of black rectangles — a warm tint
+   keeps the card feeling like part of the paper it sits on. A real photo is
+   set as a background-image inline and covers this entirely. */
 .prop-thumb {
   aspect-ratio: 4 / 3;
-  background: var(--ink-soft) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Cpath d='M0 60L60 0' stroke='%23222' stroke-width='1'/%3E%3C/svg%3E");
+  background: var(--gold-tint);
   background-size: cover;
   background-position: center;
   position: relative;
   display: grid;
   place-items: center;
+  border-bottom: 1px solid var(--line-soft);
 }
 
 .prop-thumb .ph {
   font-family: var(--display);
   font-size: 34px;
-  color: rgba(200,162,74,.35);
+  font-weight: 600;
+  color: rgba(126, 98, 32, .30);
 }
 
 .prop-thumb .tags {
@@ -1091,6 +1163,7 @@ body[lang="ar"],
 [dir="rtl"] .col-head,
 [dir="rtl"] .table th,
 [dir="rtl"] .rail-group,
+[dir="rtl"] .rail-sec > summary,
 [dir="rtl"] .tag,
 [dir="rtl"] .spec-list dt {
   font-family: var(--arabic);
@@ -1109,6 +1182,18 @@ body[lang="ar"],
   border-right: 3px solid transparent;
   padding: 9px 21px 9px 20px;
 }
+
+[dir="rtl"] .rail-sec > summary {
+  border-left: none;
+  border-right: 3px solid transparent;
+  padding: 11px 21px 11px 20px;
+}
+
+/* the chevron points the other way round in a mirrored layout */
+[dir="rtl"] .rail-sec > summary::after {
+  transform: rotate(45deg) translate(-2px, -2px);
+}
+[dir="rtl"] .rail-sec[open] > summary::after { transform: rotate(-135deg); }
 
 [dir="rtl"] .rail-link.active { border-right-color: var(--gold); }
 [dir="rtl"] .rail-link .pill { margin-left: 0; margin-right: auto; }
@@ -1307,11 +1392,14 @@ body[lang="ar"],
 /* a stand-in photo is dimmed, so nobody mistakes it for the property */
 .prop-thumb.is-standin { position: relative; }
 
+/* An owner's or partner's photo standing in for a missing listing photo still
+   needs dimming, or the gold caption over it is unreadable — warmed to match
+   the new ink rather than the old near-black. */
 .prop-thumb.is-standin::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: rgba(11, 11, 13, .55);
+  background: rgba(38, 36, 31, .55);
 }
 
 .standin-note {
@@ -1337,16 +1425,17 @@ body[lang="ar"],
   flex-wrap: wrap;
   padding: 10px 14px;
   margin-bottom: var(--s4);
-  background: var(--ink);
-  color: #fff;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
 }
 
 .bulkbar select { height: 32px; padding: 0 9px; font-size: 13px; }
-.bulkbar .small.faint { color: #97928A; }
+.bulkbar .small.faint { color: var(--faint); }
 .bulkbar input[type=checkbox] { width: auto; accent-color: var(--gold); }
-.bulkbar #pick-count { font-weight: 700; color: var(--gold); }
+.bulkbar #pick-count { font-weight: 700; color: var(--gold-deep); }
 
 .prop-wrap { position: relative; }
 

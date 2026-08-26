@@ -27,76 +27,132 @@
 
   {% set is_accountant = user and user.role == 'accountant' %}
   {% set sees_finance = user and user.role in ('admin', 'manager', 'accountant') %}
+  {% set is_admin_user = user and user.role == 'admin' %}
+  {#
+    The rail is grouped into collapsible sections, one per business area, so
+    someone looking for a property screen opens Properties instead of reading
+    a list of sixteen links. Built on <details name="..."> — the shared name is
+    what makes the browser close the other sections when one opens, with no
+    JavaScript at all (app.js carries a fallback for browsers without it).
+
+    The section covering the current page is rendered already open, so the menu
+    is never in a state that hides where you actually are. Item numbers are
+    fixed per section rather than counted at render time: a screen should keep
+    the same number whoever is looking at it, and roles hide different rows.
+  #}
   <nav class="rail-nav">
-    <div class="rail-group">{{ t('Daily') }}</div>
-    <a class="rail-link {{ 'active' if request.endpoint == 'main.dashboard' }}" href="{{ url_for('main.dashboard') }}">
-      <span class="idx">01</span> {{ t('Dashboard') }}</a>
-    {% if not is_accountant %}
-    <a class="rail-link {{ 'active' if request.blueprint == 'properties' }}" href="{{ url_for('properties.index') }}">
-      <span class="idx">02</span> {{ t('Properties') }}</a>
-    <a class="rail-link {{ 'active' if request.endpoint == 'properties.waiting' }}"
-       href="{{ url_for('properties.waiting') }}" style="padding-left:44px">
-      {{ t('Waiting for approval') }}
-      {% if waiting_count %}<span class="pill">{{ waiting_count }}</span>{% endif %}</a>
-    <a class="rail-link {{ 'active' if request.endpoint == 'properties.stale' }}"
-       href="{{ url_for('properties.stale') }}" style="padding-left:44px">
-      {{ t('Stale listings') }}
-      {% if stale_count %}<span class="pill">{{ stale_count }}</span>{% endif %}</a>
-    {% if can('import') %}
-    <a class="rail-link {{ 'active' if request.blueprint == 'imports' }}" href="{{ url_for('imports.upload') }}">
-      <span class="idx">03</span> {{ t('Import listings') }}</a>
-    <a class="rail-link {{ 'active' if request.endpoint == 'imports.history' }}"
-       href="{{ url_for('imports.history') }}" style="padding-left:44px">
-      {{ t('Import history') }}</a>
-    {% endif %}
-    <a class="rail-link {{ 'active' if request.blueprint == 'leads' }}" href="{{ url_for('leads.board') }}">
-      <span class="idx">04</span> {{ t('Leads') }}</a>
-    {% endif %}
-
-    <div class="rail-group">{{ t('Money') }}</div>
-    <a class="rail-link {{ 'active' if request.blueprint == 'deals' }}" href="{{ url_for('deals.index') }}">
-      <span class="idx">05</span> {{ t('Deals') }}</a>
-    {% if sees_finance %}
-    <a class="rail-link {{ 'active' if request.blueprint == 'finance' }}" href="{{ url_for('finance.index') }}">
-      <span class="idx">06</span> {{ t('Financial') }}</a>
-    {% endif %}
+    <a class="rail-link rail-solo {{ 'active' if request.endpoint == 'main.dashboard' }}"
+       href="{{ url_for('main.dashboard') }}">{{ t('Dashboard') }}</a>
 
     {% if not is_accountant %}
-    <div class="rail-group">{{ t('Directory') }}</div>
-    <a class="rail-link {{ 'active' if request.endpoint == 'contacts.owners' }}" href="{{ url_for('contacts.owners') }}">
-      <span class="idx">07</span> {{ t('Owners') }}</a>
-    <a class="rail-link {{ 'active' if request.endpoint == 'contacts.partners' }}" href="{{ url_for('contacts.partners') }}">
-      <span class="idx">08</span> {{ t('Partners') }}</a>
+    <details class="rail-sec" name="railsec"
+             {{ 'open' if request.blueprint in ('properties', 'imports') }}>
+      <summary>{{ t('Properties') }}</summary>
+      <a class="rail-link sub {{ 'active' if request.endpoint == 'properties.index' }}"
+         href="{{ url_for('properties.index') }}">
+        <span class="idx">1.1</span> {{ t('Properties') }}</a>
+      <a class="rail-link sub {{ 'active' if request.endpoint == 'properties.waiting' }}"
+         href="{{ url_for('properties.waiting') }}">
+        <span class="idx">1.2</span> {{ t('Waiting for approval') }}
+        {% if waiting_count %}<span class="pill">{{ waiting_count }}</span>{% endif %}</a>
+      <a class="rail-link sub {{ 'active' if request.endpoint == 'properties.stale' }}"
+         href="{{ url_for('properties.stale') }}">
+        <span class="idx">1.3</span> {{ t('Stale listings') }}
+        {% if stale_count %}<span class="pill">{{ stale_count }}</span>{% endif %}</a>
+      {% if can('import') %}
+      <a class="rail-link sub {{ 'active' if request.endpoint == 'imports.upload' }}"
+         href="{{ url_for('imports.upload') }}">
+        <span class="idx">1.4</span> {{ t('Import listings') }}</a>
+      <a class="rail-link sub {{ 'active' if request.endpoint == 'imports.history' }}"
+         href="{{ url_for('imports.history') }}">
+        <span class="idx">1.5</span> {{ t('Import history') }}</a>
+      {% endif %}
+    </details>
+
+    <details class="rail-sec" name="railsec"
+             {{ 'open' if request.blueprint == 'leads' }}>
+      <summary>{{ t('Clients') }}</summary>
+      <a class="rail-link sub {{ 'active' if request.endpoint == 'leads.board' }}"
+         href="{{ url_for('leads.board') }}">
+        <span class="idx">2.1</span> {{ t('Leads') }}</a>
+      <a class="rail-link sub {{ 'active' if request.endpoint == 'leads.index' }}"
+         href="{{ url_for('leads.index') }}">
+        <span class="idx">2.2</span> {{ t('All leads') }}</a>
+    </details>
     {% endif %}
 
-    <div class="rail-group">{{ t('Team') }}</div>
-    <a class="rail-link {{ 'active' if request.endpoint == 'main.notifications' }}" href="{{ url_for('main.notifications') }}">
-      <span class="idx">09</span> {{ t('Notifications') }}
-      {% if unread %}<span class="pill">{{ unread }}</span>{% endif %}</a>
-    {% if user and user.role == 'admin' %}
-    <a class="rail-link {{ 'active' if request.endpoint == 'main.activity' }}" href="{{ url_for('main.activity') }}">
-      <span class="idx">10</span> {{ t('Activity log') }}</a>
-    <a class="rail-link {{ 'active' if request.endpoint == 'admin.users' }}" href="{{ url_for('admin.users') }}">
-      <span class="idx">11</span> {{ t('Team members') }}</a>
+    <details class="rail-sec" name="railsec"
+             {{ 'open' if request.blueprint in ('deals', 'finance') }}>
+      <summary>{{ t('Money') }}</summary>
+      <a class="rail-link sub {{ 'active' if request.blueprint == 'deals' }}"
+         href="{{ url_for('deals.index') }}">
+        <span class="idx">3.1</span> {{ t('Deals') }}</a>
+      {% if sees_finance %}
+      <a class="rail-link sub {{ 'active' if request.blueprint == 'finance' }}"
+         href="{{ url_for('finance.index') }}">
+        <span class="idx">3.2</span> {{ t('Financial') }}</a>
+      {% endif %}
+    </details>
+
+    {% if not is_accountant %}
+    <details class="rail-sec" name="railsec"
+             {{ 'open' if request.blueprint == 'contacts' }}>
+      <summary>{{ t('Directory') }}</summary>
+      <a class="rail-link sub {{ 'active' if request.endpoint == 'contacts.owners' }}"
+         href="{{ url_for('contacts.owners') }}">
+        <span class="idx">4.1</span> {{ t('Owners') }}</a>
+      <a class="rail-link sub {{ 'active' if request.endpoint == 'contacts.partners' }}"
+         href="{{ url_for('contacts.partners') }}">
+        <span class="idx">4.2</span> {{ t('Partners') }}</a>
+    </details>
     {% endif %}
+
     {% if user and user.role in ('admin', 'manager') %}
-    <a class="rail-link {{ 'active' if request.blueprint == 'reports' }}" href="{{ url_for('reports.index') }}">
-      <span class="idx">12</span> {{ t('Agent reports') }}</a>
-    {% endif %}
-    {% if user and user.role == 'admin' %}
-    <a class="rail-link {{ 'active' if request.endpoint == 'admin.settings' }}" href="{{ url_for('admin.settings') }}">
-      <span class="idx">13</span> {{ t('Settings') }}</a>
+    <details class="rail-sec" name="railsec"
+             {{ 'open' if request.blueprint == 'reports'
+                       or request.endpoint in ('admin.users', 'main.activity') }}>
+      <summary>{{ t('Team') }}</summary>
+      {% if is_admin_user %}
+      <a class="rail-link sub {{ 'active' if request.endpoint == 'admin.users' }}"
+         href="{{ url_for('admin.users') }}">
+        <span class="idx">5.1</span> {{ t('Team members') }}</a>
+      {% endif %}
+      <a class="rail-link sub {{ 'active' if request.blueprint == 'reports' }}"
+         href="{{ url_for('reports.index') }}">
+        <span class="idx">5.2</span> {{ t('Agent reports') }}</a>
+      {% if is_admin_user %}
+      <a class="rail-link sub {{ 'active' if request.endpoint == 'main.activity' }}"
+         href="{{ url_for('main.activity') }}">
+        <span class="idx">5.3</span> {{ t('Activity log') }}</a>
+      {% endif %}
+    </details>
     {% endif %}
 
-    {% if user and user.role == 'admin' %}
-    <div class="rail-group">{{ t('Assistants') }}</div>
-    <a class="rail-link {{ 'active' if request.blueprint == 'intake' }}" href="{{ url_for('intake.index') }}">
-      <span class="idx">12</span> {{ t('Listing intake') }}</a>
-    <a class="rail-link {{ 'active' if request.blueprint == 'social' }}" href="{{ url_for('social.index') }}">
-      <span class="idx">13</span> {{ t('Social posts') }}</a>
-    <a class="rail-link {{ 'active' if request.endpoint == 'social.settings' }}"
-       href="{{ url_for('social.settings') }}" style="padding-left:44px">
-      {{ t('Social settings') }}</a>
+    {% if is_admin_user %}
+    <details class="rail-sec" name="railsec"
+             {{ 'open' if request.blueprint in ('intake', 'social') }}>
+      <summary>{{ t('Assistants') }}</summary>
+      <a class="rail-link sub {{ 'active' if request.blueprint == 'intake' }}"
+         href="{{ url_for('intake.index') }}">
+        <span class="idx">6.1</span> {{ t('Listing intake') }}</a>
+      <a class="rail-link sub {{ 'active' if request.endpoint == 'social.index' }}"
+         href="{{ url_for('social.index') }}">
+        <span class="idx">6.2</span> {{ t('Social posts') }}</a>
+      <a class="rail-link sub {{ 'active' if request.endpoint == 'social.settings' }}"
+         href="{{ url_for('social.settings') }}">
+        <span class="idx">6.3</span> {{ t('Social settings') }}</a>
+    </details>
+    {% endif %}
+
+    {# Kept outside the sections: two single screens with nowhere sensible to
+       live, opened often enough that burying them behind a menu would cost
+       more than it saves. #}
+    <a class="rail-link rail-solo {{ 'active' if request.endpoint == 'main.notifications' }}"
+       href="{{ url_for('main.notifications') }}">{{ t('Notifications') }}
+      {% if unread %}<span class="pill">{{ unread }}</span>{% endif %}</a>
+    {% if is_admin_user %}
+    <a class="rail-link rail-solo {{ 'active' if request.endpoint == 'admin.settings' }}"
+       href="{{ url_for('admin.settings') }}">{{ t('Settings') }}</a>
     {% endif %}
   </nav>
 

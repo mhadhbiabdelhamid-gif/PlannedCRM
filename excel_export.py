@@ -444,7 +444,6 @@ def agent_summary_sheet(wb, co, agent, period, deals, tasks, work, exported_by,
         (t("New listings added"), work["new_listings"]),
         (t("Leads won"), work["won"]),
         (t("Leads lost"), work["lost"]),
-        (t("Activity log entries"), work["activity_total"]),
     ]
     if "overdue_now" in tasks:
         rows.append((t("Overdue follow-ups (as of now)"), tasks["overdue_now"]))
