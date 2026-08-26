@@ -1,0 +1,592 @@
+From edca07ab88b27f18c0ad94683b2f51e548df6fd9 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 18 Aug 2026 08:57:26 +0000
+Subject: [PATCH] Let an admin change what one person can do
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Team members already had a role, but a role was all or nothing: the one
+senior agent trusted with imports had to be made an admin, which handed
+them everything else too.
+
+Each person's profile now has a "What they can do" card listing four
+things — import listings, publish listings, delete listings, export
+data. They start from whatever the role normally allows and an admin
+can change any of them for that person alone. Only the differences are
+stored, so anyone left on their role's defaults keeps following those
+defaults.
+
+The buttons and menu entries follow the same rule, so someone who
+cannot import no longer sees an Import link that would only refuse
+them. Every permission is enforced on the route as well, not only
+hidden in the page.
+
+An admin's own boxes are fixed on and the form refuses to save against
+an admin account. An admin who removed their own access to the team
+screen could not get it back without a database editor.
+
+Note this changes a default: importing was open to anyone signed in and
+is now admin-only, grantable per person.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01U3sgXu7uGRzpkyQXbzW1dC
+---
+ app.py                           |   1 +
+ auth.py                          | 106 ++++++++++++++++++++++++++++++-
+ db.py                            |   2 +
+ i18n.py                          |  21 ++++++
+ templates/admin/profile.html     |  44 +++++++++++++
+ templates/admin/users.html       |   3 +
+ templates/base.html              |   2 +
+ templates/properties/detail.html |   2 +-
+ templates/properties/index.html  |   8 ++-
+ views_admin.py                   |  63 +++++++++++++++---
+ views_imports.py                 |  13 ++--
+ views_properties.py              |  10 +--
+ 12 files changed, 249 insertions(+), 26 deletions(-)
+
+diff --git a/app.py b/app.py
+index 864c8fd..f8ebeb8 100644
+--- a/app.py
++++ b/app.py
+@@ -278,6 +278,7 @@ def create_app():
+             unread=g.get("unread", 0),
+             year=local_now().year,
+             t=t,
++            can=__import__('auth').can,
+             lang=current_lang(),
+             langs=LANGS,
+             rtl=is_rtl(),
+diff --git a/auth.py b/auth.py
+index 8aa621f..9a6e590 100644
+--- a/auth.py
++++ b/auth.py
+@@ -1,5 +1,6 @@
+ """Session-based sign-in and role guards."""
+ import functools
++import json
+ 
+ from flask import (Blueprint, flash, g, redirect, render_template, request,
+                    session, url_for)
+@@ -26,6 +27,107 @@ def load_current_user():
+             g.unread = row["c"]
+ 
+ 
++# --------------------------------------------------------------- permissions
++#
++# A role sets what someone can normally do. An admin can then grant or remove
++# one of these for a single person without changing their role — the common
++# case being one senior agent who is trusted with imports while the rest are
++# not. Overrides live in users.permissions as JSON; anything not mentioned
++# there falls back to the role.
++#
++# key: (label shown to an admin, what it lets someone do, {role: allowed})
++CAPABILITIES = {
++    "import": (
++        "Import listings from Excel",
++        "Upload a spreadsheet to add or update many listings at once, "
++        "including replacing a partner's entire list.",
++        {"admin": True, "manager": False, "agent": False},
++    ),
++    "publish": (
++        "Publish listings",
++        "Approve listings other people have sent, so they appear for "
++        "everyone.",
++        {"admin": True, "manager": False, "agent": False},
++    ),
++    "delete": (
++        "Delete listings",
++        "Remove listings for good, one at a time or in bulk.",
++        {"admin": True, "manager": False, "agent": False},
++    ),
++    "export": (
++        "Export data",
++        "Download the listings, leads and deals as Excel or CSV.",
++        {"admin": True, "manager": True, "agent": False},
++    ),
++}
++
++
++def _overrides(user):
++    if user is None:
++        return {}
++    keys = user.keys()
++    raw = (user["permissions"] if "permissions" in keys else None) or ""
++    try:
++        loaded = json.loads(raw) if raw.strip() else {}
++    except (ValueError, TypeError):
++        return {}
++    return loaded if isinstance(loaded, dict) else {}
++
++
++def can(capability, user=None):
++    """Whether this person may do one specific thing.
++
++    An admin always may. Locking an admin out of the very screens used to
++    fix permissions is the kind of mistake that needs a database editor to
++    undo, so it simply isn't possible.
++    """
++    person = user if user is not None else g.get("user")
++    if person is None:
++        return False
++    role = person["role"]
++    if role == "admin":
++        return True
++    spec = CAPABILITIES.get(capability)
++    if spec is None:
++        return False
++    override = _overrides(person).get(capability)
++    if isinstance(override, bool):
++        return override
++    return spec[2].get(role, False)
++
++
++def effective_permissions(user):
++    """Every capability for one person: (allowed, whether it was overridden)."""
++    over = _overrides(user)
++    out = {}
++    for key, spec in CAPABILITIES.items():
++        by_role = spec[2].get(user["role"], False)
++        override = over.get(key)
++        if user["role"] == "admin":
++            out[key] = (True, False)
++        elif isinstance(override, bool):
++            out[key] = (override, override != by_role)
++        else:
++            out[key] = (by_role, False)
++    return out
++
++
++def requires(capability):
++    """Guard a route with one capability."""
++    def wrap(view):
++        @functools.wraps(view)
++        def wrapped(*a, **kw):
++            if g.user is None:
++                return redirect(url_for("auth.login", next=request.path))
++            if not can(capability):
++                flash("You don't have access to that. An admin can change it "
++                      "under Team members.", "error")
++                return redirect(url_for("main.dashboard"))
++            return view(*a, **kw)
++        return wrapped
++    return wrap
++
++
+ def login_required(view):
+     @functools.wraps(view)
+     def wrapped(*a, **kw):
+@@ -72,8 +174,8 @@ def manager_required(view):
+ 
+ 
+ def can_publish():
+-    """Only an admin turns a waiting listing into a live one."""
+-    return is_admin()
++    """Whether this person may turn a waiting listing into a live one."""
++    return can("publish")
+ 
+ 
+ def published_only(alias="p"):
+diff --git a/db.py b/db.py
+index 1d9ee87..017a0d1 100644
+--- a/db.py
++++ b/db.py
+@@ -332,6 +332,8 @@ def execute(sql, args=()):
+ 
+ MIGRATIONS = [
+     ("users", "lang", "TEXT DEFAULT 'en'"),
++    # Per-person exceptions to what their role normally allows, as JSON.
++    ("users", "permissions", "TEXT"),
+     ("properties", "building_no", "TEXT"),
+     ("properties", "unit_no", "TEXT"),
+     ("properties", "map_url", "TEXT"),
+diff --git a/i18n.py b/i18n.py
+index 69e6cec..ade6564 100644
+--- a/i18n.py
++++ b/i18n.py
+@@ -274,6 +274,27 @@ AR = {
+         "حدّد هذا لعقاراتكم الخاصة. تُدرج في ورقة منفصلة عن عقارات الأطراف الأخرى عند التصدير.",
+     "Stale listings": "عقارات متأخرة المراجعة",
+     "Waiting for approval": "بانتظار الموافقة",
++    "What they can do": "الصلاحيات",
++    "Access": "الصلاحيات",
++    "Save access": "حفظ الصلاحيات",
++    "Changed for this person": "معدّل لهذا الشخص",
++    "Import listings from Excel": "استيراد العقارات من إكسل",
++    "Upload a spreadsheet to add or update many listings at once, including replacing a partner's entire list.":
++        "رفع ملف لإضافة أو تحديث عدة عقارات دفعة واحدة، بما في ذلك استبدال قائمة شريك بالكامل.",
++    "Publish listings": "نشر العقارات",
++    "Approve listings other people have sent, so they appear for everyone.":
++        "الموافقة على العقارات التي أرسلها الآخرون لتظهر للجميع.",
++    "Delete listings": "حذف العقارات",
++    "Remove listings for good, one at a time or in bulk.":
++        "حذف العقارات نهائياً، فردياً أو دفعة واحدة.",
++    "Export data": "تصدير البيانات",
++    "Download the listings, leads and deals as Excel or CSV.":
++        "تنزيل العقارات والعملاء والصفقات بصيغة إكسل أو CSV.",
++    "Ticked is allowed. These start from what their role normally allows — change any of them for this person only.":
++        "المحدد مسموح. تبدأ هذه من صلاحيات الدور، ويمكن تغيير أي منها لهذا الشخص فقط.",
++    "An admin can do everything. To limit this person, change their role to Manager or Agent first, under Team members.":
++        "المدير لديه كل الصلاحيات. لتقييده، غيّر دوره إلى مدير فريق أو موظف أولاً من أعضاء الفريق.",
++    "Nothing beyond the everyday screens.": "لا شيء خارج الشاشات اليومية.",
+     "Waiting for approval.": "بانتظار الموافقة.",
+     "Waiting": "بانتظار",
+     "Sent back": "أُعيد للتعديل",
+diff --git a/templates/admin/profile.html b/templates/admin/profile.html
+index 48bcb18..acd5ce2 100644
+--- a/templates/admin/profile.html
++++ b/templates/admin/profile.html
+@@ -130,6 +130,50 @@
+     </div>
+   </div>
+ 
++  <div class="card" id="access">
++    <div class="card-head">
++      <h3>{{ t('What they can do') }}</h3>
++      <span class="tag tag-{{ 'sale' if person.role == 'admin' else 'plain' }}">
++        {{ t('Admin') if person.role == 'admin' else (t('Manager') if person.role == 'manager' else t('Agent')) }}</span>
++    </div>
++    <div class="card-body">
++      {% if person.role == 'admin' %}
++        <p class="small muted" style="margin:0">
++          {{ t('An admin can do everything. To limit this person, change their role to Manager or Agent first, under Team members.') }}
++        </p>
++      {% elif user.role == 'admin' %}
++        <p class="small muted" style="margin:0 0 12px">
++          {{ t('Ticked is allowed. These start from what their role normally allows — change any of them for this person only.') }}
++        </p>
++        <form method="post" action="{{ url_for('admin.save_access', uid=person.id) }}">
++          {% for key, spec in capabilities.items() %}
++            {% set allowed, overridden = access[key] %}
++            <label class="inline" style="align-items:flex-start;gap:9px;margin-bottom:12px">
++              <input type="checkbox" name="cap" value="{{ key }}"
++                     {{ 'checked' if allowed }} style="margin-top:3px">
++              <span>
++                <b>{{ t(spec[0]) }}</b>
++                {% if overridden %}
++                  <span class="tag tag-reserved">{{ t('Changed for this person') }}</span>
++                {% endif %}
++                <div class="small muted">{{ t(spec[1]) }}</div>
++              </span>
++            </label>
++          {% endfor %}
++          <button class="btn btn-gold btn-sm" type="submit">{{ t('Save access') }}</button>
++        </form>
++      {% else %}
++        <ul class="small muted" style="margin:0;padding-left:18px">
++          {% for key, spec in capabilities.items() %}
++            {% if access[key][0] %}<li>{{ t(spec[0]) }}</li>{% endif %}
++          {% else %}
++            <li>{{ t('Nothing beyond the everyday screens.') }}</li>
++          {% endfor %}
++        </ul>
++      {% endif %}
++    </div>
++  </div>
++
+   <div class="card">
+     <div class="card-head"><h3>{{ t('Details') }}</h3></div>
+     <div class="card-body">
+diff --git a/templates/admin/users.html b/templates/admin/users.html
+index 7a0806d..4eceee3 100644
+--- a/templates/admin/users.html
++++ b/templates/admin/users.html
+@@ -53,6 +53,9 @@
+ 
+       <div class="inline" style="gap:6px">
+         <a class="btn btn-sm" href="{{ url_for('admin.profile', uid=u.id) }}">{{ t('Open profile') }}</a>
++        {% if user.role == 'admin' and u.role != 'admin' %}
++          <a class="btn btn-sm" href="{{ url_for('admin.profile', uid=u.id) }}#access">{{ t('Access') }}</a>
++        {% endif %}
+         {% if user.role == 'admin' and u.id != user.id %}
+           <form method="post" action="{{ url_for('admin.toggle_user', uid=u.id) }}"
+                 data-confirm="{{ t('Switch off') }} {{ u.name }}?">
+diff --git a/templates/base.html b/templates/base.html
+index 1ce9ec4..e3726f1 100644
+--- a/templates/base.html
++++ b/templates/base.html
+@@ -39,11 +39,13 @@
+        href="{{ url_for('properties.stale') }}" style="padding-left:44px">
+       {{ t('Stale listings') }}
+       {% if stale_count %}<span class="pill">{{ stale_count }}</span>{% endif %}</a>
++    {% if can('import') %}
+     <a class="rail-link {{ 'active' if request.blueprint == 'imports' }}" href="{{ url_for('imports.upload') }}">
+       <span class="idx">03</span> {{ t('Import listings') }}</a>
+     <a class="rail-link {{ 'active' if request.endpoint == 'imports.history' }}"
+        href="{{ url_for('imports.history') }}" style="padding-left:44px">
+       {{ t('Import history') }}</a>
++    {% endif %}
+     <a class="rail-link {{ 'active' if request.blueprint == 'leads' }}" href="{{ url_for('leads.board') }}">
+       <span class="idx">04</span> {{ t('Leads') }}</a>
+ 
+diff --git a/templates/properties/detail.html b/templates/properties/detail.html
+index 414107e..a8195e4 100644
+--- a/templates/properties/detail.html
++++ b/templates/properties/detail.html
+@@ -49,7 +49,7 @@
+     {% endif %}
+     <button class="btn" onclick="openModal('dup-modal')">{{ t('Duplicate') }}</button>
+     {% if editable %}<a class="btn btn-gold" href="{{ url_for('properties.form', pid=p.id) }}">{{ t('Edit listing') }}</a>{% endif %}
+-    {% if user.role == 'admin' %}
++    {% if can('delete') %}
+       <form method="post" action="{{ url_for('properties.delete', pid=p.id) }}"
+             data-confirm="Delete {{ p.title }} for good? Its images, documents and notes go too.">
+         <button class="btn btn-danger" type="submit">{{ t('Delete') }}</button>
+diff --git a/templates/properties/index.html b/templates/properties/index.html
+index b56bff6..4652491 100644
+--- a/templates/properties/index.html
++++ b/templates/properties/index.html
+@@ -12,11 +12,13 @@
+     <a class="btn {{ 'btn-dark' if view == 'table' }}" href="{{ url_for('properties.index', view='table', **f) }}">{{ t('Table') }}</a>
+     <a class="btn" href="{{ url_for('properties.stale') }}">{{ t('Stale listings') }}
+       {% if stale_count %}<span class="pill">{{ stale_count }}</span>{% endif %}</a>
+-    {% if user.role == 'admin' %}
++    {% if can('export') %}
+       <a class="btn btn-dark" href="{{ url_for('admin.export_workbook') }}">{{ t('Export Excel') }}</a>
+       <a class="btn" href="{{ url_for('admin.export_properties') }}">{{ t('Export CSV') }}</a>
+     {% endif %}
+-    <a class="btn" href="{{ url_for('imports.upload') }}">{{ t('Import from Excel') }}</a>
++    {% if can('import') %}
++      <a class="btn" href="{{ url_for('imports.upload') }}">{{ t('Import from Excel') }}</a>
++    {% endif %}
+     <a class="btn btn-gold" href="{{ url_for('properties.form') }}">{{ t('Add listing') }}</a>
+   </div>
+ </div>
+@@ -135,7 +137,7 @@
+           style="max-width:210px">
+     <option value="">{{ t('Choose an action') }}</option>
+     {% for key, label in bulk_actions.items() %}
+-      {% if key != 'delete' or user.role == 'admin' %}
++      {% if key != 'delete' or can('delete') %}
+         <option value="{{ key }}">{{ t(label) }}</option>
+       {% endif %}
+     {% endfor %}
+diff --git a/views_admin.py b/views_admin.py
+index d182218..126f076 100644
+--- a/views_admin.py
++++ b/views_admin.py
+@@ -1,6 +1,7 @@
+ """Owners and partners directories, plus the admin area: users, settings, exports."""
+ import csv
+ import io
++import json
+ import os
+ import uuid
+ from datetime import datetime
+@@ -14,10 +15,11 @@ import performance
+ import whatsapp
+ from werkzeug.security import generate_password_hash
+ 
+-from auth import (admin_required, create_user, login_required,
+-                  manager_required, published_only)
++from auth import (CAPABILITIES, admin_required, can, create_user,
++                  effective_permissions, login_required, manager_required,
++                  published_only, requires)
+ from db import (DEPARTMENTS, EMPLOYMENT, PARTNER_TYPES, execute, get_setting,
+-                log, now, query, set_setting)
++                log, notify, now, query, set_setting)
+ 
+ contacts = Blueprint("contacts", __name__, url_prefix="/directory")
+ admin = Blueprint("admin", __name__, url_prefix="/admin")
+@@ -247,6 +249,8 @@ def profile(uid):
+                            managers=managers, employment=EMPLOYMENT,
+                            departments=DEPARTMENTS,
+                            can_edit=(g.user["role"] == "admin" or g.user["id"] == uid),
++                           capabilities=CAPABILITIES,
++                           access=effective_permissions(person),
+                            may_see_numbers=may_see_numbers)
+ 
+ 
+@@ -370,6 +374,49 @@ def save_user():
+     return redirect(url_for("admin.users"))
+ 
+ 
++@admin.route("/users/<int:uid>/access", methods=("POST",))
++@admin_required
++def save_access(uid):
++    """Change what one person is allowed to do, without changing their role.
++
++    Only differences from the role are stored, so someone left entirely on
++    their role's defaults keeps following those defaults if the defaults ever
++    change. An admin's boxes are fixed on, because an admin who removed their
++    own access to this screen could not put it back.
++    """
++    person = query("SELECT * FROM users WHERE id = ?", (uid,), one=True)
++    if person is None:
++        flash("That team member no longer exists.", "error")
++        return redirect(url_for("admin.users"))
++    if person["role"] == "admin":
++        flash("Admins already have every permission — there is nothing to "
++              "change here. Change their role first if you want to limit them.",
++              "error")
++        return redirect(url_for("admin.profile", uid=uid))
++
++    granted = set(request.form.getlist("cap"))
++    overrides, changed = {}, []
++    for key, spec in CAPABILITIES.items():
++        by_role = spec[2].get(person["role"], False)
++        wanted = key in granted
++        if wanted != by_role:
++            overrides[key] = wanted
++        if wanted != can(key, person):
++            changed.append(f"{spec[0]}: {'on' if wanted else 'off'}")
++
++    execute("UPDATE users SET permissions = ? WHERE id = ?",
++            (json.dumps(overrides) if overrides else None, uid))
++    log(g.user["id"], "Changed what a team member can do", "user", uid,
++        "; ".join(changed) or "no change")
++    if changed:
++        notify(uid, "An admin changed what you can do in the CRM",
++               url_for("admin.profile", uid=uid))
++        flash(f"Access updated for {person['name']}.", "ok")
++    else:
++        flash("Nothing changed.", "ok")
++    return redirect(url_for("admin.profile", uid=uid))
++
++
+ @admin.route("/users/<int:uid>/toggle", methods=("POST",))
+ @admin_required
+ def toggle_user(uid):
+@@ -602,7 +649,7 @@ def _csv(rows, headers, filename):
+ 
+ 
+ @admin.route("/export/workbook.xlsx")
+-@manager_required
++@requires("export")
+ def export_workbook():
+     """The full branded workbook: our listings, other listings, leads, deals."""
+     properties = query(
+@@ -636,7 +683,7 @@ def export_workbook():
+ 
+ 
+ @admin.route("/export/leads.csv")
+-@manager_required
++@requires("export")
+ def export_leads():
+     rows = query("SELECT l.ref, l.full_name, l.phone, l.email, l.source, l.status,"
+                  " l.budget, u.name AS agent, p.title AS property_of_interest,"
+@@ -649,7 +696,7 @@ def export_leads():
+ 
+ 
+ @admin.route("/export/properties.csv")
+-@manager_required
++@requires("export")
+ def export_properties():
+     rows = query("SELECT p.ref, p.title, p.address, p.building_no, p.floor_no,"
+                  " p.unit_no, p.extras, p.area,"
+@@ -667,7 +714,7 @@ def export_properties():
+ 
+ 
+ @admin.route("/export/deals.csv")
+-@manager_required
++@requires("export")
+ def export_deals():
+     rows = query("SELECT d.ref, d.deal_type, d.status, d.value, d.commission_pct,"
+                  " d.commission_amt, p.title AS property, l.full_name AS client,"
+@@ -681,7 +728,7 @@ def export_deals():
+ 
+ 
+ @admin.route("/export/owners.csv")
+-@manager_required
++@requires("export")
+ def export_owners():
+     rows = query("SELECT name, phone, email, company, notes, created_at FROM owners"
+                  " ORDER BY name")
+diff --git a/views_imports.py b/views_imports.py
+index 15ca965..f3161c6 100644
+--- a/views_imports.py
++++ b/views_imports.py
+@@ -14,8 +14,7 @@ from flask import (Blueprint, current_app, flash, g, redirect, render_template,
+                    request, url_for)
+ 
+ import importer
+-from auth import login_required
+-from auth import admin_required
++from auth import admin_required, login_required, requires
+ from db import (IMPORT_MODES, LISTING_TYPES, PROP_STATUS, PROP_TYPES, execute,
+                 log, next_ref, now, query)
+ 
+@@ -40,7 +39,7 @@ def _path(token):
+ 
+ 
+ @bp.route("/", methods=("GET", "POST"))
+-@login_required
++@requires("import")
+ def upload():
+     if request.method == "POST":
+         fs = request.files.get("workbook")
+@@ -65,7 +64,7 @@ def upload():
+ 
+ 
+ @bp.route("/review/<token>")
+-@login_required
++@requires("import")
+ def review(token):
+     path = _path(token)
+     if not path:
+@@ -127,7 +126,7 @@ def review(token):
+ 
+ 
+ @bp.route("/commit/<token>", methods=("POST",))
+-@login_required
++@requires("import")
+ def commit(token):
+     path = _path(token)
+     if not path:
+@@ -331,7 +330,7 @@ def commit(token):
+ 
+ 
+ @bp.route("/history")
+-@login_required
++@requires("import")
+ def history():
+     rows = query(
+         "SELECT i.*, u.name AS user_name, u.photo AS user_photo,"
+@@ -401,7 +400,7 @@ def undo(iid):
+ 
+ 
+ @bp.route("/discard/<token>", methods=("POST",))
+-@login_required
++@requires("import")
+ def discard(token):
+     path = _path(token)
+     if path:
+diff --git a/views_properties.py b/views_properties.py
+index 2d6542b..55f1f74 100644
+--- a/views_properties.py
++++ b/views_properties.py
+@@ -8,7 +8,7 @@ from flask import (Blueprint, current_app, flash, g, redirect, render_template,
+                    request, url_for)
+ from werkzeug.utils import secure_filename
+ 
+-from auth import (can_edit, can_publish, can_see_listing, is_admin,
++from auth import (can, can_edit, can_publish, can_see_listing, is_admin,
+                   login_required, published_only, sees_all)
+ from db import (LISTING_TYPES, PROP_STATUS, PROP_TYPES, STALE_DAYS, days_ago,
+                 execute, get_setting, log, next_ref, notify, now, paginate, query)
+@@ -643,8 +643,8 @@ def bulk():
+     blocked = len(rows) - len(allowed)
+ 
+     if action == "delete":
+-        if not is_admin():
+-            flash("Only admins can delete listings.", "error")
++        if not can("delete"):
++            flash("You don't have access to delete listings.", "error")
+             return redirect(back)
+         # a bulk delete is the easiest way to lose a lot at once
+         try:
+@@ -715,8 +715,8 @@ def bulk():
+ @bp.route("/<int:pid>/delete", methods=("POST",))
+ @login_required
+ def delete(pid):
+-    if not is_admin():
+-        flash("Only admins can delete listings.", "error")
++    if not can("delete"):
++        flash("You don't have access to delete listings.", "error")
+         return redirect(url_for("properties.detail", pid=pid))
+     p = query("SELECT title FROM properties WHERE id = ?", (pid,), one=True)
+     execute("DELETE FROM properties WHERE id = ?", (pid,))
+-- 
+2.43.0
+

@@ -49,7 +49,7 @@
     </header>
     <div class="col-body">
       {% for l in columns[stage] %}
-        <article class="lead-card" data-id="{{ l.id }}">
+        <article class="lead-card" data-id="{{ l.id }}" data-name="{{ l.full_name }}">
           <div class="row">
             <b>{{ l.full_name }}</b>
             <span class="mono faint">{{ l.updated_at | ago }}</span>
@@ -80,4 +80,36 @@
   </section>
   {% endfor %}
 </div>
+
+<div class="modal-back" id="lost-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>{{ t('Why was this client lost?') }} <span id="board-lost-who" class="faint"></span></h3>
+      <button class="btn btn-quiet btn-sm" onclick="closeModal('lost-modal')">{{ t('Close') }}</button>
+    </div>
+    <form method="post" id="board-lost-form">
+      <input type="hidden" name="stage" value="Lost">
+      <input type="hidden" name="next" value="{{ request.full_path }}">
+      <div class="modal-body">
+        <div class="field"><label>{{ t('Reason') }}</label>
+          <select name="lost_reason" required>
+            <option value="">{{ t('Choose a reason') }}</option>
+            {% for key, label in lost_reasons %}
+              <option value="{{ key }}">{{ t(label) }}</option>
+            {% endfor %}
+          </select></div>
+        <div class="field"><label>{{ t('What happened?') }}</label>
+          <textarea name="lost_note" style="min-height:120px" required minlength="10"
+                    placeholder="{{ t('e.g. Wanted 8,000 for a 2-bed in The Pearl. Nothing in our stock at that price.') }}"></textarea></div>
+        <p class="small faint" style="margin:0">
+          {{ t('This is shown on the agent report, so write it for someone who does not know the client.') }}</p>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-quiet" type="button" onclick="closeModal('lost-modal')">{{ t('Cancel') }}</button>
+        <button class="btn btn-dark" type="submit">{{ t('Mark as lost') }}</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 {% endblock %}

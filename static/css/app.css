@@ -656,6 +656,36 @@ main { padding: 26px; flex: 1; max-width: 1480px; width: 100%; }
 .tag-stage-won         { background: rgba(63,125,92,.11); color: var(--ok); border-color: rgba(63,125,92,.28); }
 .tag-stage-lost        { background: rgba(138,58,58,.10); color: var(--bad); border-color: rgba(138,58,58,.26); }
 
+/* ---- a recorded loss
+   Deliberately quiet rather than alarming: this is a normal part of the work
+   and the point is that the reason is legible, not that it shouts. */
+.lost-box {
+  border: 1px solid var(--line);
+  border-inline-start: 3px solid rgba(138,58,58,.5);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  padding: 11px 13px;
+}
+
+.lost-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.lost-reason {
+  font-family: var(--ui);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--bad);
+}
+
+[dir="rtl"] .lost-reason { letter-spacing: 0; text-transform: none; font-size: 13px; }
+
 /* ---------------------------------------------------------------- table */
 .table { width: 100%; border-collapse: collapse; }
 

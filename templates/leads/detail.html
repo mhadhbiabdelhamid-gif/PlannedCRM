@@ -93,13 +93,28 @@
       <div class="card-body">
         <div class="chip-row">
           {% for s in stages %}
-            <form method="post" action="{{ url_for('leads.move_stage', lid=l.id) }}">
-              <input type="hidden" name="stage" value="{{ s }}">
-              <button class="chip {{ 'on' if l.status == s }}" type="submit"
+            {% if s == 'Lost' %}
+              {# Lost is the one stage that cannot be set with a single click:
+                 it has to carry a reason, so it opens the form below. #}
+              <button class="chip {{ 'on' if l.status == s }}" type="button"
+                      onclick="openModal('lost-modal')"
                       style="cursor:pointer;font-family:inherit">{{ t(s) }}</button>
-            </form>
+            {% else %}
+              <form method="post" action="{{ url_for('leads.move_stage', lid=l.id) }}">
+                <input type="hidden" name="stage" value="{{ s }}">
+                <button class="chip {{ 'on' if l.status == s }}" type="submit"
+                        style="cursor:pointer;font-family:inherit">{{ t(s) }}</button>
+              </form>
+            {% endif %}
           {% endfor %}
         </div>
+        {% if l.status == 'Lost' and l.lost_reason %}
+        <div class="lost-box" style="margin-top:14px">
+          <div class="eyebrow">{{ t('Why this client was lost') }}</div>
+          <div class="lost-reason">{{ t(lost_label) }}</div>
+          <p class="small" style="margin:6px 0 0">{{ l.lost_note }}</p>
+        </div>
+        {% endif %}
       </div>
     </div>
 
@@ -247,6 +262,36 @@
         {% endfor %}
       </div>
     </div>
+  </div>
+</div>
+
+<div class="modal-back" id="lost-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>{{ t('Why was this client lost?') }}</h3>
+      <button class="btn btn-quiet btn-sm" onclick="closeModal('lost-modal')">{{ t('Close') }}</button>
+    </div>
+    <form method="post" action="{{ url_for('leads.move_stage', lid=l.id) }}">
+      <input type="hidden" name="stage" value="Lost">
+      <div class="modal-body">
+        <div class="field"><label>{{ t('Reason') }}</label>
+          <select name="lost_reason" required>
+            <option value="">{{ t('Choose a reason') }}</option>
+            {% for key, label in lost_reasons %}
+              <option value="{{ key }}" {{ 'selected' if l.lost_reason == key }}>{{ t(label) }}</option>
+            {% endfor %}
+          </select></div>
+        <div class="field"><label>{{ t('What happened?') }}</label>
+          <textarea name="lost_note" style="min-height:120px" required minlength="10"
+                    placeholder="{{ t('e.g. Wanted 8,000 for a 2-bed in The Pearl. Nothing in our stock at that price.') }}">{{ l.lost_note or '' }}</textarea></div>
+        <p class="small faint" style="margin:0">
+          {{ t('This is shown on the agent report, so write it for someone who does not know the client.') }}</p>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-quiet" type="button" onclick="closeModal('lost-modal')">{{ t('Cancel') }}</button>
+        <button class="btn btn-dark" type="submit">{{ t('Mark as lost') }}</button>
+      </div>
+    </form>
   </div>
 </div>
 

@@ -1,0 +1,537 @@
+From 70aff887b04e93b2d46f31847d86d4824813dacd Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 18 Aug 2026 08:18:09 +0000
+Subject: [PATCH] Harden the deployment: schema, session key, off-site backup
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Three gaps that only showed up once this ran on a hosted server rather
+than the office PC.
+
+migrate_deals.py had to be run by hand and never was on Render, so
+every Deals page was returning a 500 on "no such table: deal_agents".
+Its work now lives in db.py alongside the other migrations and applies
+itself on the next boot: the four commission columns, the deal_agents
+table, and an idempotent backfill that describes existing deals and
+makes each one's agent its sole 100% participant. No historic
+commission amount is recalculated. The standalone script still works
+for anyone who prefers to run it.
+
+SECRET_KEY fell back to a constant published in this repo, which makes
+every session cookie forgeable — a signed cookie naming any user id is
+enough to be that user. It now takes the environment variable when set
+and otherwise generates a key and keeps it beside the database. The
+file is created with O_EXCL because the server runs several workers and
+they must agree on one key, or cookies signed by one are rejected by
+the next.
+
+Backups all landed on the same disk as the database they protect, so
+losing the server lost both. Settings gains an address to email a
+weekly copy to, claimed atomically so only one worker sends it, with a
+six-hour retry if the mail fails rather than a silent week's wait.
+
+Two things found along the way: several workers booting an empty
+database all inserted the first admin and all but one died on the
+unique constraint, and that admin's password fell back to a fixed
+string documented in the README. It is now generated and printed once
+unless ADMIN_PASSWORD is set.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01U3sgXu7uGRzpkyQXbzW1dC
+---
+ README.md                     | 12 +++--
+ app.py                        | 88 ++++++++++++++++++++++++++++---
+ backups.py                    | 97 ++++++++++++++++++++++++++++++++++-
+ db.py                         | 48 +++++++++++++++++
+ mailer.py                     | 13 ++++-
+ templates/admin/settings.html | 35 +++++++++++++
+ views_admin.py                | 31 +++++++++++
+ 7 files changed, 312 insertions(+), 12 deletions(-)
+
+diff --git a/README.md b/README.md
+index 68114de..e28977f 100644
+--- a/README.md
++++ b/README.md
+@@ -20,10 +20,16 @@ First run creates the admin account and prints it in the terminal:
+ 
+ | | |
+ |---|---|
+-| Email | `admin@plannedrealestate.qa` |
+-| Password | `Planned@2026` |
++| Email | `admin@plannedrealestate.qa` (or `ADMIN_EMAIL`) |
++| Password | `ADMIN_PASSWORD`, or a random one printed once at start-up |
+ 
+-**Change that password immediately** under My account.
++If `ADMIN_PASSWORD` isn't set, the password is generated and shown **only** in
++that first terminal line — copy it before the window scrolls, or set
++`ADMIN_PASSWORD` before starting. It used to fall back to a fixed password
++written in this file, which meant every deployed copy shipped with publicly
++known admin credentials.
++
++**Change it immediately** under My account.
+ 
+ To try the app with realistic Doha data first:
+ 
+diff --git a/app.py b/app.py
+index 2fd77bd..95e2d01 100644
+--- a/app.py
++++ b/app.py
+@@ -4,6 +4,8 @@ Run locally:   python app.py
+ Run in prod:   gunicorn "app:create_app()"
+ """
+ import os
++import secrets
++import sqlite3
+ import uuid
+ from datetime import timedelta
+ 
+@@ -31,6 +33,66 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+ 
+ LOGO_EXTS = ("png", "jpg", "jpeg", "webp", "svg", "gif")
+ 
++# The value this used to fall back to. Anyone who knows it can forge a signed
++# session cookie and sign in as an admin, so it is never used as a real key.
++PLACEHOLDER_KEY = "change-me-before-you-deploy"
++
++
++def resolve_secret_key(data_dir):
++    """The key that signs session cookies.
++
++    SECRET_KEY from the environment wins. Failing that, a key kept beside the
++    database is used, and generated the first time if it isn't there yet.
++
++    The point is that there is no path back to a known constant: forgetting to
++    set SECRET_KEY on a deployed copy used to leave every session cookie
++    forgeable, and nothing on screen said so.
++    """
++    from_env = (os.environ.get("SECRET_KEY") or "").strip()
++    if from_env and from_env != PLACEHOLDER_KEY:
++        return from_env
++
++    key_path = os.path.join(data_dir, "secret_key")
++    try:
++        with open(key_path, "r", encoding="utf-8") as fh:
++            stored = fh.read().strip()
++        if stored:
++            return stored
++    except OSError:
++        pass
++
++    generated = secrets.token_hex(32)
++    try:
++        os.makedirs(data_dir, exist_ok=True)
++        # Created exclusively: the server runs several workers, and each one
++        # calls this at start-up. Without O_EXCL they would each write their
++        # own key, and a cookie signed by one worker would be rejected by the
++        # next — an endless bounce back to the sign-in page.
++        fd = os.open(key_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
++        with os.fdopen(fd, "w") as fh:
++            fh.write(generated)
++        print(f"  SECRET_KEY was not set, so one was generated and saved to "
++              f"{key_path}.\n"
++              f"  Everyone will need to sign in again. Set SECRET_KEY in the "
++              f"environment to control it yourself.")
++        return generated
++    except FileExistsError:
++        # Another worker got there first; its key is the one that counts.
++        try:
++            with open(key_path, "r", encoding="utf-8") as fh:
++                stored = fh.read().strip()
++            if stored:
++                return stored
++        except OSError:
++            pass
++    except OSError as exc:
++        # A read-only disk still must not fall back to a shared constant. A
++        # key that lasts only until restart costs convenience, not safety.
++        print(f"  SECRET_KEY was not set and could not be saved ({exc}). "
++              f"Using a temporary key — everyone will be signed out whenever "
++              f"the server restarts.")
++    return generated
++
+ 
+ def find_logo():
+     """Look for logo.<anything sensible>, case-insensitively.
+@@ -52,10 +114,11 @@ def find_logo():
+ 
+ def create_app():
+     app = Flask(__name__, instance_relative_config=True)
++    database = os.environ.get("DATABASE_PATH",
++                              os.path.join(BASE_DIR, "instance", "crm.sqlite3"))
+     app.config.from_mapping(
+-        SECRET_KEY=os.environ.get("SECRET_KEY", "change-me-before-you-deploy"),
+-        DATABASE=os.environ.get("DATABASE_PATH",
+-                                os.path.join(BASE_DIR, "instance", "crm.sqlite3")),
++        SECRET_KEY=resolve_secret_key(os.path.dirname(database)),
++        DATABASE=database,
+         UPLOAD_FOLDER=os.environ.get("UPLOAD_FOLDER",
+                                      os.path.join(BASE_DIR, "instance", "uploads")),
+         MAX_CONTENT_LENGTH=25 * 1024 * 1024,       # 25 MB per upload
+@@ -279,9 +342,22 @@ def create_app():
+     with app.app_context():
+         if query("SELECT COUNT(*) c FROM users", one=True)["c"] == 0:
+             email = os.environ.get("ADMIN_EMAIL", "admin@plannedrealestate.qa")
+-            pw = os.environ.get("ADMIN_PASSWORD", "Planned@2026")
+-            auth.create_user("Administrator", email, pw, "admin")
+-            print(f"  Created first admin: {email} / {pw}  (change it after signing in)")
++            pw = os.environ.get("ADMIN_PASSWORD", "")
++            fallback = not pw
++            pw = pw or secrets.token_urlsafe(12)
++            try:
++                auth.create_user("Administrator", email, pw, "admin")
++            except sqlite3.IntegrityError:
++                # Several workers start together and all see an empty table.
++                # Whichever one got there first has made the account; the rest
++                # would otherwise die here and take the server down with them.
++                pass
++            else:
++                print(f"  Created first admin: {email} / {pw}")
++                if fallback:
++                    print("  That password was generated and is shown only "
++                          "here. Set ADMIN_PASSWORD in the environment, or "
++                          "sign in and change it now.")
+ 
+     return app
+ 
+diff --git a/backups.py b/backups.py
+index 7eb0471..fee4088 100644
+--- a/backups.py
++++ b/backups.py
+@@ -15,10 +15,13 @@ import sqlite3
+ import threading
+ import time
+ import zipfile
+-from datetime import datetime
++from datetime import datetime, timedelta
+ 
+ KEEP = int(os.environ.get("BACKUP_KEEP", "14"))
+ INTERVAL_HOURS = int(os.environ.get("BACKUP_INTERVAL_HOURS", "24"))
++OFFSITE_HOURS = int(os.environ.get("BACKUP_OFFSITE_INTERVAL_HOURS", "168"))
++# Most providers reject a message larger than about 25 MB.
++OFFSITE_MAX_MB = float(os.environ.get("BACKUP_OFFSITE_MAX_MB", "20"))
+ 
+ 
+ def default_folder(app):
+@@ -181,6 +184,90 @@ def build_archive(app, include_uploads=True):
+     return buf
+ 
+ 
++def send_offsite(app):
++    """Email a copy of the database somewhere that isn't this server.
++
++    Every other backup in this file lands on the same disk as the database it
++    is protecting, which is no help at all if that disk is what goes. Set
++    "Email a weekly copy to" in Settings, with the mail account already
++    configured, and a zip leaves the building once a week.
++
++    Returns (ok, message). Never raises.
++    """
++    from db import get_setting, set_setting
++    import mailer
++
++    to = (get_setting("backup_email", "") or "").strip()
++    if not to:
++        return False, "No off-site address set."
++    if not mailer.is_configured():
++        return False, "Email hasn't been set up, so no copy could be sent."
++
++    # The database alone: uploaded photos and documents make the archive far
++    # too large to email, and they are the part that can be gathered again.
++    archive = build_archive(app, include_uploads=False)
++    payload = archive.getvalue()
++    size_mb = len(payload) / (1024 * 1024)
++    if size_mb > OFFSITE_MAX_MB:
++        return False, (f"The backup is {size_mb:.1f} MB, over the "
++                       f"{OFFSITE_MAX_MB:.0f} MB email limit. Download it from "
++                       "Settings instead.")
++
++    stamp = datetime.now().strftime("%Y-%m-%d")
++    company = get_setting("company_name", "Planned Real Estate")
++    ok, detail = mailer.send(
++        to,
++        f"{company} — CRM backup {stamp}",
++        (f"Attached is the weekly copy of the {company} CRM database, taken "
++         f"{datetime.now().strftime('%d %B %Y at %H:%M')}.\n\n"
++         "Keep it somewhere that isn't the server. Photos and documents are "
++         "not included — only the records themselves.\n\n"
++         "To restore, see READ-ME-FIRST.txt inside the zip.\n"),
++        from_name=company,
++        attachments=[(f"crm-backup-{stamp}.zip", payload)])
++
++    if ok:
++        set_setting("backup_offsite_at", _stamp())
++        return True, f"Backup emailed to {to} ({size_mb:.1f} MB)."
++    return False, detail
++
++
++def _stamp(when=None):
++    return (when or datetime.now()).strftime("%Y-%m-%d %H:%M:%S")
++
++
++def _claim_offsite(app):
++    """Take the weekly slot, or report that someone else already has it.
++
++    The server runs several workers and each starts its own scheduler, so a
++    plain "is it due yet" check has them all deciding yes at the same instant
++    and sending the same backup several times over. The claim is a single
++    conditional write, which SQLite serialises, so exactly one worker wins.
++    """
++    from db import get_db
++    cutoff = _stamp(datetime.now() - timedelta(hours=OFFSITE_HOURS))
++    db = get_db()
++    cur = db.execute(
++        "INSERT INTO settings (key, value) VALUES ('backup_offsite_at', ?)"
++        " ON CONFLICT(key) DO UPDATE SET value = excluded.value"
++        "   WHERE settings.value IS NULL OR settings.value = ''"
++        "      OR settings.value < ?",
++        (_stamp(), cutoff))
++    db.commit()
++    claimed = cur.rowcount > 0
++    cur.close()
++    return claimed
++
++
++def _release_offsite(retry_hours=6):
++    """Hand the slot back after a failed send, dated so it retries before the
++    week is out rather than immediately — a misconfigured mail account should
++    not fill the log with the same complaint every half hour."""
++    from db import set_setting
++    set_setting("backup_offsite_at",
++                _stamp(datetime.now() - timedelta(hours=OFFSITE_HOURS - retry_hours)))
++
++
+ def start_scheduler(app):
+     """Take a backup every INTERVAL_HOURS while the CRM is running.
+ 
+@@ -197,6 +284,14 @@ def start_scheduler(app):
+                         path = make_backup(app, "auto")
+                         if path:
+                             print(f"  Backup saved: {path}")
++                    if _claim_offsite(app):
++                        ok, detail = send_offsite(app)
++                        if not ok:
++                            _release_offsite()
++                        # Only worth a line in the log when it was actually
++                        # meant to happen; an unset address is not a fault.
++                        if ok or "No off-site address" not in detail:
++                            print(f"  Off-site backup: {detail}")
+             except Exception as exc:        # never let this kill the CRM
+                 print(f"  Backup failed: {exc}")
+             time.sleep(1800)                # re-check every 30 minutes
+diff --git a/db.py b/db.py
+index ec0b32a..36c6f33 100644
+--- a/db.py
++++ b/db.py
+@@ -147,6 +147,19 @@ CREATE TABLE IF NOT EXISTS deals (
+     updated_at    TEXT NOT NULL
+ );
+ 
++-- Who shares a deal's commission. One row per participating agent.
++-- Defined without foreign keys to match what migrate_deals.py created on
++-- machines that ran it by hand, so both end up with the same schema.
++CREATE TABLE IF NOT EXISTS deal_agents (
++    id        INTEGER PRIMARY KEY AUTOINCREMENT,
++    deal_id   INTEGER NOT NULL,
++    user_id   INTEGER NOT NULL,
++    role      TEXT    NOT NULL DEFAULT 'lead',
++    share_pct REAL    NOT NULL DEFAULT 100,
++    amount    REAL,
++    UNIQUE (deal_id, user_id)
++);
++
+ CREATE TABLE IF NOT EXISTS comments (
+     id          INTEGER PRIMARY KEY AUTOINCREMENT,
+     entity_type TEXT NOT NULL,      -- property | lead
+@@ -213,6 +226,7 @@ CREATE INDEX IF NOT EXISTS idx_import_when ON imports(created_at);
+ CREATE INDEX IF NOT EXISTS idx_lead_agent  ON leads(agent_id);
+ CREATE INDEX IF NOT EXISTS idx_comment_ent ON comments(entity_type, entity_id);
+ CREATE INDEX IF NOT EXISTS idx_notif_user  ON notifications(user_id, is_read);
++CREATE INDEX IF NOT EXISTS idx_deal_agents_user ON deal_agents(user_id);
+ """
+ 
+ LEAD_STAGES = ["New", "Contacted", "Qualified", "Viewing", "Offer",
+@@ -341,6 +355,13 @@ MIGRATIONS = [
+     ("properties", "floor_no", "TEXT"),
+     ("properties", "extras", "TEXT"),
+     ("properties", "last_verified", "TEXT"),
++    # Flexible commission — these were previously applied by running
++    # migrate_deals.py by hand, which is easy to forget on a deployed copy and
++    # leaves every Deals page erroring on the missing columns.
++    ("deals", "term_months", "INTEGER"),
++    ("deals", "free_months", "REAL"),
++    ("deals", "commission_basis", "TEXT"),
++    ("deals", "commission_on", "TEXT"),
+ ]
+ 
+ # How long a listing can go without someone confirming it's still on the
+@@ -365,6 +386,30 @@ DEPARTMENTS = ["Sales", "Leasing", "Property Management", "Administration",
+                "Marketing", "Finance"]
+ 
+ 
++def backfill_deals(con):
++    """Give older deals the commission description the newer code expects.
++
++    Written so running it twice changes nothing: COALESCE only fills columns
++    that are still empty, and the split rows are inserted only where none
++    exist. No existing commission amount is recalculated — historic deals keep
++    exactly the figure they were recorded with.
++    """
++    con.execute(
++        "UPDATE deals SET term_months = COALESCE(term_months, 12),"
++        " free_months = COALESCE(free_months, 0),"
++        " commission_on = COALESCE(commission_on, 'contract'),"
++        " commission_basis = COALESCE(commission_basis,"
++        "   CASE WHEN lower(COALESCE(deal_type,'')) LIKE 'rent%'"
++        "        THEN 'monthly_rent' ELSE 'sale_price' END)")
++
++    # Each existing deal's agent becomes its sole 100% participant.
++    con.execute(
++        "INSERT INTO deal_agents (deal_id, user_id, role, share_pct, amount)"
++        " SELECT d.id, d.agent_id, 'lead', 100, d.commission_amt FROM deals d"
++        " WHERE d.agent_id IS NOT NULL"
++        "   AND NOT EXISTS (SELECT 1 FROM deal_agents da WHERE da.deal_id = d.id)")
++
++
+ def init_db(app):
+     """Tables, then migrations, then indexes — in that order.
+ 
+@@ -383,6 +428,9 @@ def init_db(app):
+ 
+     con.executescript(INDEXES)
+     con.commit()
++
++    backfill_deals(con)
++    con.commit()
+     con.close()
+ 
+ 
+diff --git a/mailer.py b/mailer.py
+index a504f73..cec9dc4 100644
+--- a/mailer.py
++++ b/mailer.py
+@@ -73,8 +73,13 @@ def _connect(s):
+     return server
+ 
+ 
+-def send(to, subject, body, from_name=None, reply_to=None, cc=None):
+-    """Send one message. Returns (ok, message) — never raises at the caller."""
++def send(to, subject, body, from_name=None, reply_to=None, cc=None,
++         attachments=None):
++    """Send one message. Returns (ok, message) — never raises at the caller.
++
++    attachments: list of (filename, bytes) pairs, used for the off-site
++    backup copy. Mail providers commonly cap a message at around 25 MB.
++    """
+     s = settings()
+     if not is_configured():
+         return False, ("Email hasn't been set up yet. An admin can add the "
+@@ -93,6 +98,10 @@ def send(to, subject, body, from_name=None, reply_to=None, cc=None):
+         msg["Reply-To"] = reply_to.strip()
+     msg.set_content(body or "")
+ 
++    for filename, payload in (attachments or []):
++        msg.add_attachment(payload, maintype="application",
++                           subtype="octet-stream", filename=filename)
++
+     recipients = [to.strip()] + ([cc.strip()] if cc and valid_address(cc) else [])
+ 
+     try:
+diff --git a/templates/admin/settings.html b/templates/admin/settings.html
+index 10e75ea..d332f21 100644
+--- a/templates/admin/settings.html
++++ b/templates/admin/settings.html
+@@ -136,6 +136,41 @@
+           </div>
+           <button class="btn" type="submit">Save folder and test it</button>
+         </form>
++
++        <div class="hairline"></div>
++        <div class="eyebrow" style="margin-bottom:6px">Email a weekly copy</div>
++        <p class="small muted" style="margin:0 0 10px">
++          On a hosted server there is no OneDrive folder to point at, and the daily
++          copies sit on the same disk as the database itself — so losing the server
++          loses both. This emails the database out once a week, which is the only
++          copy that survives that. Photos and documents aren't included; they'd be
++          far too large to send.
++        </p>
++        {% if not mail_ready %}
++          <p class="small" style="margin:0 0 10px;color:var(--warn)">
++            Set the mail account up under <a href="#email">Email</a> first — nothing
++            can be sent until that works.
++          </p>
++        {% endif %}
++        <form method="post" action="{{ url_for('admin.backup_offsite') }}">
++          <div class="field">
++            <input type="email" name="backup_email" value="{{ backup_email }}"
++                   placeholder="someone@plannedrealestate.qa">
++            <span class="small faint">
++              {% if backup_offsite_at %}
++                Last copy sent {{ backup_offsite_at }}.
++              {% else %}
++                No copy has been emailed yet.
++              {% endif %}
++              Leave empty to switch this off.
++            </span>
++          </div>
++          <div class="inline">
++            <button class="btn" type="submit">Save address</button>
++            <button class="btn btn-gold" type="submit" name="send_now" value="1">
++              Save and send one now</button>
++          </div>
++        </form>
+         <div class="hairline"></div>
+ 
+         {% if backup_list %}
+diff --git a/views_admin.py b/views_admin.py
+index 27754cb..3a4193c 100644
+--- a/views_admin.py
++++ b/views_admin.py
+@@ -414,6 +414,8 @@ def settings():
+                            mail_ready=mailer.is_configured(),
+                            backup_keep=backups.KEEP,
+                            backup_custom=get_setting('backup_folder', ''),
++                           backup_email=get_setting('backup_email', ''),
++                           backup_offsite_at=get_setting('backup_offsite_at', ''),
+                            backup_default=backups.default_folder(current_app))
+ 
+ 
+@@ -476,6 +478,35 @@ def backup_folder_save():
+     return redirect(url_for("admin.settings") + "#backups")
+ 
+ 
++@admin.route("/backup/offsite", methods=("POST",))
++@admin_required
++def backup_offsite():
++    """Set the address a weekly copy goes to, and optionally send one now.
++
++    Every other backup sits on the same disk as the database it protects, so
++    this is the only one that survives losing the server itself.
++    """
++    to = request.form.get("backup_email", "").strip()
++    if to and not mailer.valid_address(to):
++        flash(f"{to} doesn't look like an email address.", "error")
++        return redirect(url_for("admin.settings") + "#backups")
++
++    set_setting("backup_email", to)
++    if not to:
++        log(g.user["id"], "Turned off the off-site backup")
++        flash("Weekly off-site copies are off. Nothing now leaves the server "
++              "on its own.", "error")
++        return redirect(url_for("admin.settings") + "#backups")
++
++    log(g.user["id"], "Set the off-site backup address", detail=to)
++    if request.form.get("send_now"):
++        ok, message = backups.send_offsite(current_app)
++        flash(message, "ok" if ok else "error")
++    else:
++        flash(f"A copy of the database will be emailed to {to} once a week.", "ok")
++    return redirect(url_for("admin.settings") + "#backups")
++
++
+ @admin.route("/backup/now", methods=("POST",))
+ @admin_required
+ def backup_now():
+-- 
+2.43.0
+

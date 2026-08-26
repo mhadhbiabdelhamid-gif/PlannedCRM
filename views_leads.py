@@ -5,9 +5,9 @@ from flask import (Blueprint, flash, g, jsonify, redirect, render_template,
 from auth import can_edit, is_admin, login_required, sees_all
 from datetime import timedelta
 
-from db import (CLOSED_STAGES, LEAD_SOURCES, LEAD_STAGES, execute, local_now,
-                local_today, log, next_ref, notify, now, paginate, query,
-                to_utc, utc_day_bounds)
+from db import (CLOSED_STAGES, LEAD_SOURCES, LEAD_STAGES, LOST_REASONS,
+                LOST_REASON_LABELS, execute, local_now, local_today, log,
+                next_ref, notify, now, paginate, query, to_utc, utc_day_bounds)
 
 bp = Blueprint("leads", __name__, url_prefix="/leads")
 
@@ -63,6 +63,7 @@ def board():
                  " WHERE 1=1" + where + " ORDER BY l.updated_at DESC", args)
     columns = {s: [r for r in rows if r["status"] == s] for s in LEAD_STAGES}
     return render_template("leads/board.html", columns=columns, stages=LEAD_STAGES,
+                           lost_reasons=LOST_REASONS,
                            mine=mine, source=source, sources=LEAD_SOURCES,
                            total=len(rows), due=due,
                            day_start=utc_day_bounds(local_today())[0],
@@ -129,6 +130,9 @@ def detail(lid):
     nf = l["next_follow_up"]
     return render_template("leads/detail.html", l=l, comments=comments, trail=trail,
                            viewings=viewings, props=props, stages=LEAD_STAGES,
+                           lost_reasons=LOST_REASONS,
+                           lost_label=LOST_REASON_LABELS.get(
+                               l["lost_reason"] if "lost_reason" in l.keys() else None),
                            editable=can_edit(l),
                            overdue=bool(nf and nf < day_start),
                            due_today=bool(nf and day_start <= nf < day_end))
@@ -156,6 +160,14 @@ def form(lid=None):
                 to_utc(d.get("next_follow_up", "")) or None)
         if not vals[0]:
             flash("A lead needs a name.", "error")
+            return redirect(request.url)
+
+        # Lost is a workflow decision that has to carry a reason, and this form
+        # has nowhere to ask for one — so it is not a way in. Anyone already
+        # marked lost keeps that status when their details are edited.
+        if vals[4] == "Lost" and (l is None or l["status"] != "Lost"):
+            flash("To mark a client lost, open their page and use the Lost "
+                  "button — it asks for the reason.", "error")
             return redirect(request.url)
 
         if l is None:
@@ -204,15 +216,58 @@ def move_stage(lid):
         return jsonify(ok=False, error="Lead not found"), 404
     if not can_edit(l):
         return jsonify(ok=False, error="That lead belongs to another agent"), 403
+    # Losing a client is the one move that has to be explained. Without a
+    # reason and a note the record says only that someone gave up, which is
+    # exactly the information the office needs and never has.
+    reason = note = None
+    if stage == "Lost":
+        data = request.json or request.form
+        reason = (data.get("lost_reason") or "").strip()
+        note = (data.get("lost_note") or "").strip()
+        problem = None
+        if reason not in LOST_REASON_LABELS:
+            problem = "Choose a reason before marking this client lost."
+        elif len(note) < 10:
+            problem = ("Write a line about what happened — at least a few "
+                       "words, so the reason is useful later.")
+        if problem:
+            if request.is_json:
+                return jsonify(ok=False, error=problem), 400
+            flash(problem, "error")
+            return redirect(url_for("leads.detail", lid=lid))
+
     if l["status"] != stage:
-        execute("UPDATE leads SET status = ?, updated_at = ? WHERE id = ?",
-                (stage, now(), lid))
-        log(g.user["id"], "Moved lead", "lead", lid, f"{l['status']} → {stage}")
+        if stage == "Lost":
+            execute("UPDATE leads SET status = ?, lost_reason = ?, lost_note = ?,"
+                    " lost_at = ?, updated_at = ? WHERE id = ?",
+                    (stage, reason, note, now(), now(), lid))
+            # Also written into the client's own timeline, so someone reading
+            # the file sees the ending in place rather than only in a report.
+            execute("INSERT INTO comments (entity_type, entity_id, user_id, body,"
+                    " created_at) VALUES ('lead',?,?,?,?)",
+                    (lid, g.user["id"],
+                     f"{LOST_REASON_LABELS[reason]} — {note}", now()))
+            log(g.user["id"], "Moved lead", "lead", lid,
+                f"{l['status']} → Lost ({LOST_REASON_LABELS[reason]})")
+        else:
+            # Coming back out of Lost: the old reason no longer describes this
+            # client, and leaving it behind would show a stale cause on a live
+            # lead the next time they are lost.
+            execute("UPDATE leads SET status = ?, lost_reason = NULL,"
+                    " lost_note = NULL, lost_at = NULL, updated_at = ?"
+                    " WHERE id = ?", (stage, now(), lid))
+            log(g.user["id"], "Moved lead", "lead", lid, f"{l['status']} → {stage}")
         if l["agent_id"] and l["agent_id"] != g.user["id"]:
             notify(l["agent_id"], f"{l['full_name']} moved to {stage}",
                    url_for("leads.detail", lid=lid))
+
     if request.is_json:
         return jsonify(ok=True, stage=stage)
+    # The board sends people back to the board; everywhere else lands on the
+    # client's own page.
+    nxt = request.form.get("next", "")
+    if nxt.startswith("/"):
+        return redirect(nxt)
     return redirect(url_for("leads.detail", lid=lid))
 
 

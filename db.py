@@ -240,6 +240,20 @@ LISTING_TYPES = ["Sale", "Rent"]
 # Whether a listing is published. Separate from status, which is about the
 # market (a listing waiting for approval still has a status of Available).
 APPROVAL_STATES = ["pending", "approved", "rejected"]
+# Why a client was lost. Recorded as a code so losses stay countable across the
+# team ("six on price this month"); the agent's own words go in leads.lost_note
+# beside it, because the code alone never explains the particular client.
+LOST_REASONS = [
+    ("price",        "Price too high"),
+    ("competitor",   "Found somewhere else"),
+    ("timing",       "Changed their mind / timing"),
+    ("unresponsive", "Not serious / unreachable"),
+    ("unavailable",  "Property no longer available"),
+    ("requirements", "Requirements we can't match"),
+    ("other",        "Other"),
+]
+LOST_REASON_LABELS = dict(LOST_REASONS)
+
 LEAD_SOURCES = ["Walk-in", "Website", "Property Finder", "Referral",
                 "Instagram", "WhatsApp", "Phone", "Other"]
 PARTNER_TYPES = ["Developer", "Legal", "Maintenance", "Bank", "Marketing", "Other"]
@@ -392,6 +406,12 @@ MIGRATIONS = [
     ("deal_agents", "paid_at", "TEXT"),
     ("deal_agents", "payout_note", "TEXT"),
     ("deal_agents", "recorded_by", "INTEGER"),
+    # A lead cannot be closed as Lost without a reason and a written note.
+    # Kept on the lead itself rather than only as a comment, so the report can
+    # group losses by cause instead of re-reading everyone's prose.
+    ("leads", "lost_reason", "TEXT"),
+    ("leads", "lost_note", "TEXT"),
+    ("leads", "lost_at", "TEXT"),
 ]
 
 # How long a listing can go without someone confirming it's still on the

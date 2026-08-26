@@ -100,7 +100,10 @@
             {% if l.prop_ref and l.prop_title %}<div class="small muted">{{ l.prop_title }}</div>{% endif %}
           {% else %}<span class="faint">—</span>{% endif %}
         </td>
-        <td><span class="tag tag-stage-{{ l.status | lower }}">{{ t(l.status) }}</span></td>
+        <td><span class="tag tag-stage-{{ l.status | lower }}">{{ t(l.status) }}</span>
+          {% if l.status == 'Lost' and l.lost_reason %}
+            <div class="small muted" style="margin-top:5px">{{ t(lost_labels[l.lost_reason]) }}</div>
+          {% endif %}</td>
         <td style="min-width:220px">
           {% if row.timeline %}
           <details>
@@ -182,6 +185,45 @@
     </tbody></table></div>
   {% else %}
     <div class="empty"><span class="mark">◇</span>{{ t('No deals closed in this period.') }}</div>
+  {% endif %}
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div class="card-head"><h3>{{ t('Lost clients') }}</h3>
+    <span class="mono faint">{{ report.lost.count }}</span></div>
+  {% if report.lost.rows %}
+  {% if report.lost.by_reason %}
+  <div class="card-body" style="padding-bottom:0">
+    <div class="chip-row">
+      {% for label, n in report.lost.by_reason %}
+        <span class="chip">{{ t(label) }} <b>{{ n }}</b></span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+  <div class="card-body stack" style="gap:14px">
+    {% for row in report.lost.rows %}
+      {% set l = row.lead %}
+      <div class="lost-box">
+        <div class="lost-head">
+          <a href="{{ url_for('leads.detail', lid=l.id) }}"><b>{{ l.full_name }}</b></a>
+          {% if l.property_id %}
+            <a class="small muted" href="{{ url_for('properties.detail', pid=l.property_id) }}">{{ l.prop_ref or l.prop_title }}</a>
+          {% endif %}
+          <span class="small faint" style="margin-inline-start:auto">{{ row.at | ago }}</span>
+        </div>
+        {% if row.label %}
+          <div class="lost-reason">{{ t(row.label) }}</div>
+          <p class="small" style="margin:6px 0 0;white-space:pre-wrap">{{ l.lost_note }}</p>
+        {% else %}
+          <p class="small faint" style="margin:6px 0 0">
+            {{ t('Closed before a reason was required, so none was recorded.') }}</p>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+  {% else %}
+    <div class="empty"><span class="mark">◇</span>{{ t('No clients lost in this period.') }}</div>
   {% endif %}
 </div>
 

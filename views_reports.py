@@ -6,7 +6,7 @@ from flask import Blueprint, g, redirect, render_template, request, send_file, u
 import excel_export
 import reports
 from auth import manager_required
-from db import log, query
+from db import LOST_REASON_LABELS, log, query
 
 bp = Blueprint("reports", __name__, url_prefix="/admin/reports")
 
@@ -44,6 +44,7 @@ def index():
     return render_template("admin/reports.html", agents=agents, agent=agent,
                            report=report, overview=overview,
                            period_types=reports.PERIOD_TYPES,
+                           lost_labels=LOST_REASON_LABELS,
                            period_type=period_type)
 
 

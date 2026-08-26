@@ -1,0 +1,645 @@
+From 34fa88792d43ccfb1ee24544694d77b8577af70b Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 18 Aug 2026 08:45:48 +0000
+Subject: [PATCH] Listings from agents and managers wait for an admin to
+ publish
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Anyone who is not an admin now proposes a listing rather than
+publishing one. It is saved with approval='pending' and stays out of
+the listings page, the global search, the stale-listings screen, the
+dashboard counts and both exports until an admin publishes it. The
+author still sees it, so they can follow it and correct it.
+
+Rejecting sends it back with a note explaining what to change, which
+reaches the author as a notification and shows on the listing itself.
+They fix it and resubmit. A note is required — sending work back
+without saying why is how people stop bothering.
+
+Approval is a separate column from status on purpose: status is about
+the market, and a listing waiting to be published still needs to be
+Available or Reserved. Existing rows default to 'approved' so the 171
+listings already in the database stay live through the upgrade.
+
+Editing an already-published listing still takes effect immediately;
+only new listings wait.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01U3sgXu7uGRzpkyQXbzW1dC
+---
+ app.py                            |  13 ++-
+ auth.py                           |  38 +++++++
+ db.py                             |  11 +++
+ i18n.py                           |  28 ++++++
+ templates/base.html               |   4 +
+ templates/properties/detail.html  |  13 +++
+ templates/properties/waiting.html | 106 ++++++++++++++++++++
+ views_admin.py                    |   8 +-
+ views_main.py                     |  20 ++--
+ views_properties.py               | 158 ++++++++++++++++++++++++++++--
+ 10 files changed, 379 insertions(+), 20 deletions(-)
+ create mode 100644 templates/properties/waiting.html
+
+diff --git a/app.py b/app.py
+index 95e2d01..864c8fd 100644
+--- a/app.py
++++ b/app.py
+@@ -243,20 +243,31 @@ def create_app():
+         offset_hours = int(TZ_OFFSET.total_seconds() // 3600)
+         logo = find_logo()
+         stale_count = 0
++        waiting_count = 0
+         if g.get("user") is not None:
+             from db import STALE_DAYS, days_ago
+-            from auth import sees_all
++            from auth import published_only, sees_all
+             cutoff = days_ago(STALE_DAYS)
+             sql = ("SELECT COUNT(*) c FROM properties p"
+                    " WHERE p.status IN ('Available','Reserved')"
++                   + published_only("p") +
+                    " AND (p.last_verified IS NULL OR p.last_verified < ?)")
+             args = [cutoff]
+             if not sees_all():
+                 sql += " AND (p.agent_id = ? OR p.agent_id IS NULL)"
+                 args.append(g.user["id"])
+             stale_count = query(sql, args, one=True)["c"]
++
++            wsql = ("SELECT COUNT(*) c FROM properties p WHERE"
++                    " COALESCE(p.approval, 'approved') IN ('pending', 'rejected')")
++            wargs = []
++            if not sees_all():
++                wsql += " AND p.submitted_by = ?"
++                wargs.append(g.user["id"])
++            waiting_count = query(wsql, wargs, one=True)["c"]
+         return dict(
+             stale_count=stale_count,
++            waiting_count=waiting_count,
+             logo_exists=logo is not None,
+             logo_url=(f"{url_for('static', filename=logo[0])}?v={logo[1]}"
+                       if logo else None),
+diff --git a/auth.py b/auth.py
+index 21223a2..8aa621f 100644
+--- a/auth.py
++++ b/auth.py
+@@ -71,6 +71,44 @@ def manager_required(view):
+     return wrapped
+ 
+ 
++def can_publish():
++    """Only an admin turns a waiting listing into a live one."""
++    return is_admin()
++
++
++def published_only(alias="p"):
++    """SQL fragment keeping unpublished listings out of a query.
++
++    Used by the main list, the search and the exports. A listing waiting for
++    approval is not part of the company's stock yet, so it should not appear
++    where people go to find something to sell — and that includes the admin's
++    own browsing, or the list stops meaning "what we can offer today".
++
++    Listings that predate this feature have no approval value at all, hence
++    the COALESCE: they are live and must stay live.
++    """
++    return f" AND COALESCE({alias}.approval, 'approved') = 'approved'"
++
++
++def can_see_listing(record):
++    """Whether this person may open one listing's own page.
++
++    Wider than the browsing list: the agent who submitted something needs to
++    follow it while it waits, and admins and managers need to review it.
++    """
++    if g.user is None or record is None:
++        return False
++    keys = record.keys()
++    state = (record["approval"] if "approval" in keys else None) or "approved"
++    if state == "approved":
++        return True
++    if sees_all():
++        return True
++    submitted = record["submitted_by"] if "submitted_by" in keys else None
++    agent = record["agent_id"] if "agent_id" in keys else None
++    return g.user["id"] in (submitted, agent)
++
++
+ def can_edit(record):
+     """Admins and managers edit anything. Agents edit what's theirs or
+     unclaimed."""
+diff --git a/db.py b/db.py
+index 36c6f33..1d9ee87 100644
+--- a/db.py
++++ b/db.py
+@@ -236,6 +236,9 @@ CLOSED_STAGES = ("Won", "Lost")
+ PROP_TYPES = ["Villa", "Apartment", "Commercial", "Office", "Land"]
+ PROP_STATUS = ["Available", "Reserved", "Sold", "Rented"]
+ LISTING_TYPES = ["Sale", "Rent"]
++# Whether a listing is published. Separate from status, which is about the
++# market (a listing waiting for approval still has a status of Available).
++APPROVAL_STATES = ["pending", "approved", "rejected"]
+ LEAD_SOURCES = ["Walk-in", "Website", "Property Finder", "Referral",
+                 "Instagram", "WhatsApp", "Phone", "Other"]
+ PARTNER_TYPES = ["Developer", "Legal", "Maintenance", "Bank", "Marketing", "Other"]
+@@ -355,6 +358,14 @@ MIGRATIONS = [
+     ("properties", "floor_no", "TEXT"),
+     ("properties", "extras", "TEXT"),
+     ("properties", "last_verified", "TEXT"),
++    # Listings added by an agent or manager wait for an admin to publish them.
++    # Everything already in the table predates this and is therefore live, so
++    # the default has to be 'approved' or 171 listings would vanish at once.
++    ("properties", "approval", "TEXT NOT NULL DEFAULT 'approved'"),
++    ("properties", "submitted_by", "INTEGER"),
++    ("properties", "reviewed_by", "INTEGER"),
++    ("properties", "reviewed_at", "TEXT"),
++    ("properties", "review_note", "TEXT"),
+     # Flexible commission — these were previously applied by running
+     # migrate_deals.py by hand, which is easy to forget on a deployed copy and
+     # leaves every Deals page erroring on the missing columns.
+diff --git a/i18n.py b/i18n.py
+index 5eeff88..69e6cec 100644
+--- a/i18n.py
++++ b/i18n.py
+@@ -273,6 +273,34 @@ AR = {
+     "Tick this for your own stock. Exports keep these on a separate sheet from third-party listings.":
+         "حدّد هذا لعقاراتكم الخاصة. تُدرج في ورقة منفصلة عن عقارات الأطراف الأخرى عند التصدير.",
+     "Stale listings": "عقارات متأخرة المراجعة",
++    "Waiting for approval": "بانتظار الموافقة",
++    "Waiting for approval.": "بانتظار الموافقة.",
++    "Waiting": "بانتظار",
++    "Sent back": "أُعيد للتعديل",
++    "Send back": "إعادة للتعديل",
++    "Send it back": "إعادته للتعديل",
++    "Publish": "نشر",
++    "Open": "فتح",
++    "Edit": "تعديل",
++    "Sent by": "أرسله",
++    "by": "بواسطة",
++    "Unknown": "غير معروف",
++    "Nothing is waiting.": "لا يوجد شيء بانتظار الموافقة.",
++    "Send for approval again": "إعادة الإرسال للموافقة",
++    "What needs fixing?": "ما الذي يحتاج تصحيحاً؟",
++    "e.g. Price looks wrong, and it needs the building name.":
++        "مثال: السعر يبدو غير صحيح، وينقصه اسم المبنى.",
++    "This goes to the person who sent it, so they know what to change.":
++        "تصل هذه الملاحظة لمن أرسل العقار ليعرف ما يجب تغييره.",
++    "No note was left.": "لم تُترك ملاحظة.",
++    "Correct it, then send it for approval again from the waiting list.":
++        "صحّح العقار ثم أعد إرساله للموافقة من قائمة الانتظار.",
++    "Nobody else can see this listing until an admin publishes it.":
++        "لا يمكن لأحد رؤية هذا العقار حتى ينشره المدير.",
++    "Listings your team has added. Nobody else can see them until you publish them.":
++        "عقارات أضافها فريقك. لا يراها أحد حتى تنشرها.",
++    "Listings you have sent for approval. They stay out of the main list until an admin publishes them.":
++        "عقارات أرسلتها للموافقة. تبقى خارج القائمة الرئيسية حتى ينشرها المدير.",
+     "Last verified": "آخر تحقق",
+     "Never verified": "لم يتم التحقق بعد",
+     "Stale": "متأخر",
+diff --git a/templates/base.html b/templates/base.html
+index ce90e22..1ce9ec4 100644
+--- a/templates/base.html
++++ b/templates/base.html
+@@ -31,6 +31,10 @@
+       <span class="idx">01</span> {{ t('Dashboard') }}</a>
+     <a class="rail-link {{ 'active' if request.blueprint == 'properties' }}" href="{{ url_for('properties.index') }}">
+       <span class="idx">02</span> {{ t('Properties') }}</a>
++    <a class="rail-link {{ 'active' if request.endpoint == 'properties.waiting' }}"
++       href="{{ url_for('properties.waiting') }}" style="padding-left:44px">
++      {{ t('Waiting for approval') }}
++      {% if waiting_count %}<span class="pill">{{ waiting_count }}</span>{% endif %}</a>
+     <a class="rail-link {{ 'active' if request.endpoint == 'properties.stale' }}"
+        href="{{ url_for('properties.stale') }}" style="padding-left:44px">
+       {{ t('Stale listings') }}
+diff --git a/templates/properties/detail.html b/templates/properties/detail.html
+index e968cce..414107e 100644
+--- a/templates/properties/detail.html
++++ b/templates/properties/detail.html
+@@ -2,6 +2,19 @@
+ {% block title %}{{ p.title }}{% endblock %}
+ 
+ {% block content %}
++{% if (p.approval or 'approved') != 'approved' %}
++  <div class="flash {{ 'error' if p.approval == 'rejected' else '' }}" style="margin-bottom:16px">
++    {% if p.approval == 'rejected' %}
++      <b>{{ t('Sent back') }}{% if p.reviewed_name %} {{ t('by') }} {{ p.reviewed_name }}{% endif %}:</b>
++      {{ p.review_note or t('No note was left.') }}
++      <div class="small" style="margin-top:6px">
++        {{ t('Correct it, then send it for approval again from the waiting list.') }}</div>
++    {% else %}
++      <b>{{ t('Waiting for approval.') }}</b>
++      {{ t('Nobody else can see this listing until an admin publishes it.') }}
++    {% endif %}
++  </div>
++{% endif %}
+ <div class="page-head">
+   <div>
+     <div class="eyebrow">{{ p.ref }} · {{ t(p.prop_type) }}</div>
+diff --git a/templates/properties/waiting.html b/templates/properties/waiting.html
+new file mode 100644
+index 0000000..1883d34
+--- /dev/null
++++ b/templates/properties/waiting.html
+@@ -0,0 +1,106 @@
++{% extends "base.html" %}
++{% block title %}{{ t('Waiting for approval') }}{% endblock %}
++
++{% block content %}
++<div class="page-head">
++  <div>
++    <div class="eyebrow">02 · {{ t('Listings') }}</div>
++    <h1 class="page-title">{{ t('Waiting for approval') }}</h1>
++  </div>
++  <div class="actions">
++    <a class="btn btn-quiet" href="{{ url_for('properties.index') }}">{{ t('Back to properties') }}</a>
++  </div>
++</div>
++
++<p class="muted small" style="margin:-6px 0 16px">
++  {% if can_publish %}
++    {{ t('Listings your team has added. Nobody else can see them until you publish them.') }}
++  {% else %}
++    {{ t('Listings you have sent for approval. They stay out of the main list until an admin publishes them.') }}
++  {% endif %}
++</p>
++
++{% if not rows %}
++  <div class="card"><div class="empty">
++    <span class="mark">◇</span>
++    {{ t('Nothing is waiting.') }}
++  </div></div>
++{% else %}
++  <div class="grid">
++    {% for p in rows %}
++      <div class="card">
++        <div class="card-head">
++          <h3 style="display:flex;align-items:center;gap:8px">
++            <a href="{{ url_for('properties.detail', pid=p.id) }}">{{ p.title }}</a>
++            {% if p.approval == 'rejected' %}
++              <span class="tag tag-sold">{{ t('Sent back') }}</span>
++            {% else %}
++              <span class="tag tag-reserved">{{ t('Waiting') }}</span>
++            {% endif %}
++          </h3>
++          <span class="price mono" style="color:var(--gold-deep)">
++            {{ currency }} {{ p.price | money }}</span>
++        </div>
++        <div class="card-body">
++          <div class="small muted" style="margin-bottom:10px">
++            <span class="mono faint">{{ p.ref }}</span> ·
++            {{ t(p.prop_type) }} · {{ t(p.listing_type) }}
++            {%- if p.building_no %} · {{ t('Building') }} {{ p.building_no }}{% endif -%}
++            {%- if p.unit_no %} · {{ t('Flat') }} {{ p.unit_no }}{% endif -%}
++            {%- if p.area %} · {{ p.area }}{% endif %}
++          </div>
++          <div class="small muted" style="margin-bottom:12px">
++            {{ t('Sent by') }} <b>{{ p.submitted_name or t('Unknown') }}</b>
++            · {{ p.created_at | nice_date }}
++          </div>
++
++          {% if p.approval == 'rejected' and p.review_note %}
++            <div class="flash error" style="margin-bottom:12px">
++              <b>{{ t('Sent back') }}{% if p.reviewed_name %} {{ t('by') }} {{ p.reviewed_name }}{% endif %}:</b>
++              {{ p.review_note }}
++            </div>
++          {% endif %}
++
++          <div class="inline">
++            <a class="btn btn-sm" href="{{ url_for('properties.detail', pid=p.id) }}">
++              {{ t('Open') }}</a>
++            <a class="btn btn-sm" href="{{ url_for('properties.form', pid=p.id) }}">
++              {{ t('Edit') }}</a>
++
++            {% if can_publish %}
++              <form method="post" action="{{ url_for('properties.approve', pid=p.id) }}">
++                <button class="btn btn-gold btn-sm" type="submit">{{ t('Publish') }}</button>
++              </form>
++              <button class="btn btn-sm" type="button"
++                      onclick="document.getElementById('send-back-{{ p.id }}').hidden = false; this.hidden = true">
++                {{ t('Send back') }}</button>
++            {% elif p.approval == 'rejected' %}
++              <form method="post" action="{{ url_for('properties.resubmit', pid=p.id) }}">
++                <button class="btn btn-gold btn-sm" type="submit">
++                  {{ t('Send for approval again') }}</button>
++              </form>
++            {% endif %}
++          </div>
++
++          {% if can_publish %}
++            <form method="post" action="{{ url_for('properties.reject', pid=p.id) }}"
++                  id="send-back-{{ p.id }}" hidden style="margin-top:12px">
++              <div class="field">
++                <label>{{ t('What needs fixing?') }}</label>
++                <textarea name="note" required style="min-height:60px"
++                  placeholder="{{ t('e.g. Price looks wrong, and it needs the building name.') }}"></textarea>
++                <span class="small faint">
++                  {{ t('This goes to the person who sent it, so they know what to change.') }}</span>
++              </div>
++              <button class="btn btn-danger btn-sm" type="submit">
++                {{ t('Send it back') }}</button>
++            </form>
++          {% endif %}
++        </div>
++      </div>
++    {% endfor %}
++  </div>
++{% endif %}
++{% include "_pager.html" %}
++
++{% endblock %}
+diff --git a/views_admin.py b/views_admin.py
+index 3a4193c..d182218 100644
+--- a/views_admin.py
++++ b/views_admin.py
+@@ -14,7 +14,8 @@ import performance
+ import whatsapp
+ from werkzeug.security import generate_password_hash
+ 
+-from auth import admin_required, create_user, login_required, manager_required
++from auth import (admin_required, create_user, login_required,
++                  manager_required, published_only)
+ from db import (DEPARTMENTS, EMPLOYMENT, PARTNER_TYPES, execute, get_setting,
+                 log, now, query, set_setting)
+ 
+@@ -608,6 +609,8 @@ def export_workbook():
+         "SELECT p.*, o.name AS owner_name, u.name AS agent_name FROM properties p"
+         " LEFT JOIN owners o ON o.id = p.owner_id"
+         " LEFT JOIN users u ON u.id = p.agent_id"
++        # A listing nobody has published shouldn't reach a client's inbox.
++        " WHERE 1=1" + published_only("p") +
+         " ORDER BY CASE WHEN COALESCE(TRIM(p.building_no), '') = '' THEN 1 ELSE 0 END,"
+         " p.area, p.building_no, CAST(COALESCE(p.unit_no, '') AS INTEGER),"
+         " LENGTH(COALESCE(p.unit_no, '')), p.unit_no, p.id")
+@@ -654,7 +657,8 @@ def export_properties():
+                  " p.status, p.price, p.size_sqm, p.bedrooms, p.bathrooms,"
+                  " o.name AS owner, u.name AS agent, p.created_at FROM properties p"
+                  " LEFT JOIN owners o ON o.id = p.owner_id"
+-                 " LEFT JOIN users u ON u.id = p.agent_id ORDER BY p.id")
++                 " LEFT JOIN users u ON u.id = p.agent_id"
++                 " WHERE 1=1" + published_only("p") + " ORDER BY p.id")
+     return _csv(rows, ["ref", "title", "address", "building_no", "floor_no",
+                        "unit_no", "extras", "area",
+                        "prop_type", "listing_type",
+diff --git a/views_main.py b/views_main.py
+index d6a1945..8115570 100644
+--- a/views_main.py
++++ b/views_main.py
+@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
+ from flask import (Blueprint, current_app, g, jsonify, redirect,
+                    render_template, request, send_from_directory, url_for)
+ 
+-from auth import is_admin, login_required, sees_all
++from auth import is_admin, login_required, published_only, sees_all
+ from db import execute, local_now, local_today, paginate, query, utc_day_bounds
+ 
+ bp = Blueprint("main", __name__)
+@@ -16,9 +16,14 @@ def dashboard():
+     mine = "" if sees_all() else " AND agent_id = %d" % g.user["id"]
+     day_start, day_end = utc_day_bounds(local_today())
+ 
+-    total_listings = query("SELECT COUNT(*) c FROM properties", one=True)["c"]
+-    available = query("SELECT COUNT(*) c FROM properties WHERE status='Available'",
+-                      one=True)["c"]
++    # Counts describe the stock we can actually offer, so anything still
++    # waiting to be published is left out.
++    live = published_only("p")
++    total_listings = query(
++        "SELECT COUNT(*) c FROM properties p WHERE 1=1" + live, one=True)["c"]
++    available = query(
++        "SELECT COUNT(*) c FROM properties p WHERE p.status='Available'" + live,
++        one=True)["c"]
+     new_leads = query("SELECT COUNT(*) c FROM leads"
+                       " WHERE created_at >= ? AND created_at < ?" + mine,
+                       (day_start, day_end), one=True)["c"]
+@@ -92,9 +97,10 @@ def search():
+     if q:
+         like = f"%{q}%"
+         props = query(
+-            "SELECT * FROM properties WHERE title LIKE ? OR address LIKE ?"
+-            " OR area LIKE ? OR ref LIKE ? OR building_no LIKE ? OR unit_no LIKE ?"
+-            " ORDER BY id DESC LIMIT 25",
++            "SELECT * FROM properties p WHERE (p.title LIKE ? OR p.address LIKE ?"
++            " OR p.area LIKE ? OR p.ref LIKE ? OR p.building_no LIKE ?"
++            " OR p.unit_no LIKE ?)" + published_only("p") +
++            " ORDER BY p.id DESC LIMIT 25",
+             (like,) * 6)
+         leads = query(
+             "SELECT l.*, u.name AS agent_name FROM leads l"
+diff --git a/views_properties.py b/views_properties.py
+index 22f0354..2d6542b 100644
+--- a/views_properties.py
++++ b/views_properties.py
+@@ -8,7 +8,8 @@ from flask import (Blueprint, current_app, flash, g, redirect, render_template,
+                    request, url_for)
+ from werkzeug.utils import secure_filename
+ 
+-from auth import can_edit, is_admin, login_required
++from auth import (can_edit, can_publish, can_see_listing, is_admin,
++                  login_required, published_only, sees_all)
+ from db import (LISTING_TYPES, PROP_STATUS, PROP_TYPES, STALE_DAYS, days_ago,
+                 execute, get_setting, log, next_ref, notify, now, paginate, query)
+ 
+@@ -46,6 +47,7 @@ def index():
+            " LEFT JOIN users u ON u.id = p.agent_id"
+            " LEFT JOIN owners o ON o.id = p.owner_id"
+            " LEFT JOIN partners pa ON pa.id = p.partner_id WHERE 1=1")
++    sql += published_only("p")
+     args = []
+     if f["q"]:
+         sql += (" AND (p.title LIKE ? OR p.address LIKE ? OR p.ref LIKE ?"
+@@ -175,14 +177,20 @@ def detail(pid):
+               " o.phone AS owner_phone, o.email AS owner_email, o.photo AS owner_photo,"
+               " o.company AS owner_company, pa.name AS partner_name,"
+               " pa.photo AS partner_photo, pa.phone AS partner_phone,"
+-              " pa.email AS partner_email, pa.partner_type"
++              " pa.email AS partner_email, pa.partner_type,"
++              " r.name AS reviewed_name, s.name AS submitted_name"
+               " FROM properties p LEFT JOIN users u ON u.id = p.agent_id"
+               " LEFT JOIN owners o ON o.id = p.owner_id"
+               " LEFT JOIN partners pa ON pa.id = p.partner_id"
++              " LEFT JOIN users r ON r.id = p.reviewed_by"
++              " LEFT JOIN users s ON s.id = p.submitted_by"
+               " WHERE p.id = ?", (pid,), one=True)
+     if p is None:
+         flash("That property no longer exists.", "error")
+         return redirect(url_for("properties.index"))
++    if not can_see_listing(p):
++        flash("That listing is still waiting to be published.", "error")
++        return redirect(url_for("properties.index"))
+     images = query("SELECT * FROM property_images WHERE property_id = ?"
+                    " ORDER BY is_cover DESC, id", (pid,))
+     docs = query("SELECT d.*, u.name AS uploader FROM documents d"
+@@ -244,18 +252,33 @@ def form(pid=None):
+ 
+         if p is None:
+             ref = next_ref("PRE-P", "properties")
++            # An admin publishes as they write. Anyone else is proposing a
++            # listing, and it waits where the rest of the office can't see it.
++            waiting = not can_publish()
++            approval = "pending" if waiting else "approved"
+             pid = execute(
+                 "INSERT INTO properties (title,address,area,prop_type,listing_type,status,"
+                 "price,size_sqm,bedrooms,bathrooms,description,features,owner_id,partner_id,"
+                 "agent_id,building_no,floor_no,unit_no,extras,map_url,is_own,ref,"
+-                "created_at,updated_at,last_verified)"
+-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+-                vals + (ref, now(), now(), now()))
+-            log(g.user["id"], "Added listing", "property", pid, f"{ref} — {vals[0]}")
+-            if vals[14] and vals[14] != g.user["id"]:
+-                notify(vals[14], f"You were assigned the listing {vals[0]}",
+-                       url_for("properties.detail", pid=pid))
+-            flash("Listing added.", "ok")
++                "created_at,updated_at,last_verified,approval,submitted_by)"
++                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
++                vals + (ref, now(), now(), now(), approval, g.user["id"]))
++            log(g.user["id"],
++                "Submitted listing for approval" if waiting else "Added listing",
++                "property", pid, f"{ref} — {vals[0]}")
++            if waiting:
++                for admin_row in query(
++                        "SELECT id FROM users WHERE role = 'admin' AND is_active = 1"):
++                    notify(admin_row["id"],
++                           f"{g.user['name']} submitted {vals[0]} for approval",
++                           url_for("properties.waiting"))
++                flash("Sent for approval. It stays out of the listings until "
++                      "an admin publishes it.", "ok")
++            else:
++                if vals[14] and vals[14] != g.user["id"]:
++                    notify(vals[14], f"You were assigned the listing {vals[0]}",
++                           url_for("properties.detail", pid=pid))
++                flash("Listing added.", "ok")
+         else:
+             changes = []
+             if float(p["price"] or 0) != vals[6]:
+@@ -427,6 +450,119 @@ def verify(pid):
+     return redirect(back if back and back.startswith("/") else url_for("properties.detail", pid=pid))
+ 
+ 
++@bp.route("/waiting")
++@login_required
++def waiting():
++    """Listings an agent or manager has proposed but nobody has published.
++
++    Admins see everything here and act on it. Everyone else sees only their
++    own, so they can follow what they sent and fix anything sent back.
++    """
++    sql = ("SELECT p.*, u.name AS agent_name, s.name AS submitted_name,"
++           " r.name AS reviewed_name,"
++           " (SELECT filename FROM property_images i WHERE i.property_id = p.id"
++           "   ORDER BY is_cover DESC, id LIMIT 1) AS cover"
++           " FROM properties p"
++           " LEFT JOIN users u ON u.id = p.agent_id"
++           " LEFT JOIN users s ON s.id = p.submitted_by"
++           " LEFT JOIN users r ON r.id = p.reviewed_by"
++           " WHERE COALESCE(p.approval, 'approved') IN ('pending', 'rejected')")
++    args = []
++    if not sees_all():
++        sql += " AND p.submitted_by = ?"
++        args.append(g.user["id"])
++    # Sent-back ones first: someone is waiting on those to be corrected.
++    sql += " ORDER BY CASE p.approval WHEN 'rejected' THEN 0 ELSE 1 END, p.id"
++
++    pager = paginate(sql, args, request.args.get("page", 1), per_page=60)
++    return render_template("properties/waiting.html", rows=pager["rows"],
++                           pager=pager, args={}, can_publish=can_publish())
++
++
++@bp.route("/<int:pid>/approve", methods=("POST",))
++@login_required
++def approve(pid):
++    """Publish a waiting listing so the rest of the office can see it."""
++    if not can_publish():
++        flash("Only an admin can publish a listing.", "error")
++        return redirect(url_for("properties.waiting"))
++    p = query("SELECT * FROM properties WHERE id = ?", (pid,), one=True)
++    if p is None:
++        flash("That listing no longer exists.", "error")
++        return redirect(url_for("properties.waiting"))
++
++    execute("UPDATE properties SET approval='approved', reviewed_by=?,"
++            " reviewed_at=?, review_note=NULL, last_verified=?, updated_at=?"
++            " WHERE id=?", (g.user["id"], now(), now(), now(), pid))
++    log(g.user["id"], "Published listing", "property", pid, p["title"])
++    if p["submitted_by"] and p["submitted_by"] != g.user["id"]:
++        notify(p["submitted_by"], f"{p['title']} is now published",
++               url_for("properties.detail", pid=pid))
++    flash(f"{p['title']} is published.", "ok")
++    return redirect(url_for("properties.waiting"))
++
++
++@bp.route("/<int:pid>/reject", methods=("POST",))
++@login_required
++def reject(pid):
++    """Send a listing back to whoever wrote it, with a note saying why."""
++    if not can_publish():
++        flash("Only an admin can send a listing back.", "error")
++        return redirect(url_for("properties.waiting"))
++    p = query("SELECT * FROM properties WHERE id = ?", (pid,), one=True)
++    if p is None:
++        flash("That listing no longer exists.", "error")
++        return redirect(url_for("properties.waiting"))
++
++    note = request.form.get("note", "").strip()
++    if not note:
++        flash("Say what needs fixing — that note is the whole point of "
++              "sending it back.", "error")
++        return redirect(url_for("properties.waiting"))
++
++    execute("UPDATE properties SET approval='rejected', reviewed_by=?,"
++            " reviewed_at=?, review_note=?, updated_at=? WHERE id=?",
++            (g.user["id"], now(), note, now(), pid))
++    log(g.user["id"], "Sent listing back", "property", pid,
++        f"{p['title']} — {note[:80]}")
++    author = query("SELECT name FROM users WHERE id = ?",
++                   (p["submitted_by"],), one=True) if p["submitted_by"] else None
++    if p["submitted_by"]:
++        notify(p["submitted_by"],
++               f"{p['title']} was sent back: {note[:60]}",
++               url_for("properties.detail", pid=pid))
++    flash(f"{p['title']} went back to {author['name'] if author else 'its author'}.",
++          "ok")
++    return redirect(url_for("properties.waiting"))
++
++
++@bp.route("/<int:pid>/resubmit", methods=("POST",))
++@login_required
++def resubmit(pid):
++    """Put a corrected listing back in front of the admin."""
++    p = query("SELECT * FROM properties WHERE id = ?", (pid,), one=True)
++    if p is None:
++        flash("That listing no longer exists.", "error")
++        return redirect(url_for("properties.waiting"))
++    if not can_edit(p) and p["submitted_by"] != g.user["id"]:
++        flash("That listing belongs to another agent.", "error")
++        return redirect(url_for("properties.waiting"))
++    if (p["approval"] or "approved") != "rejected":
++        flash("That listing isn't waiting to be corrected.", "error")
++        return redirect(url_for("properties.waiting"))
++
++    execute("UPDATE properties SET approval='pending', review_note=NULL,"
++            " updated_at=? WHERE id=?", (now(), pid))
++    log(g.user["id"], "Resubmitted listing", "property", pid, p["title"])
++    for admin_row in query(
++            "SELECT id FROM users WHERE role = 'admin' AND is_active = 1"):
++        notify(admin_row["id"],
++               f"{g.user['name']} resubmitted {p['title']}",
++               url_for("properties.waiting"))
++    flash("Sent back for approval.", "ok")
++    return redirect(url_for("properties.waiting"))
++
++
+ @bp.route("/stale")
+ @login_required
+ def stale():
+@@ -440,6 +576,8 @@ def stale():
+            "   ORDER BY is_cover DESC, id LIMIT 1) AS cover"
+            " FROM properties p LEFT JOIN users u ON u.id = p.agent_id"
+            " WHERE p.status IN ('Available','Reserved')"
++           # A listing nobody has published yet isn't stock to chase up.
++           + published_only("p") +
+            " AND (p.last_verified IS NULL OR p.last_verified < ?)")
+     args = [cutoff]
+     if not sees_all():
+-- 
+2.43.0
+

@@ -125,6 +125,19 @@
         var origin = dragged.closest(".col");
         if (origin === col) return;
 
+        /* Lost is the one column a card cannot simply be dropped into: the
+           move has to carry a reason, so leave the card where it was and ask
+           for one. The form posts normally and the server does the move. */
+        var lostForm = document.getElementById("board-lost-form");
+        if (stage === "Lost" && lostForm) {
+          var card = dragged;
+          lostForm.action = "/leads/" + card.dataset.id + "/stage";
+          var who = document.getElementById("board-lost-who");
+          if (who) who.textContent = card.dataset.name || "";
+          openModal("lost-modal");
+          return;
+        }
+
         col.querySelector(".col-body").appendChild(dragged);
         recount();
 

@@ -490,10 +490,44 @@ def agent_deals_sheet(wb, co, agent, period, records, exported_by, rtl=False):
     finish(ws, co, len(headers), widths, end, rtl)
 
 
+def agent_lost_sheet(wb, co, agent, period, lost, exported_by, rtl=False):
+    """Every client closed as Lost in the period, with the reason the agent
+    had to give and their own account of what happened."""
+    headers = [t("Client"), t("Property"), t("Reason"), t("What happened"),
+               t("Lost on")]
+    formats = [
+        (None, "left"), (None, "left"), (None, "left"),
+        (None, "left"), (_date_fmt(rtl), "center"),
+    ]
+    widths = [22, 30, 24, 56, 13]
+
+    ws = wb.create_sheet(t("Lost clients"))
+    rows = [(r["lead"]["full_name"],
+             r["lead"]["prop_ref"] or r["lead"]["prop_title"] or "",
+             t(r["label"]) if r["label"] else t("Not recorded"),
+             r["lead"]["lost_note"] or "",
+             _date(r["at"])) for r in lost["rows"]]
+
+    # The commonest cause first, so the header line answers "why are we losing
+    # people" before anyone reads a single row.
+    tally = " · ".join(f"{t(label)} {n}" for label, n in lost["by_reason"])
+    brand_header(ws, co, t("Lost clients"),
+                 f"{agent['name']} · {period['label']} · "
+                 f"{len(rows)} {t('records')}" + (f" · {tally}" if tally else ""),
+                 len(headers), exported_by, rtl)
+    table_header(ws, headers)
+    if rows:
+        end = write_rows(ws, rows, formats, rtl)
+    else:
+        end = FIRST_DATA - 1
+        empty_note(ws, len(headers), t("No clients lost in this period."))
+    finish(ws, co, len(headers), widths, end, rtl)
+
+
 def agent_report_workbook(report, agent, exported_by):
-    """One agent's tasks/work/deals report (see reports.py) as a two-sheet
-    workbook: a Summary of every figure, and the Deals that made up the
-    period's closed total."""
+    """One agent's report (see reports.py) as a three-sheet workbook: a
+    Summary of every figure, the Deals that made up the period's closed
+    total, and the clients lost in the period with the reason for each."""
     co = company()
     rtl = is_rtl()
     wb = Workbook()
@@ -503,6 +537,7 @@ def agent_report_workbook(report, agent, exported_by):
     agent_summary_sheet(wb, co, agent, period, report["deals"], report["tasks"],
                         report["work"], exported_by, rtl)
     agent_deals_sheet(wb, co, agent, period, report["deals"]["rows"], exported_by, rtl)
+    agent_lost_sheet(wb, co, agent, period, report["lost"], exported_by, rtl)
 
     wb.properties.title = f"{co['name']} — {agent['name']} {t('report')}"
     wb.properties.creator = co["name"]

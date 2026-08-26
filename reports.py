@@ -16,7 +16,7 @@ client's own timeline, where a stage change is part of that client's story.
 """
 from datetime import date, datetime, timedelta
 
-from db import local_now, now, query, utc_day_bounds
+from db import LOST_REASON_LABELS, local_now, now, query, utc_day_bounds
 from i18n import t
 
 PERIOD_TYPES = [
@@ -206,7 +206,40 @@ def agent_report(user_id, period_type, ref):
     # admins only, and counting it here made the report look like a
     # surveillance sheet rather than a record of clients and deals.
 
-    return {"period": period, "deals": deals, "tasks": tasks, "work": work}
+    # --------------------------------------------------------------- lost
+    # Every client closed as Lost in this period, with the reason the agent
+    # had to give. lost_at is only set from the day the reason became
+    # compulsory, so older losses fall back to updated_at rather than
+    # disappearing from history.
+    lost_rows = query(
+        "SELECT l.*, p.title AS prop_title, p.ref AS prop_ref FROM leads l"
+        " LEFT JOIN properties p ON p.id = l.property_id"
+        " WHERE l.agent_id = ? AND l.status = 'Lost'"
+        "   AND COALESCE(l.lost_at, l.updated_at) >= ?"
+        "   AND COALESCE(l.lost_at, l.updated_at) < ?"
+        " ORDER BY COALESCE(l.lost_at, l.updated_at) DESC",
+        (user_id, u_start, u_end))
+
+    by_reason = {}
+    for row in lost_rows:
+        label = LOST_REASON_LABELS.get(row["lost_reason"])
+        if label:
+            by_reason[label] = by_reason.get(label, 0) + 1
+
+    lost = {
+        "rows": [{
+            "lead": row,
+            "label": LOST_REASON_LABELS.get(row["lost_reason"]),
+            "at": row["lost_at"] or row["updated_at"],
+        } for row in lost_rows],
+        "count": len(lost_rows),
+        # commonest cause first, so the pattern shows before the detail
+        "by_reason": sorted(by_reason.items(), key=lambda kv: (-kv[1], kv[0])),
+        "unexplained": sum(1 for r in lost_rows if not r["lost_reason"]),
+    }
+
+    return {"period": period, "deals": deals, "tasks": tasks, "work": work,
+            "lost": lost}
 
 
 # Activity actions that represent a change to a lead's own record (creation,
