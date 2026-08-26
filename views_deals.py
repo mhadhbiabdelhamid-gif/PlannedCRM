@@ -5,6 +5,7 @@ from flask import (Blueprint, flash, g, redirect, render_template, request,
                    url_for)
 
 from auth import admin_required, can_edit, login_required, sees_all, sees_finance
+import leases
 from commission import (AGENT_ROLES, BASES, ON_CHOICES, check_shares,
                         commission_amount, split_amounts)
 from db import (DEAL_STATUS, LISTING_TYPES, execute, get_setting, local_now,
@@ -138,11 +139,24 @@ def form(did=None):
 
         lead_agent = max(people, key=lambda p: p[2])[0]
 
+        # When the tenancy actually runs. Only meaningful for a rental, and
+        # only the start is asked for — the end follows from the term that is
+        # already being captured for the commission, unless someone overrides
+        # it for a lease that does not run in whole months.
+        is_rent = f.get("deal_type", "Sale").lower().startswith("rent")
+        lease_start = (f.get("lease_start", "").strip() or None) if is_rent else None
+        if lease_start is None and is_rent and f.get("closed_at"):
+            lease_start = f.get("closed_at", "")[:10] or None
+        lease_end = (f.get("lease_end", "").strip() or None) if is_rent else None
+        if is_rent and lease_start and not lease_end:
+            lease_end = leases.lease_end_for(term, lease_start)
+
         vals = (int(f["property_id"]) if f.get("property_id") else None,
                 int(f["lead_id"]) if f.get("lead_id") else None,
                 lead_agent, f.get("deal_type", "Sale"), value, pct, amt,
                 f.get("status", "Agreed"), to_utc(f.get("closed_at")),
-                f.get("notes", "").strip(), term, free, basis, on)
+                f.get("notes", "").strip(), term, free, basis, on,
+                lease_start, lease_end)
 
         if d is None:
             ref = next_ref("PRE-D", "deals")
@@ -150,8 +164,9 @@ def form(did=None):
                 "INSERT INTO deals (property_id,lead_id,agent_id,deal_type,value,"
                 "commission_pct,commission_amt,status,closed_at,notes,"
                 "term_months,free_months,commission_basis,commission_on,"
+                "lease_start,lease_end,"
                 "ref,created_at,updated_at) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 vals + (ref, now(), now()))
             log(g.user["id"], "Recorded deal", "deal", did,
                 f"{ref} — {value:,.0f}, commission {amt:,.0f}")
@@ -160,7 +175,8 @@ def form(did=None):
             execute("UPDATE deals SET property_id=?,lead_id=?,agent_id=?,"
                     "deal_type=?,value=?,commission_pct=?,commission_amt=?,"
                     "status=?,closed_at=?,notes=?,term_months=?,free_months=?,"
-                    "commission_basis=?,commission_on=?,updated_at=? WHERE id=?",
+                    "commission_basis=?,commission_on=?,lease_start=?,"
+                    "lease_end=?,updated_at=? WHERE id=?",
                     vals + (now(), did))
             detail = (f"status {d['status']} → {vals[7]}"
                       if d["status"] != vals[7] else "details edited")

@@ -84,6 +84,22 @@
                value="{{ d.free_months if d and d.free_months else 0 }}">
         <span class="small faint">{{ t('Half months are allowed.') }}</span>
       </div>
+      {# When the tenancy runs, as opposed to when the paperwork was signed.
+         Only the start is asked for: leaving the end blank derives it from the
+         lease length above, which is right for almost every contract. #}
+      <div class="field">
+        <label for="lease_start">{{ t('Tenancy starts') }}</label>
+        <input id="lease_start" type="date" name="lease_start"
+               value="{{ d.lease_start if d and d.lease_start else '' }}">
+        <span class="small faint">{{ t('Leave blank to use the closing date.') }}</span>
+      </div>
+      <div class="field">
+        <label for="lease_end">{{ t('Tenancy ends') }}</label>
+        <input id="lease_end" type="date" name="lease_end"
+               value="{{ d.lease_end if d and d.lease_end else '' }}">
+        <span class="small faint">
+          {{ t('Leave blank to count the lease length from the start date.') }}</span>
+      </div>
     </div>
   </div>
 

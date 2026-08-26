@@ -412,7 +412,20 @@ MIGRATIONS = [
     ("leads", "lost_reason", "TEXT"),
     ("leads", "lost_note", "TEXT"),
     ("leads", "lost_at", "TEXT"),
+    # When a tenancy actually runs, as opposed to when the deal was closed.
+    # closed_at is the paperwork date and is often days or weeks out, which is
+    # no basis for telling someone their unit is free today.
+    ("deals", "lease_start", "TEXT"),
+    ("deals", "lease_end", "TEXT"),
+    # Which reminder has already gone out for this lease: NULL, 'soon',
+    # 'ended', or 'done' once someone has dealt with it. Stops the scheduler
+    # sending the same notification every time it wakes up.
+    ("deals", "lease_alert", "TEXT"),
 ]
+
+# How much warning the office gets before a tenancy ends. A unit that comes
+# free unannounced is a unit nobody is marketing.
+LEASE_NOTICE_DAYS = 30
 
 # How long a listing can go without someone confirming it's still on the
 # market before it counts as "stale" on the office-admin screen.
@@ -460,6 +473,24 @@ def backfill_deals(con):
         "   AND NOT EXISTS (SELECT 1 FROM deal_agents da WHERE da.deal_id = d.id)")
 
 
+def backfill_leases(con):
+    """Give rentals recorded before this feature a lease window.
+
+    The best available guess is the closing date plus the term that was already
+    captured for the commission calculation. Only fills rows that are still
+    empty, so a date someone has since corrected by hand is never overwritten.
+    """
+    con.execute(
+        "UPDATE deals SET lease_start = date(closed_at)"
+        " WHERE lease_start IS NULL AND closed_at IS NOT NULL"
+        "   AND lower(COALESCE(deal_type,'')) LIKE 'rent%'")
+    con.execute(
+        "UPDATE deals SET lease_end ="
+        "   date(lease_start, '+' || CAST(COALESCE(term_months, 12) AS INTEGER) || ' months')"
+        " WHERE lease_end IS NULL AND lease_start IS NOT NULL"
+        "   AND lower(COALESCE(deal_type,'')) LIKE 'rent%'")
+
+
 def init_db(app):
     """Tables, then migrations, then indexes — in that order.
 
@@ -480,6 +511,7 @@ def init_db(app):
     con.commit()
 
     backfill_deals(con)
+    backfill_leases(con)
     con.commit()
     con.close()
 

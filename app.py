@@ -258,6 +258,7 @@ def create_app():
         logo = find_logo()
         stale_count = 0
         waiting_count = 0
+        lease_count = 0
         if g.get("user") is not None:
             from db import STALE_DAYS, days_ago
             from auth import published_only, sees_all
@@ -279,9 +280,18 @@ def create_app():
                 wsql += " AND p.submitted_by = ?"
                 wargs.append(g.user["id"])
             waiting_count = query(wsql, wargs, one=True)["c"]
+
+            # Tenancies on our own units that have run out or are about to.
+            import leases as _leases
+            lease_count = _leases.count_ending()
+            if not sees_all():
+                lease_count = len([
+                    r for r in _leases.ending()
+                    if g.user["id"] in (r["prop_agent_id"], r["agent_id"])])
         return dict(
             stale_count=stale_count,
             waiting_count=waiting_count,
+            lease_count=lease_count,
             logo_exists=logo is not None,
             logo_url=(f"{url_for('static', filename=logo[0])}?v={logo[1]}"
                       if logo else None),
@@ -363,6 +373,12 @@ def create_app():
 
     if os.environ.get("BACKUP_DISABLED", "").lower() not in ("1", "true", "yes"):
         backups.start_scheduler(app)
+
+    # Watches for tenancies on our own units ending. Shares the same off switch
+    # as the backup thread so a sandbox or a test run starts no threads at all.
+    if os.environ.get("BACKUP_DISABLED", "").lower() not in ("1", "true", "yes"):
+        import leases
+        leases.start_scheduler(app)
 
     # ---------------------------------------------------------- first-run admin
     with app.app_context():

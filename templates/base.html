@@ -59,13 +59,17 @@
          href="{{ url_for('properties.stale') }}">
         <span class="idx">1.3</span> {{ t('Stale listings') }}
         {% if stale_count %}<span class="pill">{{ stale_count }}</span>{% endif %}</a>
+      <a class="rail-link sub {{ 'active' if request.endpoint == 'properties.leases_ending' }}"
+         href="{{ url_for('properties.leases_ending') }}">
+        <span class="idx">1.4</span> {{ t('Leases ending') }}
+        {% if lease_count %}<span class="pill">{{ lease_count }}</span>{% endif %}</a>
       {% if can('import') %}
       <a class="rail-link sub {{ 'active' if request.endpoint == 'imports.upload' }}"
          href="{{ url_for('imports.upload') }}">
-        <span class="idx">1.4</span> {{ t('Import listings') }}</a>
+        <span class="idx">1.5</span> {{ t('Import listings') }}</a>
       <a class="rail-link sub {{ 'active' if request.endpoint == 'imports.history' }}"
          href="{{ url_for('imports.history') }}">
-        <span class="idx">1.5</span> {{ t('Import history') }}</a>
+        <span class="idx">1.6</span> {{ t('Import history') }}</a>
       {% endif %}
     </details>
 

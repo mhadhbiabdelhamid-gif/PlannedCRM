@@ -11,8 +11,9 @@ from werkzeug.utils import secure_filename
 
 from auth import (can, can_edit, can_publish, can_see_listing, is_admin,
                   login_required, published_only, sees_all)
-from db import (LISTING_TYPES, PROP_STATUS, PROP_TYPES, STALE_DAYS, days_ago,
-                execute, get_setting, log, next_ref, notify, now, paginate, query)
+from db import (LEASE_NOTICE_DAYS, LISTING_TYPES, PROP_STATUS, PROP_TYPES,
+                STALE_DAYS, days_ago, execute, get_setting, local_today, log,
+                next_ref, notify, now, paginate, query)
 
 bp = Blueprint("properties", __name__, url_prefix="/properties")
 
@@ -599,6 +600,64 @@ def stale():
     pager = paginate(sql, args, request.args.get("page", 1), per_page=60)
     return render_template("properties/stale.html", rows=pager["rows"], pager=pager,
                            args={}, cutoff=cutoff, stale_days=STALE_DAYS)
+
+
+@bp.route("/leases")
+@login_required
+def leases_ending():
+    """Tenancies that have run out, or are about to.
+
+    The counterpart to /stale: that screen chases listings nobody has
+    confirmed, this one catches units nobody has noticed are free. Everything
+    on it needs a person to decide, so nothing is changed automatically.
+    """
+    import leases
+    rows = leases.ending()
+    if not sees_all():
+        rows = [r for r in rows
+                if g.user["id"] in (r["prop_agent_id"], r["agent_id"])]
+    today = local_today()
+    items = [{"deal": r, "left": leases.days_left(r["lease_end"], today)}
+             for r in rows]
+    return render_template("properties/leases.html", items=items,
+                           notice_days=LEASE_NOTICE_DAYS)
+
+
+@bp.route("/<int:pid>/available", methods=("POST",))
+@login_required
+def mark_available(pid):
+    """Put a unit back on the market once its tenancy is over.
+
+    Reached from the leases screen, which is the moment someone has actually
+    decided the tenant has gone. The lease is marked dealt with at the same
+    time, or the reminder would keep coming back about a unit already relisted.
+    """
+    import leases
+    p = query("SELECT * FROM properties WHERE id = ?", (pid,), one=True)
+    if p is None:
+        flash("That property no longer exists.", "error")
+        return redirect(url_for("properties.leases_ending"))
+    if not can_edit(p):
+        flash("That listing belongs to another agent. Ask an admin to reassign it.",
+              "error")
+        return redirect(url_for("properties.leases_ending"))
+
+    deal_id = request.form.get("deal_id", type=int)
+    if deal_id:
+        leases.resolve(deal_id)
+
+    if p["status"] != "Available":
+        execute("UPDATE properties SET status = 'Available', last_verified = ?,"
+                " updated_at = ? WHERE id = ?", (now(), now(), pid))
+        log(g.user["id"], "Updated listing", "property", pid,
+            f"status {p['status']} → Available (lease ended)")
+        if p["agent_id"] and p["agent_id"] != g.user["id"]:
+            notify(p["agent_id"], f"{p['title']} is available again",
+                   url_for("properties.detail", pid=pid))
+        flash("Back on the market.", "ok")
+    else:
+        flash("That listing was already available. The reminder is cleared.", "ok")
+    return redirect(url_for("properties.leases_ending"))
 
 
 @bp.route("/<int:pid>/comment", methods=("POST",))
