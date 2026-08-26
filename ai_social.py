@@ -330,7 +330,7 @@ def index():
 @social_bp.route("/generate", methods=["POST"])
 @admin_required
 def generate_post():
-    ids = (request.json or {}).get("property_ids", [])
+    ids = (request.get_json(silent=True) or {}).get("property_ids", [])
     ids = [int(i) for i in ids][:10]
     if not ids:
         return jsonify({"error": "Select at least one listing."}), 400

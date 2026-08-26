@@ -208,7 +208,13 @@ def form(lid=None):
 @login_required
 def move_stage(lid):
     """Called by the board's drag-and-drop, and by the stage buttons."""
-    stage = (request.json or request.form).get("stage")
+    # Both a JSON fetch (the board) and an ordinary form post (the stage chips
+    # and the Lost dialog) arrive here. `request.json` cannot be used to cover
+    # both: on a form post current Werkzeug *raises* 415 rather than returning
+    # None, which is what made every stage chip fail with "Unsupported Media
+    # Type". silent=True is what actually gives the fall-through this needs.
+    data = request.get_json(silent=True) or request.form
+    stage = data.get("stage")
     if stage not in LEAD_STAGES:
         return jsonify(ok=False, error="Unknown stage"), 400
     l = query("SELECT * FROM leads WHERE id = ?", (lid,), one=True)
@@ -221,7 +227,6 @@ def move_stage(lid):
     # exactly the information the office needs and never has.
     reason = note = None
     if stage == "Lost":
-        data = request.json or request.form
         reason = (data.get("lost_reason") or "").strip()
         note = (data.get("lost_note") or "").strip()
         problem = None

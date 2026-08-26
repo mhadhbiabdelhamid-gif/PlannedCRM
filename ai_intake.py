@@ -444,7 +444,7 @@ def index():
 @admin_required
 def parse():
     raw = (request.form.get("raw_text") or
-           (request.json or {}).get("raw_text", "")).strip()
+           (request.get_json(silent=True) or {}).get("raw_text", "")).strip()
     if not raw:
         return jsonify({"error": "Paste a message first."}), 400
 
