@@ -192,7 +192,8 @@
       {% if unread %}<span class="dot">{{ unread }}</span>{% endif %}
     </a>
 
-    <a class="userchip" href="{{ url_for('auth.account') }}">
+    <a class="userchip" href="{{ url_for('auth.account') }}"
+       aria-label="{{ t('My account') }} — {{ user.name }}">
       {{ avatar(user, 34) }}
       <span class="who"><b>{{ user.name }}</b><em>{{ user.role | role_label }}</em></span>
     </a>

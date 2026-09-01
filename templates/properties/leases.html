@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Leases ending') }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">02 · {{ t('Listings') }}</div>
+    <h1 class="page-title">{{ t('Leases ending') }}</h1>
+  </div>
+  <div class="actions">
+    <a class="btn btn-quiet" href="{{ url_for('properties.index') }}">{{ t('Back to properties') }}</a>
+  </div>
+</div>
+
+<p class="muted small" style="margin:-6px 0 16px">
+  {{ t('Tenancies that have already run out, or end within the next') }}
+  {{ notice_days }} {{ t('days') }}.
+  {{ t('Nothing here changes on its own — mark a unit available once you know the tenant has gone.') }}
+</p>
+
+{% if not items %}
+  <div class="card"><div class="empty">
+    <span class="mark">◇</span>
+    {{ t('No tenancy is ending in the next') }} {{ notice_days }} {{ t('days') }}.
+  </div></div>
+{% else %}
+<div class="card">
+  <div class="card-head"><h3>{{ t('Coming free') }}</h3>
+    <span class="mono faint">{{ items|length }}</span></div>
+  <div class="table-scroll"><table class="table">
+    <thead><tr>
+      <th>{{ t('Property') }}</th>
+      <th>{{ t('Tenant') }}</th>
+      <th class="right">{{ t('Rent') }}</th>
+      <th>{{ t('Lease') }}</th>
+      <th>{{ t('Status') }}</th>
+      <th></th>
+    </tr></thead>
+    <tbody>
+    {% for item in items %}
+      {% set d = item.deal %}
+      <tr>
+        <td>
+          {% if d.property_id %}
+            <a href="{{ url_for('properties.detail', pid=d.property_id) }}">
+              <b>{{ d.prop_ref or d.prop_title }}</b></a>
+            {% if d.prop_ref and d.prop_title %}
+              <div class="small muted">{{ d.prop_title }}</div>{% endif %}
+            {% if d.prop_area %}<div class="small faint">{{ d.prop_area }}</div>{% endif %}
+          {% else %}<span class="faint">—</span>{% endif %}
+        </td>
+        <td class="small">
+          {% if d.lead_id %}
+            <a href="{{ url_for('leads.detail', lid=d.lead_id) }}">{{ d.tenant_name }}</a>
+          {% else %}<span class="faint">—</span>{% endif %}
+          {% if d.tenant_phone %}<div class="small muted mono">{{ d.tenant_phone }}</div>{% endif %}
+        </td>
+        <td class="right mono nowrap">{{ currency }} {{ d.value | money }}</td>
+        {# Stacked rather than "start → end": an arrow between two dates
+           reorders unreadably under Arabic bidi. #}
+        <td class="small nowrap">
+          <b>{{ d.lease_end | nice_date }}</b>
+          {% if d.lease_start %}
+            <div class="small faint">{{ t('from') }} {{ d.lease_start | nice_date }}</div>
+          {% endif %}
+          {% if d.term_months %}
+            <div class="small faint">{{ d.term_months }} {{ t('months') }}</div>
+          {% endif %}
+        </td>
+        <td class="nowrap">
+          {% if item.left is none %}
+            <span class="faint">—</span>
+          {% elif item.left < 0 %}
+            <span class="tag tag-sold">{{ t('Free now') }} · {{ -item.left }} {{ t('days ago') }}</span>
+          {% elif item.left == 0 %}
+            <span class="tag tag-sold">{{ t('Ends today') }}</span>
+          {% else %}
+            <span class="tag tag-reserved">{{ t('in') }} {{ item.left }} {{ t('days') }}</span>
+          {% endif %}
+          <div class="small faint" style="margin-top:4px">
+            {{ t(d.prop_status or '—') }}</div>
+        </td>
+        <td class="right nowrap">
+          {% if d.property_id %}
+          <form method="post"
+                action="{{ url_for('properties.mark_available', pid=d.property_id) }}">
+            <input type="hidden" name="deal_id" value="{{ d.id }}">
+            <button class="btn btn-gold btn-sm" type="submit">{{ t('Mark available') }}</button>
+          </form>
+          {% else %}
+          <span class="faint small">{{ t('Listing no longer exists') }}</span>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody></table></div>
+</div>
+{% endif %}
+{% endblock %}

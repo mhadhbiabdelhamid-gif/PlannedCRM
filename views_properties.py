@@ -99,11 +99,11 @@ def index():
     # Grouping by building is the default, so units in one tower read in order.
     # unit_no is text ("402", "12B", "G04"), and plain text sorting puts 1102
     # before 402 — so sort on the leading number first, then the text itself.
-    # Within a building, order by floor then flat, both read as numbers so
-    # floor 2 comes before floor 10.
-    NATURAL_UNIT = ("CAST(COALESCE(p.floor_no, '') AS INTEGER), p.floor_no, "
-                    "CAST(COALESCE(p.unit_no, '') AS INTEGER), "
-                    "LENGTH(COALESCE(p.unit_no, '')), p.unit_no")
+    # Within a building: floor, then flat, counting up from one. natkey()
+    # (see db.natural_key) is what makes 2 come before 10 and keeps a lettered
+    # unit like A-15 from jumping ahead of flat 1 — CAST used to read every
+    # such label as zero, so they all landed at the top of the building.
+    NATURAL_UNIT = "natkey(p.floor_no), natkey(p.unit_no)"
     # Our own stock first, then each owner or partner together, then anything
     # unattributed. Inside a company the units still read in flat order.
     COMPANY_ORDER = (
@@ -111,16 +111,16 @@ def index():
         "     WHEN COALESCE(o.name, pa.name, p.import_source, '') != '' THEN 1"
         "     ELSE 2 END,"
         " LOWER(COALESCE(o.name, pa.name, p.import_source, '')),"
-        " p.building_no, " + NATURAL_UNIT + ", p.id")
+        " natkey(p.building_no), " + NATURAL_UNIT + ", p.id")
     SORTS = {
         "company": COMPANY_ORDER,
         "building": ("CASE WHEN COALESCE(TRIM(p.building_no), '') = '' THEN 1 ELSE 0 END,"
-                     " p.area, p.building_no, " + NATURAL_UNIT + ", p.id"),
+                     " p.area, natkey(p.building_no), " + NATURAL_UNIT + ", p.id"),
         "newest": "p.id DESC",
         "oldest": "p.id",
         "price_asc": "p.price, p.id",
         "price_desc": "p.price DESC, p.id",
-        "area": "p.area, p.building_no, " + NATURAL_UNIT,
+        "area": "p.area, natkey(p.building_no), " + NATURAL_UNIT,
     }
     sort = request.args.get("sort", "company")
     if sort not in SORTS:

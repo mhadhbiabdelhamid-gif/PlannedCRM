@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}{{ t("Today's priorities") }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">03 · {{ t('Pipeline') }}</div>
+    <h1 class="page-title">{{ t("Today's priorities") }}</h1>
+  </div>
+  <div class="actions">
+    <a class="btn btn-quiet" href="{{ url_for('leads.board') }}">{{ t('Back to board') }}</a>
+  </div>
+</div>
+
+<p class="muted small" style="margin:-6px 0 16px">
+  {{ t('An assistant reads your open leads and suggests who is worth calling today, and why. It never changes a lead on its own — you decide what to do with each one.') }}
+</p>
+
+{% if key_missing %}
+  <div class="card" style="border-left:3px solid var(--warn); margin-bottom:16px">
+    <div class="card-body small">
+      {{ t('No AI provider key is set up yet, so this cannot run. Ask an admin to add one on the server.') }}
+    </div>
+  </div>
+{% endif %}
+
+<form method="post" action="{{ url_for('leads.priority_generate') }}" style="margin-bottom:20px">
+  <button class="btn btn-gold" type="submit" {{ 'disabled' if key_missing }}>
+    {{ t("Generate today's priorities") }}
+  </button>
+  {% if result %}
+    <span class="small faint" style="margin-inline-start:10px">
+      {{ t('Based on') }} {{ result.considered }} {{ t('open leads') }} ·
+      {{ result.generated_at | nice_time }}
+    </span>
+  {% endif %}
+</form>
+
+{% if result %}
+  {% if result.note %}
+    <p class="small muted" style="margin-top:-10px;margin-bottom:14px">{{ result.note }}</p>
+  {% endif %}
+
+  {% if not result.picks %}
+    <div class="card"><div class="empty">
+      <span class="mark">◇</span>
+      {{ t('Nothing stood out as urgent right now.') }}
+    </div></div>
+  {% else %}
+  <div class="card">
+    <div class="card-head"><h3>{{ t('Suggested calls') }}</h3>
+      <span class="mono faint">{{ result.picks|length }}</span></div>
+    <div class="card-body" style="padding:4px 16px">
+      {% for pick in result.picks %}
+        <div class="feed-item">
+          <span class="feed-dot"></span>
+          <div class="stack" style="flex:1;min-width:0">
+            <div class="row" style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">
+              <a href="{{ url_for('leads.detail', lid=pick.lead_id) }}"><b>{{ pick.name }}</b></a>
+              <span class="tag tag-stage-{{ pick.stage | lower }}">{{ t(pick.stage) }}</span>
+            </div>
+            <div class="small muted">{{ pick.reason }}</div>
+            <div class="small faint">
+              {% if pick.phone %}{{ pick.phone }}{% endif %}
+              {% if pick.agent_name %} · {{ pick.agent_name }}{% endif %}
+            </div>
+          </div>
+          <a class="btn btn-quiet btn-sm" href="{{ url_for('leads.detail', lid=pick.lead_id) }}">{{ t('Open') }}</a>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+{% elif not key_missing %}
+  <div class="card"><div class="empty">
+    <span class="mark">◇</span>
+    {{ t('Generate a list to see who to contact today.') }}
+  </div></div>
+{% endif %}
+{% endblock %}

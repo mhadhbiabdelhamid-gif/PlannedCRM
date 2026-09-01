@@ -3,6 +3,7 @@
 Uses the standard library only, so deployment needs nothing beyond Flask.
 """
 import os
+import re
 import sqlite3
 from datetime import datetime, timedelta
 
@@ -322,12 +323,43 @@ def utc_day_bounds(local_date):
     return start.strftime(STAMP), (start + timedelta(days=1)).strftime(STAMP)
 
 
+# --------------------------------------------------------- natural ordering
+_DIGITS = re.compile(r"(\d+)")
+
+
+def natural_key(value):
+    """A sort key that reads a flat or building label the way a person does.
+
+    Plain text ordering puts flat 10 before flat 2, and CAST(... AS INTEGER)
+    collapses every lettered unit to zero — which is why a building holding
+    both A-15 and flat 8 used to list every lettered unit ahead of flat 1.
+    This splits a label into its runs of letters and digits and pads the
+    digits, so numbers compare as numbers while the letters around them still
+    group together.
+
+    The first character decides the block: numbered flats first, counting up
+    from one; then lettered codes (A001, A-15, C-03); then labels with no
+    number in them at all; then blanks.
+    """
+    s = (value or "").strip().lower()
+    if not s:
+        return "3"
+    parts = [p for p in _DIGITS.split(s) if p != ""]
+    if not any(p.isdigit() for p in parts):
+        return "2|" + s
+    block = "0" if s[0].isdigit() else "1"
+    return "|".join([block] + [p.zfill(12) if p.isdigit() else p for p in parts])
+
+
 def get_db():
     if "db" not in g:
         g.db = sqlite3.connect(current_app.config["DATABASE"],
                                detect_types=sqlite3.PARSE_DECLTYPES)
         g.db.row_factory = sqlite3.Row
         g.db.execute("PRAGMA foreign_keys = ON")
+        # Callable from any ORDER BY as natkey(column). Deterministic so
+        # SQLite may call it as few times as it likes.
+        g.db.create_function("natkey", 1, natural_key, deterministic=True)
     return g.db
 
 

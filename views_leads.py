@@ -1,4 +1,6 @@
 """Leads: drag-and-drop pipeline board, list view, detail file and viewings."""
+import json
+
 from flask import (Blueprint, flash, g, jsonify, redirect, render_template,
                    request, url_for)
 
@@ -7,9 +9,45 @@ from datetime import timedelta
 
 from db import (CLOSED_STAGES, LEAD_SOURCES, LEAD_STAGES, LOST_REASONS,
                 LOST_REASON_LABELS, execute, local_now, local_today, log,
-                next_ref, notify, now, paginate, query, to_utc, utc_day_bounds)
+                next_ref, notify, now, paginate, query, to_local, to_utc,
+                utc_day_bounds)
 
 bp = Blueprint("leads", __name__, url_prefix="/leads")
+
+# ---------------------------------------------------------- AI prioritiser
+# Reuses ai_intake's provider-agnostic ask_model() rather than talking to an
+# API directly — one place decides which provider/key is in use, and this
+# stays a thin consumer of it. Never writes to the leads table: it only ever
+# reorders what an agent already sees, the same "advisory, not authoritative"
+# rule ai_intake.py and ai_social.py both follow.
+PRIORITY_SYSTEM_PROMPT = """You help a real estate agent in Doha, Qatar decide \
+who to contact today, from a list of their open leads (clients not yet won or \
+lost).
+
+You will receive a JSON array of leads, each with: id, name, stage (pipeline \
+status), source, budget (QAR, may be null), property (their property of \
+interest, may be null), days_since_created, days_since_contact (null if never \
+contacted), follow_up ("overdue" / "today" / "upcoming" / "none"), and agent \
+(who holds the lead — only meaningful if more than one name appears).
+
+Pick up to 8 leads worth contacting today, ranked most urgent first. Weigh:
+- an overdue or due-today follow-up is the strongest signal
+- a lead never contacted, or not contacted in a while, especially if new
+- higher budget deals are worth more attention, all else being equal
+- a lead with no signal of urgency at all should not be forced onto the list \
+just to fill it — fewer, well-justified picks beat a padded list
+
+For each pick, give one short, specific reason a busy agent can read in two \
+seconds, referencing the actual signal given (e.g. "Follow-up was due 3 days \
+ago" or "New lead, budget 12,000 QAR, not yet contacted"). Never invent a \
+detail that isn't in the data.
+
+Return ONLY a JSON object, no preamble and no markdown fences:
+{"picks": [{"id": int, "reason": string}], "note": string}
+
+"note" is one short sentence of overall context, e.g. "3 follow-ups are \
+overdue" or "Nothing urgent today — the pipeline is current." Use "" if there \
+is nothing worth saying beyond the picks themselves."""
 
 
 def follow_up_clause(kind, prefix="l"):
@@ -102,6 +140,87 @@ def index():
     return render_template("leads/index.html", rows=rows, q=q, due=due,
                            counts=counts, today=local_today(), pager=pager,
                            args={k: v for k, v in (("q", q), ("due", due)) if v})
+
+
+@bp.route("/priority")
+@login_required
+def priority():
+    from ai_intake import api_key_present
+    return render_template("leads/priority.html", result=None,
+                           key_missing=not api_key_present())
+
+
+@bp.route("/priority/generate", methods=("POST",))
+@login_required
+def priority_generate():
+    """Renders the result straight from this POST rather than storing it
+    somewhere and redirecting: the picks are only ever a few KB, but a
+    Flask session is a signed browser cookie with roughly a 4KB ceiling, and
+    this app has no server-side session store to spill into instead. A
+    reload loses the picks and needs a fresh "Generate" — a fair trade for
+    not depending on a schema change or risking a silently-dropped cookie."""
+    from ai_intake import api_key_present, ask_model
+
+    where, args = _scope()
+    rows = query(
+        "SELECT l.*, p.title AS prop_title, u.name AS agent_name FROM leads l"
+        " LEFT JOIN properties p ON p.id = l.property_id"
+        " LEFT JOIN users u ON u.id = l.agent_id"
+        " WHERE l.status NOT IN ('Won','Lost')" + where +
+        " ORDER BY l.updated_at DESC LIMIT 120", args)
+    if not rows:
+        flash("No open leads to prioritise.", "info")
+        return redirect(url_for("leads.priority"))
+
+    key_missing = not api_key_present()
+    today = local_now().date()
+
+    def _days_since(value):
+        dt = to_local(value)
+        return (today - dt.date()).days if dt else None
+
+    payload = []
+    for l in rows:
+        follow_up = to_local(l["next_follow_up"])
+        fu_state = "none"
+        if follow_up:
+            fu_state = ("overdue" if follow_up.date() < today
+                        else "today" if follow_up.date() == today else "upcoming")
+        payload.append({
+            "id": l["id"], "name": l["full_name"], "stage": l["status"],
+            "source": l["source"], "budget": l["budget"],
+            "property": l["prop_title"],
+            "days_since_created": _days_since(l["created_at"]),
+            "days_since_contact": _days_since(l["last_contact_at"]),
+            "follow_up": fu_state,
+            "agent": l["agent_name"],
+        })
+
+    try:
+        result = ask_model(PRIORITY_SYSTEM_PROMPT,
+                           json.dumps(payload, ensure_ascii=False))
+    except RuntimeError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("leads.priority"))
+
+    by_id = {l["id"]: l for l in rows}
+    picks = []
+    for p in (result.get("picks") or [])[:8]:
+        lead = by_id.get(p.get("id"))
+        if lead is None:
+            continue
+        picks.append({
+            "lead_id": lead["id"], "name": lead["full_name"],
+            "phone": lead["phone"], "stage": lead["status"],
+            "agent_name": lead["agent_name"],
+            "reason": (p.get("reason") or "").strip(),
+        })
+
+    log(g.user["id"], "Generated lead priorities", detail=f"{len(picks)} picks")
+    return render_template(
+        "leads/priority.html", key_missing=key_missing,
+        result={"picks": picks, "note": (result.get("note") or "").strip(),
+               "generated_at": now(), "considered": len(rows)})
 
 
 @bp.route("/<int:lid>")
