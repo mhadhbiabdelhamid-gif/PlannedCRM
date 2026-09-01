@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Marketing performance') }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">{{ t('Team') }}</div>
+    <h1 class="page-title">{{ t('Marketing performance') }}</h1>
+  </div>
+  <div class="actions">
+    <a class="btn btn-quiet" href="{{ url_for('admin.settings') }}#marketing">{{ t('Settings') }}</a>
+  </div>
+</div>
+
+<p class="muted small" style="margin:-6px 0 16px">
+  {{ t('Ad spend and reach from your connected ad accounts, read live from Windsor.ai and set next to the leads the CRM recorded from those same channels.') }}
+</p>
+
+{% if key_missing %}
+  <div class="card"><div class="empty">
+    <span class="mark">◇</span>
+    <p>{{ t('No Windsor.ai key is set up yet.') }}</p>
+    <a class="btn btn-gold" href="{{ url_for('admin.settings') }}#marketing">{{ t('Connect Windsor.ai') }}</a>
+  </div></div>
+{% else %}
+
+<div class="chip-row" style="margin-bottom:14px">
+  {% for key, label in ranges %}
+    <a class="chip {{ 'on' if range_key == key }}"
+       href="{{ url_for('reports.marketing_report', range=key) }}">{{ t(label) }}</a>
+  {% endfor %}
+</div>
+
+{% if not ok %}
+  <div class="card"><div class="empty">
+    <span class="mark">◇</span>
+    <p>{{ error }}</p>
+    <a class="btn btn-quiet" href="{{ url_for('admin.settings') }}#marketing">{{ t('Check the connection') }}</a>
+  </div></div>
+{% else %}
+
+<div class="eyebrow" style="margin:18px 0 8px">{{ t(connector_label) }} · {{ date_from }} → {{ date_to }}</div>
+
+{% if not summary.has_data %}
+  <div class="card"><div class="empty">
+    <span class="mark">◇</span>
+    {{ t('No ad activity in this period.') }}
+  </div></div>
+{% else %}
+
+<div class="metrics">
+  <div class="metric">
+    <div class="label">{{ t('Spend') }}</div>
+    <div class="value">{{ '%.2f' | format(summary.spend) }} {{ summary.currency or '' }}</div>
+  </div>
+  <div class="metric">
+    <div class="label">{{ t('Impressions') }}</div>
+    <div class="value">{{ '{:,}'.format(summary.impressions) }}</div>
+  </div>
+  <div class="metric">
+    <div class="label">{{ t('Reach') }}</div>
+    <div class="value">{{ '{:,}'.format(summary.reach) }}</div>
+  </div>
+  <div class="metric">
+    <div class="label">{{ t('Clicks') }}</div>
+    <div class="value">{{ '{:,}'.format(summary.clicks) }}</div>
+  </div>
+  <div class="metric">
+    <div class="label">{{ t('Click-through rate') }}</div>
+    <div class="value">{{ '%.2f%%' | format(summary.ctr) if summary.ctr is not none else '—' }}</div>
+  </div>
+  <div class="metric">
+    <div class="label">{{ t('Avg. cost per click') }}</div>
+    <div class="value">{{ '%.2f' | format(summary.cpc) if summary.cpc is not none else '—' }} {{ summary.currency or '' }}</div>
+  </div>
+</div>
+
+<div class="eyebrow" style="margin:22px 0 8px">{{ t('What it produced in the CRM') }}</div>
+<div class="metrics">
+  <div class="metric">
+    <div class="label">{{ t('New leads from these channels') }}</div>
+    <div class="value">{{ leads_count }}</div>
+    <div class="foot">{% for src in lead_sources %}{{ t(src) }}{{ ', ' if not loop.last }}{% endfor %}</div>
+  </div>
+  <div class="metric">
+    <div class="label">{{ t('Cost per lead') }}</div>
+    <div class="value">
+      {% if leads_count %}{{ '%.2f' | format(summary.spend / leads_count) }} {{ summary.currency or '' }}
+      {% else %}—{% endif %}
+    </div>
+  </div>
+</div>
+<p class="small faint" style="margin-top:8px">
+  {{ t('Leads counted here are CRM leads with source Instagram or WhatsApp, created in this window — the closest match to the platforms this ad account covers, not a per-ad tracking link, so treat cost per lead as an estimate.') }}
+</p>
+
+<div class="card" style="margin-top:22px">
+  <div class="card-head"><h3>{{ t('Campaigns') }}</h3>
+    <span class="mono faint">{{ summary.campaigns|length }}</span></div>
+  <div class="table-scroll"><table class="table">
+    <thead><tr>
+      <th>{{ t('Campaign') }}</th>
+      <th>{{ t('Spend') }}</th>
+      <th>{{ t('Impressions') }}</th>
+      <th>{{ t('Reach') }}</th>
+      <th>{{ t('Clicks') }}</th>
+    </tr></thead>
+    <tbody>
+    {% for c in summary.campaigns %}
+      <tr>
+        <td>{{ c.name }}</td>
+        <td class="mono">{{ '%.2f' | format(c.spend) }}</td>
+        <td class="mono">{{ '{:,}'.format(c.impressions) }}</td>
+        <td class="mono">{{ '{:,}'.format(c.reach) }}</td>
+        <td class="mono">{{ '{:,}'.format(c.clicks) }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+
+{% endif %}
+{% endif %}
+{% endif %}
+{% endblock %}

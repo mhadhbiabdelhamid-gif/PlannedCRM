@@ -82,6 +82,9 @@
       <a class="rail-link sub {{ 'active' if request.endpoint == 'leads.index' }}"
          href="{{ url_for('leads.index') }}">
         <span class="idx">2.2</span> {{ t('All leads') }}</a>
+      <a class="rail-link sub {{ 'active' if request.endpoint == 'leads.priority' }}"
+         href="{{ url_for('leads.priority') }}">
+        <span class="idx">2.3</span> {{ t("Today's priorities") }}</a>
     </details>
     {% endif %}
 
@@ -121,7 +124,7 @@
          href="{{ url_for('admin.users') }}">
         <span class="idx">5.1</span> {{ t('Team members') }}</a>
       {% endif %}
-      <a class="rail-link sub {{ 'active' if request.blueprint == 'reports' }}"
+      <a class="rail-link sub {{ 'active' if request.endpoint == 'reports.index' }}"
          href="{{ url_for('reports.index') }}">
         <span class="idx">5.2</span> {{ t('Agent reports') }}</a>
       {% if is_admin_user %}
@@ -129,6 +132,9 @@
          href="{{ url_for('main.activity') }}">
         <span class="idx">5.3</span> {{ t('Activity log') }}</a>
       {% endif %}
+      <a class="rail-link sub {{ 'active' if request.endpoint == 'reports.marketing_report' }}"
+         href="{{ url_for('reports.marketing_report') }}">
+        <span class="idx">5.4</span> {{ t('Marketing performance') }}</a>
     </details>
     {% endif %}
 

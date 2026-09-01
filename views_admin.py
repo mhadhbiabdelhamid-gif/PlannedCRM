@@ -11,6 +11,7 @@ from flask import (Blueprint, Response, current_app, flash, g, redirect,
 import backups
 import excel_export
 import mailer
+import marketing
 import performance
 import whatsapp
 from werkzeug.security import generate_password_hash
@@ -459,6 +460,9 @@ def settings():
     mail = mailer.settings()
     mail["has_password"] = bool(mail.get("smtp_pass"))
     mail.pop("smtp_pass", None)          # never send the password back to a page
+    mkt = marketing.settings()
+    mkt["has_key"] = bool(mkt.get("windsor_api_key"))
+    mkt.pop("windsor_api_key", None)     # never send the key back to a page
     return render_template("admin/settings.html", s=s, templates=templates,
                            labels=whatsapp.LABELS,
                            placeholders=whatsapp.PLACEHOLDERS,
@@ -467,6 +471,7 @@ def settings():
                            backup_folder=backups.backup_folder(current_app),
                            mail=mail, mail_presets=mailer.PRESETS,
                            mail_ready=mailer.is_configured(),
+                           mkt=mkt, mkt_ready=marketing.api_key_present(),
                            backup_keep=backups.KEEP,
                            backup_custom=get_setting('backup_folder', ''),
                            backup_email=get_setting('backup_email', ''),
@@ -493,6 +498,23 @@ def save_email():
     else:
         flash("Email settings saved.", "ok")
     return redirect(url_for("admin.settings") + "#email")
+
+
+@admin.route("/settings/marketing", methods=("POST",))
+@admin_required
+def save_marketing():
+    d = request.form
+    key = d.get("windsor_api_key", "").strip()
+    if key:                              # a blank field means "keep the saved one"
+        set_setting("windsor_api_key", key)
+    log(g.user["id"], "Updated the marketing report settings")
+
+    if d.get("test"):
+        ok, message = marketing.test_connection()
+        flash(message, "ok" if ok else "error")
+    else:
+        flash("Marketing report settings saved.", "ok")
+    return redirect(url_for("admin.settings") + "#marketing")
 
 
 @admin.route("/settings/email/test-send", methods=("POST",))

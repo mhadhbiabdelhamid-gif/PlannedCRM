@@ -276,6 +276,42 @@
 </form>
 {% endif %}
 
+<form method="post" action="{{ url_for('admin.save_marketing') }}" class="card"
+      style="margin-top:16px" id="marketing">
+  <div class="card-head">
+    <h3>{{ t('Marketing report') }}</h3>
+    {% if mkt_ready %}<span class="tag tag-available">{{ t('Set up') }}</span>
+    {% else %}<span class="tag tag-plain">{{ t('Not set up') }}</span>{% endif %}
+  </div>
+  <div class="card-body">
+    <p class="small muted" style="margin-top:0">
+      {{ t('Connect a Windsor.ai account and the marketing performance report can read ad spend, reach and clicks straight from your connected ad accounts — right now that means Meta Ads (Facebook & Instagram).') }}
+    </p>
+    <div class="field">
+      <label>{{ t('Windsor.ai API key') }}</label>
+      <input type="password" name="windsor_api_key" autocomplete="new-password"
+             placeholder="{{ t('Saved — leave blank to keep it') if mkt.has_key else t('Paste your key here') }}">
+      <span class="small faint">
+        {{ t('Sign in at windsor.ai, connect your ad account under Connectors, then copy the API key from your account settings.') }}
+      </span>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn" type="submit" name="test" value="1">{{ t('Save and test the connection') }}</button>
+    <button class="btn btn-gold" type="submit">{{ t('Save marketing settings') }}</button>
+  </div>
+</form>
+{% if mkt_ready %}
+<div class="card" style="margin-top:16px">
+  <div class="card-body inline">
+    <span class="small muted">
+      {{ t('Windsor.ai is connected.') }}
+    </span>
+    <a class="btn btn-quiet btn-sm" href="{{ url_for('reports.marketing_report') }}">{{ t('Open the marketing report') }}</a>
+  </div>
+</div>
+{% endif %}
+
 <form method="post" action="{{ url_for('admin.save_templates') }}" class="card"
       style="margin-top:16px" id="templates">
   <div class="card-head">
