@@ -346,6 +346,9 @@ AR = {
     "Property type": "نوع العقار",
     "Sale or rent": "بيع أم إيجار",
     "Location / district": "المنطقة",
+    "e.g. The Pearl, مشيرب, or zone 51": "مثال: اللؤلؤة، مشيرب، أو المنطقة 51",
+    "District name in English or Arabic, a close spelling, or a zone number all work.":
+    "اسم الحي بالعربية أو الإنجليزية، أو تهجئة قريبة، أو رقم المنطقة — كلها تعمل.",
     "Agent in charge": "الوكيل المسؤول",
     "Add photos": "إضافة صور",
     "Key features": "أهم المميزات",

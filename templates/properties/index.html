@@ -51,7 +51,8 @@
       </div>
       <div class="field">
         <label>{{ t('Location') }}</label>
-        <input type="text" name="area" value="{{ f.area }}" placeholder="e.g. The Pearl">
+        <input type="text" name="area" value="{{ f.area }}" placeholder="{{ t('e.g. The Pearl, مشيرب, or zone 51') }}">
+<div class="small" style="color:var(--faint);margin-top:4px">{{ t('District name in English or Arabic, a close spelling, or a zone number all work.') }}</div>
       </div>
       <div class="field">
         <label>{{ t('Min price') }}</label>
