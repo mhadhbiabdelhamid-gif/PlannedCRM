@@ -179,9 +179,9 @@
     el.textContent = message;
     el.style.cssText =
       "position:fixed;left:50%;bottom:28px;transform:translateX(-50%);" +
-      "background:#0B0B0D;color:#fff;padding:11px 18px;border-radius:3px;" +
+      "background:#23201A;color:#fff;padding:11px 18px;border-radius:3px;" +
       "font-size:13px;z-index:99;box-shadow:0 10px 30px rgba(0,0,0,.3);" +
-      "border-left:3px solid #C8A24A";
+      "border-left:3px solid #A88848";
     document.body.appendChild(el);
     setTimeout(function () { el.remove(); }, 4000);
   }

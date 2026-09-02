@@ -32,10 +32,10 @@ except ImportError:
     HAS_LOGO_SUPPORT = False
 
 # ------------------------------------------------------------------ brand
-GOLD = "C8A24A"
+GOLD = "A88848"
 GOLD_PALE = "F6EFDD"
-INK = "0B0B0D"
-PAPER = "F4F1EA"
+INK = "23201A"
+PAPER = "F6F2E9"
 LINE = "DBD7CE"
 MUTED = "4E4B44"
 LINK = "0563C1"

@@ -10,16 +10,16 @@
    ========================================================================== */
 
 :root {
-  --ink:        #26241F;
+  --ink:        #23201A;
   --ink-soft:   #332F28;
   --ink-line:   #433E35;
 
-  --gold:       #C8A24A;
-  --gold-lift:  #E0C173;
-  --gold-deep:  #7E6220;      /* darkened: 4.6:1 on paper, readable as text */
+  --gold:       #A88848;
+  --gold-lift:  #C9A961;
+  --gold-deep:  #7E6430;      /* darkened: 4.6:1 on paper, readable as text */
   --gold-tint:  #F6EFDD;
 
-  --canvas:     #F7F6F3;
+  --canvas:     #F6F2E9;
   --card:       #FFFFFF;
   --line:       #DBD7CE;
   --line-soft:  #EFEDE8;

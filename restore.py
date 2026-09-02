@@ -74,7 +74,7 @@ def inspect(path):
 PAGE = """<!doctype html>
 <title>Restore database</title>
 <style>
- body{margin:0;padding:40px 20px;background:#17181a;color:#e8e6e1;
+ body{margin:0;padding:40px 20px;background:#23201a;color:#f6f2e9;
       font:15px/1.55 "Segoe UI",system-ui,sans-serif}
  .w{max-width:560px;margin:0 auto}
  h1{font-size:20px;margin:0 0 6px}
@@ -85,10 +85,10 @@ PAGE = """<!doctype html>
  label{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.06em;
        color:#9a9691;margin:14px 0 4px}
  label:first-child{margin-top:0}
- input{width:100%;padding:9px 10px;background:#17181a;color:#e8e6e1;
+ input{width:100%;padding:9px 10px;background:#23201a;color:#f6f2e9;
        border:1px solid #33363b;border-radius:4px;font:inherit}
- input:focus{outline:2px solid #c9a227;outline-offset:1px}
- button{background:#c9a227;color:#17181a;border:0;border-radius:6px;
+ input:focus{outline:2px solid #a88848;outline-offset:1px}
+ button{background:#a88848;color:#23201a;border:0;border-radius:6px;
         padding:11px 22px;font:600 14px inherit;cursor:pointer;margin-top:18px}
  .msg{border-radius:6px;padding:12px 14px;font-size:13px;margin-bottom:16px}
  .ok{background:#1b2620;border:1px solid #2f5a3f}
