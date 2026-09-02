@@ -9,6 +9,7 @@
   </div>
   <div class="actions">
     <a class="btn {{ 'btn-dark' if view == 'grid' }}" href="{{ url_for('properties.index', view='grid', **f) }}">{{ t('Grid') }}</a>
+    <a class="btn {{ 'btn-dark' if view == 'list' }}" href="{{ url_for('properties.index', view='list', **f) }}">{{ t('List') }}</a>
     <a class="btn {{ 'btn-dark' if view == 'table' }}" href="{{ url_for('properties.index', view='table', **f) }}">{{ t('Table') }}</a>
     <a class="btn" href="{{ url_for('properties.stale') }}">{{ t('Stale listings') }}
       {% if stale_count %}<span class="pill">{{ stale_count }}</span>{% endif %}</a>
@@ -28,47 +29,14 @@
   <div class="card-body">
     <div class="filters">
       <div class="field">
-        <label>{{ t('Search') }}</label>
-        <input type="text" name="q" value="{{ f.q }}" placeholder="{{ t('Title, address, building or flat') }}">
+        <label>{{ t('Location') }}</label>
+        <input type="text" name="area" value="{{ f.area }}" placeholder="{{ t('e.g. The Pearl, مشيرب, or zone 51') }}">
+        <div class="small" style="color:var(--faint);margin-top:4px">{{ t('District name in English or Arabic, a close spelling, or a zone number all work.') }}</div>
       </div>
       <div class="field">
         <label>{{ t('Type') }}</label>
         <select name="prop_type"><option value="">{{ t('Any') }}</option>
           {% for tp in prop_types %}<option value="{{ tp }}" {{ 'selected' if f.prop_type == tp }}>{{ t(tp) }}</option>{% endfor %}
-        </select>
-      </div>
-      <div class="field">
-        <label>{{ t('Sale / Rent') }}</label>
-        <select name="listing_type"><option value="">{{ t('Any') }}</option>
-          {% for tp in listing_types %}<option value="{{ tp }}" {{ 'selected' if f.listing_type == tp }}>{{ t(tp) }}</option>{% endfor %}
-        </select>
-      </div>
-      <div class="field">
-        <label>{{ t('Status') }}</label>
-        <select name="status"><option value="">{{ t('Any') }}</option>
-          {% for s in statuses %}<option value="{{ s }}" {{ 'selected' if f.status == s }}>{{ t(s) }}</option>{% endfor %}
-        </select>
-      </div>
-      <div class="field">
-        <label>{{ t('Location') }}</label>
-        <input type="text" name="area" value="{{ f.area }}" placeholder="{{ t('e.g. The Pearl, مشيرب, or zone 51') }}">
-<div class="small" style="color:var(--faint);margin-top:4px">{{ t('District name in English or Arabic, a close spelling, or a zone number all work.') }}</div>
-      </div>
-      <div class="field">
-        <label>{{ t('Min price') }}</label>
-        <input type="number" name="min_price" value="{{ f.min_price }}" step="any" inputmode="decimal">
-      </div>
-      <div class="field">
-        <label>{{ t('Max price') }}</label>
-        <input type="number" name="max_price" value="{{ f.max_price }}" step="any" inputmode="decimal">
-      </div>
-      <div class="field">
-        <label>{{ t('Floor') }}</label>
-        <select name="floor">
-          <option value="">{{ t('Any') }}</option>
-          {% for fl in floors %}
-            <option value="{{ fl }}" {{ 'selected' if f.floor == fl }}>{{ fl }}</option>
-          {% endfor %}
         </select>
       </div>
       <div class="field">
@@ -82,35 +50,75 @@
           <option value="6+" {{ 'selected' if f.beds == '6+' }}>6+</option>
         </select>
       </div>
-      <div class="field">
-        <label>{{ t('Whose listing') }}</label>
-        <select name="owned">
-          <option value="">{{ t('Any') }}</option>
-          <option value="1" {{ 'selected' if f.owned == '1' }}>{{ t('Ours') }}</option>
-          <option value="0" {{ 'selected' if f.owned == '0' }}>{{ t('Third-party') }}</option>
-        </select>
-      </div>
-      <div class="field">
-        <label>{{ t('Agent') }}</label>
-        <select name="agent"><option value="">{{ t('Anyone') }}</option>
-          {% for a in agents %}
-            <option value="{{ a.id }}" {{ 'selected' if f.agent == a.id|string }}>{{ a.name }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="field">
-        <label>{{ t('Owner') }}</label>
-        <select name="owner"><option value="">{{ t('Any') }}</option>
-          {% for o in owners_list %}
-            <option value="{{ o.id }}" {{ 'selected' if f.owner == o.id|string }}>{{ o.name }}</option>
-          {% endfor %}
-        </select>
-      </div>
       <div class="field inline">
         <button class="btn btn-dark" type="submit">{{ t('Apply') }}</button>
         <a class="btn btn-quiet" href="{{ url_for('properties.index', view=view) }}">{{ t('Clear') }}</a>
       </div>
     </div>
+
+    {% set more_active = f.q or f.listing_type or f.status or f.min_price or f.max_price or f.floor or f.owned or f.agent or f.owner %}
+    <details class="more-filters" {{ 'open' if more_active }}>
+      <summary>{{ t('More filters') }}</summary>
+      <div class="filters">
+        <div class="field">
+          <label>{{ t('Search') }}</label>
+          <input type="text" name="q" value="{{ f.q }}" placeholder="{{ t('Title, address, building or flat') }}">
+        </div>
+        <div class="field">
+          <label>{{ t('Sale / Rent') }}</label>
+          <select name="listing_type"><option value="">{{ t('Any') }}</option>
+            {% for tp in listing_types %}<option value="{{ tp }}" {{ 'selected' if f.listing_type == tp }}>{{ t(tp) }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label>{{ t('Status') }}</label>
+          <select name="status"><option value="">{{ t('Any') }}</option>
+            {% for s in statuses %}<option value="{{ s }}" {{ 'selected' if f.status == s }}>{{ t(s) }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label>{{ t('Min price') }}</label>
+          <input type="number" name="min_price" value="{{ f.min_price }}" step="any" inputmode="decimal">
+        </div>
+        <div class="field">
+          <label>{{ t('Max price') }}</label>
+          <input type="number" name="max_price" value="{{ f.max_price }}" step="any" inputmode="decimal">
+        </div>
+        <div class="field">
+          <label>{{ t('Floor') }}</label>
+          <select name="floor">
+            <option value="">{{ t('Any') }}</option>
+            {% for fl in floors %}
+              <option value="{{ fl }}" {{ 'selected' if f.floor == fl }}>{{ fl }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label>{{ t('Whose listing') }}</label>
+          <select name="owned">
+            <option value="">{{ t('Any') }}</option>
+            <option value="1" {{ 'selected' if f.owned == '1' }}>{{ t('Ours') }}</option>
+            <option value="0" {{ 'selected' if f.owned == '0' }}>{{ t('Third-party') }}</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>{{ t('Agent') }}</label>
+          <select name="agent"><option value="">{{ t('Anyone') }}</option>
+            {% for a in agents %}
+              <option value="{{ a.id }}" {{ 'selected' if f.agent == a.id|string }}>{{ a.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label>{{ t('Owner') }}</label>
+          <select name="owner"><option value="">{{ t('Any') }}</option>
+            {% for o in owners_list %}
+              <option value="{{ o.id }}" {{ 'selected' if f.owner == o.id|string }}>{{ o.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+    </details>
   </div>
 </form>
 
@@ -219,6 +227,40 @@
       {% endfor %}
       </tbody>
     </table>
+  </div>
+
+{% elif view == 'list' and groups %}
+  {% for grp in groups %}
+    <div class="group-head {{ 'ours' if grp.kind == 'ours' }}">
+      {% if grp.photo %}
+        <img class="group-photo" src="{{ url_for('main.uploaded_file', kind='contacts', filename=grp.photo) }}" alt="">
+      {% elif grp.kind == 'ours' and logo_exists %}
+        <img class="group-photo" src="{{ logo_url }}" alt="">
+      {% endif %}
+      <div>
+        <b>{{ t(grp.label) if grp.kind in ('none',) else grp.label }}</b>
+        <div class="small muted">
+          {% if grp.kind == 'ours' %}{{ t('Our own properties') }}
+          {% elif grp.kind == 'owner' %}{{ t('Owner') }}{% if grp.company %} · {{ grp.company }}{% endif %}
+          {% elif grp.kind == 'partner' %}{{ t('Partner') }}
+          {% elif grp.kind == 'list' %}{{ t('From partner list') }}
+          {% elif grp.kind == 'building' %}{{ grp.company or '' }}
+          {% endif %}
+        </div>
+      </div>
+      <span class="mono faint">{{ grp.rows|length }}
+        {{ t('unit') if grp.rows|length == 1 else t('units') }}</span>
+    </div>
+    <div class="prop-list" style="margin-bottom:22px">
+      {% for p in grp.rows %}{% include "properties/_row.html" %}{% endfor %}
+    </div>
+  {% endfor %}
+
+{% elif view == 'list' %}
+  <div class="prop-list">
+    {% for p in rows %}
+      {% include "properties/_row.html" %}
+    {% endfor %}
   </div>
 
 {% elif groups %}
