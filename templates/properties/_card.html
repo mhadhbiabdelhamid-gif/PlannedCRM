@@ -35,6 +35,11 @@
       {% if p.bathrooms %}<span>{{ p.bathrooms }} {{ t('Bathrooms') }}</span>{% endif %}
       {% if p.size_sqm %}<span>{{ p.size_sqm | money }} m²</span>{% endif %}
     </div>
+    {% set tenant = tenants.get(p.id) if tenants else None %}
+    {% if tenant %}
+      <div class="small muted" style="margin-top:4px">
+        {{ t('Tenant') }}: {{ tenant.tenant_name or t('Unknown') }}</div>
+    {% endif %}
   </div>
 </a>
 </div>

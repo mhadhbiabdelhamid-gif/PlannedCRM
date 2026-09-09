@@ -219,7 +219,9 @@
             {% if p.is_own %}<span class="tag tag-sale">{{ t('Ours') }}</span>{% endif %}
             {% if p.status in ('Available', 'Reserved') and (not p.last_verified or p.last_verified < stale_cutoff) %}
               <span class="tag tag-reserved">{{ t('Stale') }}</span>
-            {% endif %}</td>
+            {% endif %}
+            {% set tenant = tenants.get(p.id) if tenants else None %}
+            {% if tenant %}<div class="small muted">{{ t('Tenant') }}: {{ tenant.tenant_name or t('Unknown') }}</div>{% endif %}</td>
           <td class="right price">{{ currency }} {{ p.price | money }}</td>
           <td class="muted small">{{ p.agent_name or t('Unassigned') }}</td>
         </tr>

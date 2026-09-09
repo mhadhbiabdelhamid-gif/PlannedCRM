@@ -7,10 +7,10 @@ from flask import (Blueprint, flash, g, jsonify, redirect, render_template,
 from auth import can_edit, is_admin, login_required, sees_all
 from datetime import timedelta
 
-from db import (CLOSED_STAGES, LEAD_SOURCES, LEAD_STAGES, LOST_REASONS,
-                LOST_REASON_LABELS, execute, local_now, local_today, log,
-                next_ref, notify, now, paginate, query, to_local, to_utc,
-                utc_day_bounds)
+from db import (ARCHIVE_DAYS, CLOSED_STAGES, LEAD_SOURCES, LEAD_STAGES,
+                LOST_REASONS, LOST_REASON_LABELS, days_ago, execute, local_now,
+                local_today, log, next_ref, notify, now, paginate, query,
+                to_local, to_utc, utc_day_bounds)
 
 bp = Blueprint("leads", __name__, url_prefix="/leads")
 
@@ -78,6 +78,14 @@ def _scope(prefix="l"):
     return f" AND ({prefix}.agent_id = ? OR {prefix}.agent_id IS NULL)", [g.user["id"]]
 
 
+def _not_archived(prefix="l"):
+    """Everything still worth showing day to day: open leads, plus anyone won
+    or lost within the last few days. Older closed clients have moved to the
+    archive, so the board and lists don't just grow forever."""
+    return (f" AND ({prefix}.closed_at IS NULL OR {prefix}.closed_at > ?)",
+            [days_ago(ARCHIVE_DAYS)])
+
+
 @bp.route("/")
 @login_required
 def board():
@@ -92,6 +100,9 @@ def board():
         args.append(source)
     due = request.args.get("due", "")
     clause, extra = follow_up_clause(due)
+    where += clause
+    args += extra
+    clause, extra = _not_archived()
     where += clause
     args += extra
 
@@ -120,6 +131,9 @@ def index():
     clause, extra = follow_up_clause(due)
     where += clause
     args += extra
+    clause, extra = _not_archived()
+    where += clause
+    args += extra
 
     order = ("l.next_follow_up IS NULL, l.next_follow_up" if due
              else "l.id DESC")
@@ -137,9 +151,50 @@ def index():
         counts[kind] = query("SELECT COUNT(*) n FROM leads l WHERE 1=1"
                              + base + c, base_args + a, one=True)["n"]
 
+    base, base_args = _scope()
+    archived_count = query(
+        "SELECT COUNT(*) n FROM leads l WHERE l.status IN ('Won','Lost')"
+        " AND l.closed_at IS NOT NULL AND l.closed_at <= ?" + base,
+        [days_ago(ARCHIVE_DAYS)] + base_args, one=True)["n"]
+
     return render_template("leads/index.html", rows=rows, q=q, due=due,
                            counts=counts, today=local_today(), pager=pager,
+                           archived_count=archived_count,
                            args={k: v for k, v in (("q", q), ("due", due)) if v})
+
+
+@bp.route("/archive")
+@login_required
+def archive():
+    """Clients settled — won or lost — more than a few days ago.
+
+    Kept off the board and out of the main list so the pipeline only shows
+    what still needs attention, but nothing here is ever deleted: it stays
+    searchable, exactly like before it was archived.
+    """
+    where, args = _scope()
+    q = request.args.get("q", "").strip()
+    if q:
+        where += " AND (l.full_name LIKE ? OR l.phone LIKE ? OR l.email LIKE ?)"
+        args += [f"%{q}%"] * 3
+    status = request.args.get("status", "")
+    if status in ("Won", "Lost"):
+        where += " AND l.status = ?"
+        args.append(status)
+    where += (" AND l.status IN ('Won','Lost')"
+              " AND l.closed_at IS NOT NULL AND l.closed_at <= ?")
+    args.append(days_ago(ARCHIVE_DAYS))
+
+    pager = paginate("SELECT l.*, u.name AS agent_name, p.title AS prop_title"
+                     " FROM leads l LEFT JOIN users u ON u.id = l.agent_id"
+                     " LEFT JOIN properties p ON p.id = l.property_id"
+                     " WHERE 1=1" + where + " ORDER BY l.closed_at DESC",
+                     args, request.args.get("page", 1))
+    return render_template("leads/archive.html", rows=pager["rows"], q=q,
+                           status=status, pager=pager,
+                           lost_labels=LOST_REASON_LABELS,
+                           args={k: v for k, v in
+                                 (("q", q), ("status", status)) if v})
 
 
 @bp.route("/priority")
@@ -375,8 +430,8 @@ def move_stage(lid):
     if l["status"] != stage:
         if stage == "Lost":
             execute("UPDATE leads SET status = ?, lost_reason = ?, lost_note = ?,"
-                    " lost_at = ?, updated_at = ? WHERE id = ?",
-                    (stage, reason, note, now(), now(), lid))
+                    " lost_at = ?, closed_at = ?, updated_at = ? WHERE id = ?",
+                    (stage, reason, note, now(), now(), now(), lid))
             # Also written into the client's own timeline, so someone reading
             # the file sees the ending in place rather than only in a report.
             execute("INSERT INTO comments (entity_type, entity_id, user_id, body,"
@@ -388,10 +443,13 @@ def move_stage(lid):
         else:
             # Coming back out of Lost: the old reason no longer describes this
             # client, and leaving it behind would show a stale cause on a live
-            # lead the next time they are lost.
+            # lead the next time they are lost. closed_at is set only when
+            # landing on Won — anywhere else the client is open again, and
+            # the archive clock (which runs off closed_at) has to reset too.
             execute("UPDATE leads SET status = ?, lost_reason = NULL,"
-                    " lost_note = NULL, lost_at = NULL, updated_at = ?"
-                    " WHERE id = ?", (stage, now(), lid))
+                    " lost_note = NULL, lost_at = NULL, closed_at = ?, updated_at = ?"
+                    " WHERE id = ?",
+                    (stage, now() if stage in CLOSED_STAGES else None, now(), lid))
             log(g.user["id"], "Moved lead", "lead", lid, f"{l['status']} → {stage}")
         if l["agent_id"] and l["agent_id"] != g.user["id"]:
             notify(l["agent_id"], f"{l['full_name']} moved to {stage}",

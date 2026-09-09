@@ -453,11 +453,20 @@ MIGRATIONS = [
     # 'ended', or 'done' once someone has dealt with it. Stops the scheduler
     # sending the same notification every time it wakes up.
     ("deals", "lease_alert", "TEXT"),
+    # The moment a lead actually became Won or Lost — separate from lost_at,
+    # which only ever covers Lost. This is what the archive clock runs on, so
+    # editing a settled client's notes later never resets it the way
+    # updated_at would.
+    ("leads", "closed_at", "TEXT"),
 ]
 
 # How much warning the office gets before a tenancy ends. A unit that comes
 # free unannounced is a unit nobody is marketing.
 LEASE_NOTICE_DAYS = 30
+
+# A client stays on the live board/list for this many days after being won or
+# lost, then drops to the archive — visible any time, just not in the way.
+ARCHIVE_DAYS = 3
 
 # How long a listing can go without someone confirming it's still on the
 # market before it counts as "stale" on the office-admin screen.
@@ -523,6 +532,19 @@ def backfill_leases(con):
         "   AND lower(COALESCE(deal_type,'')) LIKE 'rent%'")
 
 
+def backfill_lead_closed_at(con):
+    """Give leads that were already Won or Lost before this feature existed
+    a closing date to archive from.
+
+    Their last update is the best guess available — usually that's the very
+    edit that moved them into the stage. Only fills rows still empty, so a
+    closing date already recorded is never overwritten.
+    """
+    con.execute(
+        "UPDATE leads SET closed_at = updated_at"
+        " WHERE closed_at IS NULL AND status IN ('Won','Lost')")
+
+
 def init_db(app):
     """Tables, then migrations, then indexes — in that order.
 
@@ -544,6 +566,7 @@ def init_db(app):
 
     backfill_deals(con)
     backfill_leases(con)
+    backfill_lead_closed_at(con)
     con.commit()
     con.close()
 

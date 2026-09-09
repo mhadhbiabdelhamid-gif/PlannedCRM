@@ -9,6 +9,7 @@
   </div>
   <div class="actions">
     <a class="btn" href="{{ url_for('leads.index') }}">{{ t('Table view') }}</a>
+    <a class="btn" href="{{ url_for('leads.archive') }}">{{ t('Archived clients') }}</a>
     {% if user.role == 'admin' %}
       <a class="btn btn-dark" href="{{ url_for('admin.export_workbook') }}">{{ t('Export Excel') }}</a>
       <a class="btn" href="{{ url_for('admin.export_leads') }}">{{ t('Export CSV') }}</a>

@@ -85,6 +85,9 @@
       <a class="rail-link sub {{ 'active' if request.endpoint == 'leads.priority' }}"
          href="{{ url_for('leads.priority') }}">
         <span class="idx">2.3</span> {{ t("Today's priorities") }}</a>
+      <a class="rail-link sub {{ 'active' if request.endpoint == 'leads.archive' }}"
+         href="{{ url_for('leads.archive') }}">
+        <span class="idx">2.4</span> {{ t('Archived clients') }}</a>
     </details>
     {% endif %}
 

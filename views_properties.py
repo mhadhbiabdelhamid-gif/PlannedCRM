@@ -172,12 +172,19 @@ def index():
     view = request.args.get("view", "grid")
     args_out = {k: v for k, v in f.items() if v}
     args_out.update({"view": view, "sort": sort})
+
+    # Who's renting our own rented units, for the tenant label on each card.
+    # One bulk lookup for the whole page rather than a query per row.
+    import leases
+    rented_ids = [r["id"] for r in rows if r["is_own"] and r["status"] == "Rented"]
+    tenants = leases.current_tenants_map(rented_ids)
+
     return render_template("properties/index.html", rows=rows, f=f, agents=agents,
                            prop_types=PROP_TYPES, statuses=PROP_STATUS,
                            listing_types=LISTING_TYPES, groups=groups, sort=sort,
                            view=view, pager=pager, args=args_out,
                            bulk_actions=BULK_ACTIONS, floors=floors,
-                           stale_cutoff=days_ago(STALE_DAYS),
+                           stale_cutoff=days_ago(STALE_DAYS), tenants=tenants,
                            owners_list=query("SELECT id, name FROM owners ORDER BY name"),
                            partners_list=query("SELECT id, name FROM partners ORDER BY name"))
 
@@ -219,8 +226,16 @@ def detail(pid):
                   " LEFT JOIN users u ON u.id = a.user_id"
                   " WHERE a.entity_type='property' AND a.entity_id = ?"
                   " ORDER BY a.id DESC LIMIT 25", (pid,))
+
+    # Tenant follow-up only ever applies to our own rented stock — a
+    # third-party owner's tenancy is their business, not ours to track.
+    tenant = None
+    if p["is_own"] and p["status"] == "Rented":
+        import leases
+        tenant = leases.current_tenant(pid)
+
     return render_template("properties/detail.html", p=p, images=images, docs=docs,
-                           comments=comments, leads=leads, trail=trail,
+                           comments=comments, leads=leads, trail=trail, tenant=tenant,
                            editable=can_edit(p), cutoff=days_ago(STALE_DAYS))
 
 

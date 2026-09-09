@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Archived clients') }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">03 · {{ t('Pipeline') }}</div>
+    <h1 class="page-title">{{ t('Archived clients') }}</h1>
+  </div>
+  <div class="actions">
+    <a class="btn" href="{{ url_for('leads.board') }}">{{ t('Board view') }}</a>
+    <a class="btn" href="{{ url_for('leads.index') }}">{{ t('Leads list') }}</a>
+  </div>
+</div>
+
+<p class="muted small" style="margin:-6px 0 16px">
+  {{ t('Won or lost clients move here automatically, three days after the decision — so the board and the list stay about who still needs a call. Nothing here is deleted; search for anyone at any time.') }}
+</p>
+
+<form class="card" method="get" style="margin-bottom:16px">
+  <div class="card-body inline">
+    <input type="text" name="q" value="{{ q }}" placeholder="{{ t('Name, phone or email') }}" style="max-width:320px">
+    <button class="btn btn-dark" type="submit">{{ t('Search') }}</button>
+    {% if q or status %}<a class="btn btn-quiet" href="{{ url_for('leads.archive') }}">{{ t('Clear') }}</a>{% endif %}
+    <span class="mono muted" style="margin-left:auto">{{ pager.total }} {{ t('found') }}</span>
+  </div>
+  <div class="card-body" style="border-top:1px solid var(--line-soft);padding-top:12px">
+    <div class="chip-row">
+      <a class="chip {{ 'on' if not status }}" href="{{ url_for('leads.archive', q=q) }}">{{ t('All') }}</a>
+      <a class="chip {{ 'on' if status == 'Won' }}" href="{{ url_for('leads.archive', q=q, status='Won') }}">{{ t('Won') }}</a>
+      <a class="chip {{ 'on' if status == 'Lost' }}" href="{{ url_for('leads.archive', q=q, status='Lost') }}">{{ t('Lost') }}</a>
+    </div>
+  </div>
+</form>
+
+{% if rows %}
+<div class="card table-scroll">
+  <table class="table">
+    <thead><tr>
+      <th>#</th><th>{{ t('Name') }}</th><th>{{ t('Phone') }}</th>
+      <th>{{ t('Status') }}</th><th>{{ t('Interested in') }}</th><th>{{ t('Agent') }}</th>
+      <th class="right">{{ t('Closed') }}</th>
+    </tr></thead>
+    <tbody>
+    {% for l in rows %}
+      <tr onclick="location.href='{{ url_for('leads.detail', lid=l.id) }}'" style="cursor:pointer">
+        <td class="mono faint">{{ l.ref }}</td>
+        <td><b>{{ l.full_name }}</b>{% if l.email %}<div class="small muted">{{ l.email }}</div>{% endif %}</td>
+        <td class="mono small">{{ l.phone or '—' }}</td>
+        <td>
+          <span class="tag {{ 'tag-available' if l.status == 'Won' else 'tag-sold' }}">{{ t(l.status) }}</span>
+          {% if l.status == 'Lost' and l.lost_reason %}
+            <div class="small muted">{{ t(lost_labels.get(l.lost_reason, l.lost_reason)) }}</div>
+          {% endif %}
+        </td>
+        <td class="small muted">{{ l.prop_title or '—' }}</td>
+        <td class="small muted">{{ l.agent_name or t('Unassigned') }}</td>
+        <td class="right mono faint nowrap">{{ l.closed_at | nice_date }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+  <div class="card"><div class="empty">
+    <span class="mark">◇</span>
+    {{ t('Nothing archived yet. Clients land here three days after being won or lost.') }}</div></div>
+{% endif %}
+{% include "_pager.html" %}
+
+{% endblock %}

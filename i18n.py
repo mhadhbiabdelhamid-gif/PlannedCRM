@@ -88,6 +88,19 @@ AR = {
     "in": "خلال",
     "Back on the market.": "عادت إلى السوق.",
     "That listing was already available. The reminder is cleared.": "هذه الوحدة كانت متاحة بالفعل. تم إلغاء التذكير.",
+    "Archived clients": "العملاء المؤرشفون",
+    "Won": "تم الفوز",
+    "Lost": "خسارة",
+    "All": "الكل",
+    "Closed": "أُغلق",
+    "Won or lost clients move here automatically, three days after the decision — so the board and the list stay about who still needs a call. Nothing here is deleted; search for anyone at any time.":
+        "ينتقل العملاء الفائزون أو الخاسرون إلى هنا تلقائياً بعد ثلاثة أيام من القرار — لتبقى اللوحة والقائمة عن من يحتاج اتصالاً فعلاً. لا يُحذف شيء هنا؛ يمكنك البحث عن أي عميل في أي وقت.",
+    "Nothing archived yet. Clients land here three days after being won or lost.":
+        "لا يوجد شيء مؤرشف بعد. ينتقل العملاء إلى هنا بعد ثلاثة أيام من الفوز بهم أو خسارتهم.",
+    "Monthly rent": "الإيجار الشهري",
+    "Call": "اتصال",
+    "Marked as rented, but no active rental deal is on record for it. Add one from Deals.":
+        "مسجّلة كمؤجرة، لكن لا توجد صفقة إيجار نشطة مسجّلة لها. أضف واحدة من الصفقات.",
     "Price too high": "السعر مرتفع",
     "Found somewhere else": "وجد عقاراً في مكان آخر",
     "Changed their mind / timing": "غيّر رأيه / التوقيت غير مناسب",

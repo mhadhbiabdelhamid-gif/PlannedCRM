@@ -220,6 +220,54 @@
   </div>
 
   <div class="grid">
+    {% if p.is_own and p.status == 'Rented' %}
+    <div class="card" id="tenant">
+      <div class="card-head"><h3>{{ t('Tenant') }}</h3></div>
+      <div class="card-body">
+        {% if tenant %}
+          <div class="inline" style="gap:11px;margin-bottom:8px">
+            <span class="contact-photo" style="width:46px;height:46px;flex:0 0 46px;font-size:15px">
+              {{ (tenant.tenant_name or '?') | initials }}
+            </span>
+            <div>
+              {% if tenant.lead_id %}
+                <a href="{{ url_for('leads.detail', lid=tenant.lead_id) }}">
+                  <b>{{ tenant.tenant_name or t('Unknown') }}</b></a>
+              {% else %}<b>{{ tenant.tenant_name or t('Unknown') }}</b>{% endif %}
+              <div class="small muted">{{ t('Tenant') }}</div>
+            </div>
+          </div>
+          <div class="stack small muted" style="margin-top:6px">
+            {% if tenant.tenant_phone %}<span class="mono">{{ tenant.tenant_phone }}</span>{% endif %}
+            {% if tenant.tenant_email %}<span>{{ tenant.tenant_email }}</span>{% endif %}
+          </div>
+          <div class="hairline"></div>
+          <dl class="spec-list">
+            <div><dt>{{ t('Monthly rent') }}</dt>
+              <dd class="mono">{{ currency }} {{ tenant.value | money }}</dd></div>
+            <div><dt>{{ t('Tenancy starts') }}</dt>
+              <dd>{{ tenant.lease_start | nice_date if tenant.lease_start else '—' }}</dd></div>
+            <div><dt>{{ t('Tenancy ends') }}</dt>
+              <dd>{{ tenant.lease_end | nice_date if tenant.lease_end else '—' }}</dd></div>
+            {% if tenant.term_months %}
+              <div><dt>{{ t('Lease') }}</dt><dd>{{ tenant.term_months }} {{ t('months') }}</dd></div>
+            {% endif %}
+          </dl>
+          <div class="inline" style="margin-top:12px">
+            {% if tenant.tenant_phone %}
+              <a class="btn btn-sm" href="tel:{{ tenant.tenant_phone }}">{{ t('Call') }}</a>
+            {% endif %}
+            <a class="btn btn-sm" href="{{ url_for('properties.leases_ending') }}">
+              {{ t('Leases ending') }}</a>
+          </div>
+        {% else %}
+          <p class="muted small" style="margin:0">
+            {{ t('Marked as rented, but no active rental deal is on record for it. Add one from Deals.') }}</p>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
     {% if p.partner_name %}
     <div class="card">
       <div class="card-head"><h3>{{ t('Partner') }}</h3></div>

@@ -111,6 +111,60 @@ def resolve(deal_id):
     execute("UPDATE deals SET lease_alert = ? WHERE id = ?", (ALERT_DONE, deal_id))
 
 
+# --------------------------------------------------------------- the tenant
+
+# Same "our own stock, live rental, not superseded" idea as BASE_SQL above,
+# but without the ending-soon window — this is "who lives there right now",
+# asked from a property rather than "what's about to need re-letting".
+CURRENT_SQL = """
+SELECT d.*, l.full_name AS tenant_name, l.phone AS tenant_phone,
+       l.email AS tenant_email
+  FROM deals d
+  JOIN properties p ON p.id = d.property_id
+  LEFT JOIN leads l ON l.id = d.lead_id
+ WHERE lower(COALESCE(d.deal_type,'')) LIKE 'rent%'
+   AND d.status != 'Cancelled'
+   AND COALESCE(p.is_own, 0) = 1
+   AND COALESCE(d.lease_alert, '') != 'done'
+"""
+
+
+def current_tenant(property_id):
+    """The tenant currently renting this property, if any.
+
+    "Currently" means the most recent non-cancelled rental deal that hasn't
+    been resolved via mark_available — the same deal leases_ending() would
+    eventually warn about, just not limited to the ones ending soon.
+    """
+    return query(
+        CURRENT_SQL + " AND d.property_id = ?"
+        " ORDER BY d.lease_end IS NULL, d.lease_end DESC, d.id DESC LIMIT 1",
+        (property_id,), one=True)
+
+
+def current_tenants_map(property_ids):
+    """Bulk version of current_tenant(), for a page listing many properties.
+
+    One query instead of one per row. Returns {property_id: deal row} —
+    only properties that actually have a live tenant appear.
+    """
+    ids = [i for i in (property_ids or []) if i]
+    if not ids:
+        return {}
+    placeholders = ",".join("?" * len(ids))
+    rows = query(
+        CURRENT_SQL + f" AND d.property_id IN ({placeholders})"
+        " ORDER BY d.property_id, d.lease_end IS NULL, d.lease_end DESC, d.id DESC",
+        ids)
+    out = {}
+    for row in rows:
+        # First row per property wins the ordering above, i.e. the most
+        # current lease — exactly like the correlated NOT EXISTS in
+        # BASE_SQL, just expressed as "take the first" instead.
+        out.setdefault(row["property_id"], row)
+    return out
+
+
 # --------------------------------------------------------------- reminders
 
 def _recipients(row):

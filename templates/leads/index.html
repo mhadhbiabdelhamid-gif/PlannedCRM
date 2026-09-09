@@ -9,6 +9,8 @@
   </div>
   <div class="actions">
     <a class="btn" href="{{ url_for('leads.board') }}">{{ t('Board view') }}</a>
+    <a class="btn" href="{{ url_for('leads.archive') }}">{{ t('Archived clients') }}
+      {% if archived_count %}<span class="pill">{{ archived_count }}</span>{% endif %}</a>
     <a class="btn btn-gold" href="{{ url_for('leads.form') }}">{{ t('Capture lead') }}</a>
   </div>
 </div>
