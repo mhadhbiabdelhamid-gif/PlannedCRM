@@ -680,16 +680,30 @@ def _csv(rows, headers, filename):
 @admin.route("/export/workbook.xlsx")
 @requires("export")
 def export_workbook():
-    """The full branded workbook: our listings, other listings, leads, deals."""
+    """The full branded workbook: our listings, other listings, leads, deals.
+
+    Reached with no query string (Settings, the Leads/Deals pages) it's
+    everything, same as always. Reached from the Properties list's own
+    Export Excel button it carries that page's search filters — location,
+    availability, company/owner, and so on — so the two property sheets
+    hold only the matching listings instead of the whole table. Leads and
+    deals aren't filtered by a property search, so those sheets stay
+    company-wide either way.
+    """
+    from views_properties import _filter_clause, _read_filters
+    f = _read_filters()
+    clause, fargs = _filter_clause(f)
+    filtered = any(f.values())
+
     properties = query(
         "SELECT p.*, o.name AS owner_name, u.name AS agent_name FROM properties p"
         " LEFT JOIN owners o ON o.id = p.owner_id"
         " LEFT JOIN users u ON u.id = p.agent_id"
         # A listing nobody has published shouldn't reach a client's inbox.
-        " WHERE 1=1" + published_only("p") +
+        " WHERE 1=1" + published_only("p") + clause +
         " ORDER BY CASE WHEN COALESCE(TRIM(p.building_no), '') = '' THEN 1 ELSE 0 END,"
         " p.area, p.building_no, CAST(COALESCE(p.unit_no, '') AS INTEGER),"
-        " LENGTH(COALESCE(p.unit_no, '')), p.unit_no, p.id")
+        " LENGTH(COALESCE(p.unit_no, '')), p.unit_no, p.id", fargs)
     leads = query(
         "SELECT l.*, u.name AS agent_name, pr.title AS prop_title FROM leads l"
         " LEFT JOIN users u ON u.id = l.agent_id"
@@ -704,10 +718,12 @@ def export_workbook():
     buf = excel_export.build_workbook(properties, leads, deals, g.user["name"])
     stamp = datetime.now().strftime("%Y-%m-%d")
     company = get_setting("company_name", "Planned Real Estate").replace(" ", "-").lower()
+    label = "-filtered" if filtered else ""
     log(g.user["id"], "Exported the Excel workbook",
-        detail=f"{len(properties)} listings, {len(leads)} leads, {len(deals)} deals")
+        detail=f"{len(properties)} listings{' (filtered search)' if filtered else ''}"
+               f", {len(leads)} leads, {len(deals)} deals")
     return send_file(
-        buf, as_attachment=True, download_name=f"{company}-export-{stamp}.xlsx",
+        buf, as_attachment=True, download_name=f"{company}-export{label}-{stamp}.xlsx",
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
@@ -727,6 +743,12 @@ def export_leads():
 @admin.route("/export/properties.csv")
 @requires("export")
 def export_properties():
+    """Reached with no query string, this is every published listing, same
+    as always. Reached from the Properties list's own Export CSV button it
+    carries that page's search filters, so only the matching rows export."""
+    from views_properties import _filter_clause, _read_filters
+    f = _read_filters()
+    clause, fargs = _filter_clause(f)
     rows = query("SELECT p.ref, p.title, p.address, p.building_no, p.floor_no,"
                  " p.unit_no, p.extras, p.area,"
                  " p.prop_type, p.listing_type,"
@@ -734,12 +756,14 @@ def export_properties():
                  " o.name AS owner, u.name AS agent, p.created_at FROM properties p"
                  " LEFT JOIN owners o ON o.id = p.owner_id"
                  " LEFT JOIN users u ON u.id = p.agent_id"
-                 " WHERE 1=1" + published_only("p") + " ORDER BY p.id")
+                 " WHERE 1=1" + published_only("p") + clause + " ORDER BY p.id", fargs)
+    filename = ("planned-properties-filtered.csv" if any(f.values())
+               else "planned-properties.csv")
     return _csv(rows, ["ref", "title", "address", "building_no", "floor_no",
                        "unit_no", "extras", "area",
                        "prop_type", "listing_type",
                        "status", "price", "size_sqm", "bedrooms", "bathrooms", "owner",
-                       "agent", "created_at"], "planned-properties.csv")
+                       "agent", "created_at"], filename)
 
 
 @admin.route("/export/deals.csv")

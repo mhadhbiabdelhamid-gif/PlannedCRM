@@ -34,12 +34,75 @@ def _save(file_storage, kind):
     return name
 
 
+FILTER_FIELDS = ("q", "prop_type", "status", "listing_type", "area", "agent",
+                 "owner", "min_price", "max_price", "beds", "owned", "floor")
+
+
+def _read_filters():
+    """The Properties list's search filters, straight off the query string."""
+    return {k: request.args.get(k, "").strip() for k in FILTER_FIELDS}
+
+
+def _filter_clause(f, prefix="p"):
+    """The WHERE-clause fragment (and its params) for those filters.
+
+    Shared between the on-screen list and the Excel/CSV exports, so a
+    filtered export matches exactly what a filtered search shows — nothing
+    here decides ordering or pagination, just which rows qualify.
+    """
+    sql, args = "", []
+    if f["q"]:
+        sql += (f" AND ({prefix}.title LIKE ? OR {prefix}.address LIKE ? OR {prefix}.ref LIKE ?"
+                f" OR {prefix}.building_no LIKE ? OR {prefix}.unit_no LIKE ?"
+                f" OR {prefix}.floor_no LIKE ? OR {prefix}.extras LIKE ?)")
+        args += [f"%{f['q']}%"] * 7
+    for col in ("prop_type", "status", "listing_type"):
+        if f[col]:
+            sql += f" AND {prefix}.{col} = ?"
+            args.append(f[col])
+    if f["area"]:
+        # A district shows up in listings under several spellings — English,
+        # Arabic, or an alternate transliteration ("Lusail" / "لوسيل" /
+        # "sadd"). A plain substring match only ever finds the one spelling
+        # someone actually typed, so widen the search to every spelling on
+        # record for that place. Unrecognised text (a custom location not in
+        # areas.py) just falls back to the old plain substring match.
+        spellings = areas.variants(f["area"]) or [f["area"]]
+        sql += " AND (" + " OR ".join([f"{prefix}.area LIKE ?"] * len(spellings)) + ")"
+        args += [f"%{s}%" for s in spellings]
+    if f["agent"]:
+        sql += f" AND {prefix}.agent_id = ?"
+        args.append(f["agent"])
+    if f["owner"]:
+        sql += f" AND {prefix}.owner_id = ?"
+        args.append(f["owner"])
+    if f["min_price"]:
+        sql += f" AND {prefix}.price >= ?"
+        args.append(float(f["min_price"]))
+    if f["max_price"]:
+        sql += f" AND {prefix}.price <= ?"
+        args.append(float(f["max_price"]))
+    if f["beds"]:
+        # Exact match, so asking for 1 bedroom doesn't return 2- and 3-bed units.
+        # "6+" is the one open-ended option, since large counts are rare.
+        if f["beds"] == "6+":
+            sql += f" AND {prefix}.bedrooms >= 6"
+        else:
+            sql += f" AND COALESCE({prefix}.bedrooms, 0) = ?"
+            args.append(int(f["beds"]))
+    if f["floor"]:
+        sql += f" AND lower(TRIM(COALESCE({prefix}.floor_no,''))) = lower(?)"
+        args.append(f["floor"].strip())
+    if f["owned"] in ("1", "0"):
+        sql += f" AND COALESCE({prefix}.is_own, 0) = ?"
+        args.append(int(f["owned"]))
+    return sql, args
+
+
 @bp.route("/")
 @login_required
 def index():
-    f = {k: request.args.get(k, "").strip() for k in
-         ("q", "prop_type", "status", "listing_type", "area", "agent", "owner",
-          "min_price", "max_price", "beds", "owned", "floor")}
+    f = _read_filters()
     sql = ("SELECT p.*, u.name AS agent_name,"
            " o.name AS owner_name, o.photo AS owner_photo, o.company AS owner_company,"
            " pa.name AS partner_name, pa.photo AS partner_photo,"
@@ -50,52 +113,8 @@ def index():
            " LEFT JOIN owners o ON o.id = p.owner_id"
            " LEFT JOIN partners pa ON pa.id = p.partner_id WHERE 1=1")
     sql += published_only("p")
-    args = []
-    if f["q"]:
-        sql += (" AND (p.title LIKE ? OR p.address LIKE ? OR p.ref LIKE ?"
-                " OR p.building_no LIKE ? OR p.unit_no LIKE ? OR p.floor_no LIKE ?"
-                " OR p.extras LIKE ?)")
-        args += [f"%{f['q']}%"] * 7
-    for col in ("prop_type", "status", "listing_type"):
-        if f[col]:
-            sql += f" AND p.{col} = ?"
-            args.append(f[col])
-    if f["area"]:
-        # A district shows up in listings under several spellings — English,
-        # Arabic, or an alternate transliteration ("Lusail" / "لوسيل" /
-        # "sadd"). A plain substring match only ever finds the one spelling
-        # someone actually typed, so widen the search to every spelling on
-        # record for that place. Unrecognised text (a custom location not in
-        # areas.py) just falls back to the old plain substring match.
-        spellings = areas.variants(f["area"]) or [f["area"]]
-        sql += " AND (" + " OR ".join(["p.area LIKE ?"] * len(spellings)) + ")"
-        args += [f"%{s}%" for s in spellings]
-    if f["agent"]:
-        sql += " AND p.agent_id = ?"
-        args.append(f["agent"])
-    if f["owner"]:
-        sql += " AND p.owner_id = ?"
-        args.append(f["owner"])
-    if f["min_price"]:
-        sql += " AND p.price >= ?"
-        args.append(float(f["min_price"]))
-    if f["max_price"]:
-        sql += " AND p.price <= ?"
-        args.append(float(f["max_price"]))
-    if f["beds"]:
-        # Exact match, so asking for 1 bedroom doesn't return 2- and 3-bed units.
-        # "6+" is the one open-ended option, since large counts are rare.
-        if f["beds"] == "6+":
-            sql += " AND p.bedrooms >= 6"
-        else:
-            sql += " AND COALESCE(p.bedrooms, 0) = ?"
-            args.append(int(f["beds"]))
-    if f["floor"]:
-        sql += " AND lower(TRIM(COALESCE(p.floor_no,''))) = lower(?)"
-        args.append(f["floor"].strip())
-    if f["owned"] in ("1", "0"):
-        sql += " AND COALESCE(p.is_own, 0) = ?"
-        args.append(int(f["owned"]))
+    clause, args = _filter_clause(f)
+    sql += clause
     # Grouping by building is the default, so units in one tower read in order.
     # unit_no is text ("402", "12B", "G04"), and plain text sorting puts 1102
     # before 402 — so sort on the leading number first, then the text itself.
@@ -170,7 +189,11 @@ def index():
 
     agents = query("SELECT id, name FROM users WHERE is_active = 1 ORDER BY name")
     view = request.args.get("view", "grid")
-    args_out = {k: v for k, v in f.items() if v}
+    # The active filters alone (no view/sort/page) — passed to the Export
+    # buttons so a filtered search exports exactly what's on screen instead
+    # of the whole table.
+    export_args = {k: v for k, v in f.items() if v}
+    args_out = dict(export_args)
     args_out.update({"view": view, "sort": sort})
 
     # Who's renting our own rented units, for the tenant label on each card.
@@ -183,6 +206,7 @@ def index():
                            prop_types=PROP_TYPES, statuses=PROP_STATUS,
                            listing_types=LISTING_TYPES, groups=groups, sort=sort,
                            view=view, pager=pager, args=args_out,
+                           export_args=export_args,
                            bulk_actions=BULK_ACTIONS, floors=floors,
                            stale_cutoff=days_ago(STALE_DAYS), tenants=tenants,
                            owners_list=query("SELECT id, name FROM owners ORDER BY name"),

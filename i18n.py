@@ -99,6 +99,8 @@ AR = {
         "لا يوجد شيء مؤرشف بعد. ينتقل العملاء إلى هنا بعد ثلاثة أيام من الفوز بهم أو خسارتهم.",
     "Monthly rent": "الإيجار الشهري",
     "Call": "اتصال",
+    "Exports only the listings matching your current search": "يصدّر فقط العقارات المطابقة لبحثك الحالي",
+    "Exports every listing": "يصدّر جميع العقارات",
     "Marked as rented, but no active rental deal is on record for it. Add one from Deals.":
         "مسجّلة كمؤجرة، لكن لا توجد صفقة إيجار نشطة مسجّلة لها. أضف واحدة من الصفقات.",
     "Price too high": "السعر مرتفع",

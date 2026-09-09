@@ -14,8 +14,12 @@
     <a class="btn" href="{{ url_for('properties.stale') }}">{{ t('Stale listings') }}
       {% if stale_count %}<span class="pill">{{ stale_count }}</span>{% endif %}</a>
     {% if can('export') %}
-      <a class="btn btn-dark" href="{{ url_for('admin.export_workbook') }}">{{ t('Export Excel') }}</a>
-      <a class="btn" href="{{ url_for('admin.export_properties') }}">{{ t('Export CSV') }}</a>
+      <a class="btn btn-dark" href="{{ url_for('admin.export_workbook', **export_args) }}"
+         title="{{ t('Exports only the listings matching your current search') if export_args else t('Exports every listing') }}">
+        {{ t('Export Excel') }}{% if export_args %} ({{ pager.total }}){% endif %}</a>
+      <a class="btn" href="{{ url_for('admin.export_properties', **export_args) }}"
+         title="{{ t('Exports only the listings matching your current search') if export_args else t('Exports every listing') }}">
+        {{ t('Export CSV') }}{% if export_args %} ({{ pager.total }}){% endif %}</a>
     {% endif %}
     {% if can('import') %}
       <a class="btn" href="{{ url_for('imports.upload') }}">{{ t('Import from Excel') }}</a>
