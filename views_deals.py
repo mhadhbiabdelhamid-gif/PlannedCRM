@@ -197,8 +197,16 @@ def form(did=None):
         return redirect(url_for("deals.index"))
 
     agents = query("SELECT id, name FROM users WHERE is_active = 1 ORDER BY name")
-    props = query("SELECT id, ref, title, price, listing_type FROM properties"
-                  " ORDER BY id DESC LIMIT 300")
+    # Every property, not just the 300 newest — the form lets the agent
+    # narrow it by typing, location or bedroom count instead of scrolling.
+    props = query("SELECT id, ref, title, price, listing_type, area, bedrooms"
+                  " FROM properties ORDER BY area IS NULL, area, bedrooms, ref")
+    prop_areas = [r["area"] for r in query(
+        "SELECT DISTINCT area FROM properties"
+        " WHERE COALESCE(TRIM(area), '') != '' ORDER BY area")]
+    prop_bedrooms = [r["bedrooms"] for r in query(
+        "SELECT DISTINCT bedrooms FROM properties"
+        " WHERE bedrooms IS NOT NULL ORDER BY bedrooms")]
     leads = query("SELECT id, ref, full_name FROM leads ORDER BY id DESC LIMIT 300")
 
     prefill = {}
@@ -222,6 +230,7 @@ def form(did=None):
 
     return render_template(
         "deals/form.html", d=d, agents=agents, props=props, leads=leads,
+        prop_areas=prop_areas, prop_bedrooms=prop_bedrooms,
         deal_status=DEAL_STATUS, listing_types=LISTING_TYPES, prefill=prefill,
         default_pct=get_setting("commission_pct", "2.5"),
         default_rent_pct=get_setting("commission_pct_rent", "50"),

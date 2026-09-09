@@ -12,16 +12,34 @@
 <form method="post" class="card" style="max-width:860px" id="dealform">
   <div class="card-body">
     <div class="form-grid">
-      <div class="field">
+      <div class="field span-2">
         <label for="property_id">{{ t('Property') }}</label>
-        <select id="property_id" name="property_id" onchange="pullPrice(this)">
+        <div style="display:flex; gap:8px; margin-bottom:6px; flex-wrap:wrap">
+          <input type="text" id="property_search" style="flex:2; min-width:180px"
+                 placeholder="{{ t('Search by name, ref or unit') }}" autocomplete="off">
+          <select id="property_area_filter" style="flex:1; min-width:140px">
+            <option value="">{{ t('Any location') }}</option>
+            {% for a in prop_areas %}<option value="{{ a }}">{{ a }}</option>{% endfor %}
+          </select>
+          <select id="property_beds_filter" style="flex:1; min-width:120px">
+            <option value="">{{ t('Any bedrooms') }}</option>
+            {% for b in prop_bedrooms %}
+              <option value="{{ b }}">{{ t('Studio') if b == 0 else b }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <select id="property_id" name="property_id" size="8" onchange="pullPrice(this)">
           <option value="">{{ t('None') }}</option>
           {% for p in props %}
             <option value="{{ p.id }}" data-price="{{ p.price or 0 }}"
+                    data-search="{{ (p.ref ~ ' ' ~ p.title ~ ' ' ~ (p.area or '')) | lower }}"
+                    data-area="{{ p.area or '' }}"
+                    data-beds="{{ p.bedrooms if p.bedrooms is not none else '' }}"
               {{ 'selected' if (d and d.property_id == p.id) or (prefill.get('property_id') == p.id) }}>
-              {{ p.ref }} — {{ p.title }}</option>
+              {{ p.ref }} — {{ p.title }}{% if p.area %} · {{ p.area }}{% endif %}</option>
           {% endfor %}
         </select>
+        <span class="small faint" id="property_count"></span>
         <span class="small faint" id="askhint"></span>
       </div>
       <div class="field">
@@ -254,6 +272,39 @@ function typeChanged() {
   }
   basisChanged();
 }
+
+// Narrows the property list by free-text search, location and bedroom
+// count instead of making the agent scroll every property to find one.
+(function () {
+  var search = document.getElementById('property_search');
+  var areaFilter = document.getElementById('property_area_filter');
+  var bedsFilter = document.getElementById('property_beds_filter');
+  var select = document.getElementById('property_id');
+  var count = document.getElementById('property_count');
+  var options = Array.prototype.slice.call(select.options);
+  var total = options.length - 1; // minus "None"
+
+  function applyPropertyFilter() {
+    var q = search.value.trim().toLowerCase();
+    var area = areaFilter.value;
+    var beds = bedsFilter.value;
+    var shown = 0;
+    options.forEach(function (opt) {
+      if (!opt.value) { opt.hidden = false; return; }
+      var show = (!q || opt.dataset.search.indexOf(q) !== -1)
+        && (!area || opt.dataset.area === area)
+        && (!beds || opt.dataset.beds === beds);
+      opt.hidden = !show;
+      if (show) shown++;
+    });
+    count.textContent = "{{ t('Showing') }} " + shown + " {{ t('of') }} " + total;
+  }
+
+  search.addEventListener('input', applyPropertyFilter);
+  areaFilter.addEventListener('change', applyPropertyFilter);
+  bedsFilter.addEventListener('change', applyPropertyFilter);
+  applyPropertyFilter();
+})();
 
 function pullPrice(sel) {
   const price = sel.options[sel.selectedIndex].dataset.price;
