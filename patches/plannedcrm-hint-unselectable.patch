@@ -1,0 +1,33 @@
+From 8c6f9e94e66a167a2a897c45f7351fde64320701 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 2 Sep 2026 13:36:42 +0000
+Subject: [PATCH] Make the location-search hint text unselectable
+
+A click-drag or triple-click on the "District name in English or
+Arabic..." hint under the Location filter left it visibly highlighted
+in blue in screenshots, reading as an unintended style. It was always
+just the browser's normal text-selection highlight, but disabling
+selection on that line means it can never appear that way again.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_016tuWiGwhPRZEv1TzRpDFYk
+---
+ templates/properties/index.html | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/templates/properties/index.html b/templates/properties/index.html
+index 8aa785d..a5020ea 100644
+--- a/templates/properties/index.html
++++ b/templates/properties/index.html
+@@ -31,7 +31,7 @@
+       <div class="field">
+         <label>{{ t('Location') }}</label>
+         <input type="text" name="area" value="{{ f.area }}" placeholder="{{ t('e.g. The Pearl, مشيرب, or zone 51') }}">
+-        <div class="small" style="color:var(--faint);margin-top:4px">{{ t('District name in English or Arabic, a close spelling, or a zone number all work.') }}</div>
++        <div class="small" style="color:var(--faint);margin-top:4px;user-select:none">{{ t('District name in English or Arabic, a close spelling, or a zone number all work.') }}</div>
+       </div>
+       <div class="field">
+         <label>{{ t('Type') }}</label>
+-- 
+2.43.0
+

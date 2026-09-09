@@ -1,0 +1,450 @@
+From 3d6fe913a5927ccb49282a14f5dcd0f66e397096 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 2 Sep 2026 13:17:54 +0000
+Subject: [PATCH] Lighter listings UI: hover-only select mark, simplified
+ filters, List view
+
+- The selection checkbox on each property card now only appears on
+  hover, focus, or once picked, instead of sitting on every card at
+  all times.
+- The filter bar shows just Location, Type and Bedrooms up front;
+  Search, Sale/Rent, Status, price range, Floor, Whose listing, Agent
+  and Owner move behind a "More filters" toggle (auto-expanded if one
+  of those fields already has a value applied).
+- Added a List view (next to Grid and Table): each property as a
+  compact horizontal row instead of a card, via a new
+  templates/properties/_row.html partial.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_016tuWiGwhPRZEv1TzRpDFYk
+---
+ i18n.py                         |   2 +
+ static/css/app.css              | 109 ++++++++++++++++++++-
+ templates/properties/_row.html  |  47 +++++++++
+ templates/properties/index.html | 162 ++++++++++++++++++++------------
+ 4 files changed, 259 insertions(+), 61 deletions(-)
+ create mode 100644 templates/properties/_row.html
+
+diff --git a/i18n.py b/i18n.py
+index 1f7a74e..7fc47ce 100644
+--- a/i18n.py
++++ b/i18n.py
+@@ -201,7 +201,9 @@ AR = {
+     "Add": "إضافة",
+     "Export CSV": "تصدير CSV",
+     "Grid": "شبكة",
++    "List": "قائمة",
+     "Table": "جدول",
++    "More filters": "المزيد من الفلاتر",
+     "Any": "الكل",
+     "Anyone": "أي شخص",
+     "Unassigned": "غير مُسند",
+diff --git a/static/css/app.css b/static/css/app.css
+index 77093fe..e53741d 100644
+--- a/static/css/app.css
++++ b/static/css/app.css
+@@ -757,13 +757,70 @@ main { padding: 26px; flex: 1; max-width: 1480px; width: 100%; }
+   border-bottom: 1px solid var(--line-soft);
+ }
+ 
+-.prop-thumb .ph {
++.prop-thumb .ph, .prop-row-thumb .ph {
+   font-family: var(--display);
+   font-size: 34px;
+   font-weight: 600;
+   color: rgba(126, 98, 32, .30);
+ }
+ 
++/* ---- list view: horizontal rows instead of a card grid */
++.prop-list { display: flex; flex-direction: column; gap: 10px; }
++
++.prop-row {
++  background: var(--card);
++  border: 1px solid var(--line);
++  border-radius: var(--radius);
++  overflow: hidden;
++  display: flex;
++  transition: border-color .15s, box-shadow .15s;
++}
++
++.prop-row:hover { border-color: var(--gold); box-shadow: var(--shadow); }
++
++.prop-row-thumb {
++  flex: 0 0 160px;
++  aspect-ratio: 4 / 3;
++  background: var(--gold-tint);
++  background-size: cover;
++  background-position: center;
++  display: grid;
++  place-items: center;
++  border-right: 1px solid var(--line-soft);
++}
++[dir="rtl"] .prop-row-thumb { border-right: none; border-left: 1px solid var(--line-soft); }
++
++.prop-row-body {
++  padding: 12px 14px;
++  display: flex;
++  flex-direction: column;
++  gap: 6px;
++  flex: 1;
++  min-width: 0;
++}
++
++.prop-row-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
++.prop-row-top h4 { font-size: 15.5px; font-weight: 700; line-height: 1.3; }
++
++.prop-row-bottom {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: 12px;
++  flex-wrap: wrap;
++  margin-top: auto;
++  padding-top: 6px;
++  border-top: 1px solid var(--line-soft);
++}
++.prop-row-bottom .tags { display: flex; gap: 6px; }
++.prop-row-bottom .prop-meta { border-top: none; padding-top: 0; margin-top: 0; }
++
++@media (max-width: 640px) {
++  .prop-row { flex-direction: column; }
++  .prop-row-thumb { flex: none; width: 100%; border-right: none; border-bottom: 1px solid var(--line-soft); }
++  [dir="rtl"] .prop-row-thumb { border-left: none; }
++}
++
+ .prop-thumb .tags {
+   position: absolute;
+   top: 10px; left: 10px;
+@@ -940,6 +997,40 @@ input[type=file] { font-size: 13px; font-family: var(--mono); }
+ 
+ .filters .field { margin: 0; }
+ 
++/* ---- secondary filters, tucked behind a toggle so the bar stays short */
++.more-filters { margin-top: 12px; }
++
++.more-filters > summary {
++  list-style: none;
++  cursor: pointer;
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  font-family: var(--ui);
++  font-size: 11px;
++  font-weight: 600;
++  letter-spacing: .07em;
++  text-transform: uppercase;
++  color: var(--muted);
++  user-select: none;
++  transition: color .12s;
++}
++.more-filters > summary::-webkit-details-marker { display: none; }
++.more-filters > summary:hover { color: var(--gold-deep); }
++
++.more-filters > summary::after {
++  content: "";
++  width: 6px; height: 6px;
++  border-right: 1.5px solid currentColor;
++  border-bottom: 1.5px solid currentColor;
++  transform: rotate(45deg) translate(-1px, -1px);
++  opacity: .65;
++  transition: transform .18s ease;
++}
++.more-filters[open] > summary::after { transform: rotate(-135deg); }
++
++.more-filters .filters { margin-top: 14px; }
++
+ /* -------------------------------------------------------------- flash */
+ .flash-wrap { padding: 0 26px; margin-top: 14px; }
+ 
+@@ -1537,6 +1628,9 @@ body[lang="ar"],
+ 
+ .prop-wrap { position: relative; }
+ 
++/* Hidden until the card is hovered/focused (or already picked) — it's a
++   bulk-select affordance, not something that needs to sit on every card at
++   all times. */
+ .prop-wrap .pick {
+   position: absolute;
+   top: 10px; right: 10px;
+@@ -1547,6 +1641,19 @@ body[lang="ar"],
+   border-radius: var(--radius);
+   box-shadow: 0 1px 3px rgba(0,0,0,.25);
+   cursor: pointer;
++  opacity: 0;
++  transition: opacity .12s;
++}
++
++.prop-wrap:hover .pick,
++.prop-wrap .pick:focus-within,
++.prop-wrap:has(input:checked) .pick {
++  opacity: 1;
++}
++
++@media (hover: none) {
++  /* touch devices have no hover — keep it reachable, just quieter */
++  .prop-wrap .pick { opacity: .85; }
+ }
+ 
+ [dir="rtl"] .prop-wrap .pick { right: auto; left: 10px; }
+diff --git a/templates/properties/_row.html b/templates/properties/_row.html
+new file mode 100644
+index 0000000..a5ff906
+--- /dev/null
++++ b/templates/properties/_row.html
+@@ -0,0 +1,47 @@
++<div class="prop-wrap">
++  <label class="pick" onclick="event.stopPropagation()">
++    <input type="checkbox" name="ids" value="{{ p.id }}" form="bulkform"
++           onchange="bulkChanged()" aria-label="{{ t('Select') }} {{ p.title }}">
++  </label>
++<a class="prop-row" href="{{ url_for('properties.detail', pid=p.id) }}">
++  {% set stand_in = p.owner_photo or p.partner_photo %}
++  <div class="prop-row-thumb {{ 'is-standin' if not p.cover and stand_in }}"
++       {% if p.cover %}style="background-image:url('{{ url_for('main.uploaded_file', kind='images', filename=p.cover) }}')"
++       {% elif stand_in %}style="background-image:url('{{ url_for('main.uploaded_file', kind='contacts', filename=stand_in) }}')"{% endif %}>
++    {% if not p.cover and not stand_in %}<span class="ph">{{ p.prop_type[0] }}</span>{% endif %}
++    {% if not p.cover and stand_in %}
++      <span class="standin-note">{{ p.owner_name or p.partner_name }}</span>
++    {% endif %}
++  </div>
++  <div class="prop-row-body">
++    <div class="prop-row-top">
++      <div>
++        <div class="mono faint">{{ p.ref }}</div>
++        <h4>{{ p.title }}</h4>
++        <div class="small muted">
++          {%- if p.floor_no %}{{ t('Floor') }} {{ p.floor_no }} · {% endif -%}
++          {%- if p.unit_no %}{{ t('Flat') }} {{ p.unit_no }} · {% endif -%}
++          {{ p.area or p.address or '—' }}</div>
++      </div>
++      <div class="prop-price">{{ currency }} {{ p.price | money }}</div>
++    </div>
++    <div class="prop-row-bottom">
++      <div class="tags">
++        <span class="tag tag-{{ 'sale' if p.listing_type == 'Sale' else 'rent' }}">{{ t(p.listing_type) }}</span>
++        <span class="tag tag-{{ p.status|lower }}">{{ t(p.status) }}</span>
++        {% if p.is_own %}<span class="tag tag-sale">{{ t('Ours') }}</span>{% endif %}
++        {% if p.status in ('Available', 'Reserved') and (not p.last_verified or p.last_verified < stale_cutoff) %}
++          <span class="tag tag-reserved">{{ t('Stale') }}</span>
++        {% endif %}
++      </div>
++      <div class="prop-meta">
++        <span>{{ t(p.prop_type) }}</span>
++        {% if p.bedrooms %}<span>{{ p.bedrooms }} {{ t('Bedrooms') }}</span>{% endif %}
++        {% if p.bathrooms %}<span>{{ p.bathrooms }} {{ t('Bathrooms') }}</span>{% endif %}
++        {% if p.size_sqm %}<span>{{ p.size_sqm | money }} m²</span>{% endif %}
++        <span>{{ p.agent_name or t('Unassigned') }}</span>
++      </div>
++    </div>
++  </div>
++</a>
++</div>
+diff --git a/templates/properties/index.html b/templates/properties/index.html
+index 8c048e4..8aa785d 100644
+--- a/templates/properties/index.html
++++ b/templates/properties/index.html
+@@ -9,6 +9,7 @@
+   </div>
+   <div class="actions">
+     <a class="btn {{ 'btn-dark' if view == 'grid' }}" href="{{ url_for('properties.index', view='grid', **f) }}">{{ t('Grid') }}</a>
++    <a class="btn {{ 'btn-dark' if view == 'list' }}" href="{{ url_for('properties.index', view='list', **f) }}">{{ t('List') }}</a>
+     <a class="btn {{ 'btn-dark' if view == 'table' }}" href="{{ url_for('properties.index', view='table', **f) }}">{{ t('Table') }}</a>
+     <a class="btn" href="{{ url_for('properties.stale') }}">{{ t('Stale listings') }}
+       {% if stale_count %}<span class="pill">{{ stale_count }}</span>{% endif %}</a>
+@@ -28,8 +29,9 @@
+   <div class="card-body">
+     <div class="filters">
+       <div class="field">
+-        <label>{{ t('Search') }}</label>
+-        <input type="text" name="q" value="{{ f.q }}" placeholder="{{ t('Title, address, building or flat') }}">
++        <label>{{ t('Location') }}</label>
++        <input type="text" name="area" value="{{ f.area }}" placeholder="{{ t('e.g. The Pearl, مشيرب, or zone 51') }}">
++        <div class="small" style="color:var(--faint);margin-top:4px">{{ t('District name in English or Arabic, a close spelling, or a zone number all work.') }}</div>
+       </div>
+       <div class="field">
+         <label>{{ t('Type') }}</label>
+@@ -37,40 +39,6 @@
+           {% for tp in prop_types %}<option value="{{ tp }}" {{ 'selected' if f.prop_type == tp }}>{{ t(tp) }}</option>{% endfor %}
+         </select>
+       </div>
+-      <div class="field">
+-        <label>{{ t('Sale / Rent') }}</label>
+-        <select name="listing_type"><option value="">{{ t('Any') }}</option>
+-          {% for tp in listing_types %}<option value="{{ tp }}" {{ 'selected' if f.listing_type == tp }}>{{ t(tp) }}</option>{% endfor %}
+-        </select>
+-      </div>
+-      <div class="field">
+-        <label>{{ t('Status') }}</label>
+-        <select name="status"><option value="">{{ t('Any') }}</option>
+-          {% for s in statuses %}<option value="{{ s }}" {{ 'selected' if f.status == s }}>{{ t(s) }}</option>{% endfor %}
+-        </select>
+-      </div>
+-      <div class="field">
+-        <label>{{ t('Location') }}</label>
+-        <input type="text" name="area" value="{{ f.area }}" placeholder="{{ t('e.g. The Pearl, مشيرب, or zone 51') }}">
+-<div class="small" style="color:var(--faint);margin-top:4px">{{ t('District name in English or Arabic, a close spelling, or a zone number all work.') }}</div>
+-      </div>
+-      <div class="field">
+-        <label>{{ t('Min price') }}</label>
+-        <input type="number" name="min_price" value="{{ f.min_price }}" step="any" inputmode="decimal">
+-      </div>
+-      <div class="field">
+-        <label>{{ t('Max price') }}</label>
+-        <input type="number" name="max_price" value="{{ f.max_price }}" step="any" inputmode="decimal">
+-      </div>
+-      <div class="field">
+-        <label>{{ t('Floor') }}</label>
+-        <select name="floor">
+-          <option value="">{{ t('Any') }}</option>
+-          {% for fl in floors %}
+-            <option value="{{ fl }}" {{ 'selected' if f.floor == fl }}>{{ fl }}</option>
+-          {% endfor %}
+-        </select>
+-      </div>
+       <div class="field">
+         <label>{{ t('Bedrooms') }}</label>
+         <select name="beds">
+@@ -82,35 +50,75 @@
+           <option value="6+" {{ 'selected' if f.beds == '6+' }}>6+</option>
+         </select>
+       </div>
+-      <div class="field">
+-        <label>{{ t('Whose listing') }}</label>
+-        <select name="owned">
+-          <option value="">{{ t('Any') }}</option>
+-          <option value="1" {{ 'selected' if f.owned == '1' }}>{{ t('Ours') }}</option>
+-          <option value="0" {{ 'selected' if f.owned == '0' }}>{{ t('Third-party') }}</option>
+-        </select>
+-      </div>
+-      <div class="field">
+-        <label>{{ t('Agent') }}</label>
+-        <select name="agent"><option value="">{{ t('Anyone') }}</option>
+-          {% for a in agents %}
+-            <option value="{{ a.id }}" {{ 'selected' if f.agent == a.id|string }}>{{ a.name }}</option>
+-          {% endfor %}
+-        </select>
+-      </div>
+-      <div class="field">
+-        <label>{{ t('Owner') }}</label>
+-        <select name="owner"><option value="">{{ t('Any') }}</option>
+-          {% for o in owners_list %}
+-            <option value="{{ o.id }}" {{ 'selected' if f.owner == o.id|string }}>{{ o.name }}</option>
+-          {% endfor %}
+-        </select>
+-      </div>
+       <div class="field inline">
+         <button class="btn btn-dark" type="submit">{{ t('Apply') }}</button>
+         <a class="btn btn-quiet" href="{{ url_for('properties.index', view=view) }}">{{ t('Clear') }}</a>
+       </div>
+     </div>
++
++    {% set more_active = f.q or f.listing_type or f.status or f.min_price or f.max_price or f.floor or f.owned or f.agent or f.owner %}
++    <details class="more-filters" {{ 'open' if more_active }}>
++      <summary>{{ t('More filters') }}</summary>
++      <div class="filters">
++        <div class="field">
++          <label>{{ t('Search') }}</label>
++          <input type="text" name="q" value="{{ f.q }}" placeholder="{{ t('Title, address, building or flat') }}">
++        </div>
++        <div class="field">
++          <label>{{ t('Sale / Rent') }}</label>
++          <select name="listing_type"><option value="">{{ t('Any') }}</option>
++            {% for tp in listing_types %}<option value="{{ tp }}" {{ 'selected' if f.listing_type == tp }}>{{ t(tp) }}</option>{% endfor %}
++          </select>
++        </div>
++        <div class="field">
++          <label>{{ t('Status') }}</label>
++          <select name="status"><option value="">{{ t('Any') }}</option>
++            {% for s in statuses %}<option value="{{ s }}" {{ 'selected' if f.status == s }}>{{ t(s) }}</option>{% endfor %}
++          </select>
++        </div>
++        <div class="field">
++          <label>{{ t('Min price') }}</label>
++          <input type="number" name="min_price" value="{{ f.min_price }}" step="any" inputmode="decimal">
++        </div>
++        <div class="field">
++          <label>{{ t('Max price') }}</label>
++          <input type="number" name="max_price" value="{{ f.max_price }}" step="any" inputmode="decimal">
++        </div>
++        <div class="field">
++          <label>{{ t('Floor') }}</label>
++          <select name="floor">
++            <option value="">{{ t('Any') }}</option>
++            {% for fl in floors %}
++              <option value="{{ fl }}" {{ 'selected' if f.floor == fl }}>{{ fl }}</option>
++            {% endfor %}
++          </select>
++        </div>
++        <div class="field">
++          <label>{{ t('Whose listing') }}</label>
++          <select name="owned">
++            <option value="">{{ t('Any') }}</option>
++            <option value="1" {{ 'selected' if f.owned == '1' }}>{{ t('Ours') }}</option>
++            <option value="0" {{ 'selected' if f.owned == '0' }}>{{ t('Third-party') }}</option>
++          </select>
++        </div>
++        <div class="field">
++          <label>{{ t('Agent') }}</label>
++          <select name="agent"><option value="">{{ t('Anyone') }}</option>
++            {% for a in agents %}
++              <option value="{{ a.id }}" {{ 'selected' if f.agent == a.id|string }}>{{ a.name }}</option>
++            {% endfor %}
++          </select>
++        </div>
++        <div class="field">
++          <label>{{ t('Owner') }}</label>
++          <select name="owner"><option value="">{{ t('Any') }}</option>
++            {% for o in owners_list %}
++              <option value="{{ o.id }}" {{ 'selected' if f.owner == o.id|string }}>{{ o.name }}</option>
++            {% endfor %}
++          </select>
++        </div>
++      </div>
++    </details>
+   </div>
+ </form>
+ 
+@@ -221,6 +229,40 @@
+     </table>
+   </div>
+ 
++{% elif view == 'list' and groups %}
++  {% for grp in groups %}
++    <div class="group-head {{ 'ours' if grp.kind == 'ours' }}">
++      {% if grp.photo %}
++        <img class="group-photo" src="{{ url_for('main.uploaded_file', kind='contacts', filename=grp.photo) }}" alt="">
++      {% elif grp.kind == 'ours' and logo_exists %}
++        <img class="group-photo" src="{{ logo_url }}" alt="">
++      {% endif %}
++      <div>
++        <b>{{ t(grp.label) if grp.kind in ('none',) else grp.label }}</b>
++        <div class="small muted">
++          {% if grp.kind == 'ours' %}{{ t('Our own properties') }}
++          {% elif grp.kind == 'owner' %}{{ t('Owner') }}{% if grp.company %} · {{ grp.company }}{% endif %}
++          {% elif grp.kind == 'partner' %}{{ t('Partner') }}
++          {% elif grp.kind == 'list' %}{{ t('From partner list') }}
++          {% elif grp.kind == 'building' %}{{ grp.company or '' }}
++          {% endif %}
++        </div>
++      </div>
++      <span class="mono faint">{{ grp.rows|length }}
++        {{ t('unit') if grp.rows|length == 1 else t('units') }}</span>
++    </div>
++    <div class="prop-list" style="margin-bottom:22px">
++      {% for p in grp.rows %}{% include "properties/_row.html" %}{% endfor %}
++    </div>
++  {% endfor %}
++
++{% elif view == 'list' %}
++  <div class="prop-list">
++    {% for p in rows %}
++      {% include "properties/_row.html" %}
++    {% endfor %}
++  </div>
++
+ {% elif groups %}
+   {% for grp in groups %}
+     <div class="group-head {{ 'ours' if grp.kind == 'ours' }}">
+-- 
+2.43.0
+
