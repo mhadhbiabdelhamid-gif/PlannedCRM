@@ -661,6 +661,11 @@ AR = {
     "Leave in the shared pool": "اتركه في المجموعة المشتركة",
     "Not decided yet": "لم يُحدد بعد",
     "Pick a property": "اختر عقاراً",
+    "Search by name, ref or unit": "ابحث بالاسم أو المرجع أو الوحدة",
+    "Any location": "أي موقع",
+    "Any bedrooms": "أي عدد غرف",
+    "Studio": "استوديو",
+    "Showing": "عرض",
     "Nothing logged yet. Every call and message should land here.":
         "لا يوجد شيء مسجل. كل مكالمة ورسالة يجب أن تُسجل هنا.",
     "No leads match. Capture one to start the pipeline.":

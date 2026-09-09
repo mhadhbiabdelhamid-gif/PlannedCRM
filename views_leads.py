@@ -318,9 +318,21 @@ def form(lid=None):
         return redirect(url_for("leads.detail", lid=lid))
 
     agents = query("SELECT id, name FROM users WHERE is_active = 1 ORDER BY name")
-    props = query("SELECT id, title, ref FROM properties ORDER BY id DESC LIMIT 200")
+    # Every property, not just the 200 newest — a lead can be interested in an
+    # older listing too. The full list is fine to send to the page because the
+    # template lets the agent narrow it by typing, location or bedroom count
+    # instead of scrolling a few hundred options.
+    props = query("SELECT id, title, ref, area, bedrooms FROM properties"
+                  " ORDER BY area IS NULL, area, bedrooms, ref")
+    prop_areas = [r["area"] for r in query(
+        "SELECT DISTINCT area FROM properties"
+        " WHERE COALESCE(TRIM(area), '') != '' ORDER BY area")]
+    prop_bedrooms = [r["bedrooms"] for r in query(
+        "SELECT DISTINCT bedrooms FROM properties"
+        " WHERE bedrooms IS NOT NULL ORDER BY bedrooms")]
     return render_template("leads/form.html", l=l, agents=agents, props=props,
-                           stages=LEAD_STAGES, sources=LEAD_SOURCES)
+                           stages=LEAD_STAGES, sources=LEAD_SOURCES,
+                           prop_areas=prop_areas, prop_bedrooms=prop_bedrooms)
 
 
 @bp.route("/<int:lid>/stage", methods=("POST",))
