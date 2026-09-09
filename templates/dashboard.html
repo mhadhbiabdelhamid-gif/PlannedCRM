@@ -153,31 +153,6 @@
         </div>
       </div>
     </div>
-
-    {% if user.role == 'admin' %}
-    <div class="card">
-      <div class="card-head">
-        <h3>{{ t('Team activity') }}</h3>
-        <a class="btn btn-quiet btn-sm" href="{{ url_for('main.activity') }}">{{ t('Full log') }}</a>
-      </div>
-      <div class="card-body" style="padding-top:4px">
-        {% if feed %}
-          {% for a in feed %}
-          <div class="feed-item">
-            <span class="feed-dot"></span>
-            <div class="stack">
-              <div><b>{{ a.user_name or 'System' }}</b> <span class="muted">{{ t(a.action) | lower }}</span></div>
-              {% if a.detail %}<div class="small muted">{{ a.detail }}</div>{% endif %}
-              <div class="mono faint">{{ a.created_at | ago }}</div>
-            </div>
-          </div>
-          {% endfor %}
-        {% else %}
-          <div class="empty"><span class="mark">◇</span>{{ t('Activity shows up here as the team works.') }}</div>
-        {% endif %}
-      </div>
-    </div>
-    {% endif %}
   </div>
 
 </div>

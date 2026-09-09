@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from flask import (Blueprint, current_app, g, jsonify, redirect,
                    render_template, request, send_from_directory, url_for)
 
-from auth import admin_required, is_admin, login_required, published_only, sees_all
+from auth import admin_required, login_required, published_only, sees_all
 from db import execute, local_now, local_today, paginate, query, utc_day_bounds
 
 bp = Blueprint("main", __name__)
@@ -64,13 +64,6 @@ def dashboard():
         " WHERE (l.next_follow_up IS NULL OR TRIM(l.next_follow_up) = '')"
         + open_stages + scope, one=True)["c"]
 
-    # Activity is confidential to admins: it's how the administrator
-    # evaluates everyone's work, so nobody else should see who did what.
-    feed = query(
-        "SELECT a.*, u.name AS user_name FROM activity a"
-        " LEFT JOIN users u ON u.id = a.user_id"
-        " ORDER BY a.id DESC LIMIT 12") if is_admin() else []
-
     week_start, _ = utc_day_bounds(
         (local_now() - timedelta(days=7)).strftime("%Y-%m-%d"))
     leads_week = query("SELECT COUNT(*) c FROM leads WHERE created_at >= ?" + mine,
@@ -86,7 +79,7 @@ def dashboard():
     return render_template(
         "dashboard.html", total_listings=total_listings, available=available,
         new_leads=new_leads, pending_deals=pending_deals, upcoming=upcoming,
-        pipeline=pipeline, feed=feed, leads_week=leads_week,
+        pipeline=pipeline, leads_week=leads_week,
         commission=commission, viewings_count=len(upcoming),
         overdue=overdue, due_today=due_today, no_followup=no_followup)
 
