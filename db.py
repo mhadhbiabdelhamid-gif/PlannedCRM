@@ -229,6 +229,8 @@ CREATE INDEX IF NOT EXISTS idx_comment_ent ON comments(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_notif_user  ON notifications(user_id, is_read);
 CREATE INDEX IF NOT EXISTS idx_deal_agents_user ON deal_agents(user_id);
 CREATE INDEX IF NOT EXISTS idx_deal_agents_payout ON deal_agents(payout_status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_ad_lead_id ON leads(ad_lead_id)
+    WHERE ad_lead_id IS NOT NULL;
 """
 
 LEAD_STAGES = ["New", "Contacted", "Qualified", "Viewing", "Offer",
@@ -256,7 +258,8 @@ LOST_REASONS = [
 LOST_REASON_LABELS = dict(LOST_REASONS)
 
 LEAD_SOURCES = ["Walk-in", "Website", "Property Finder", "Referral",
-                "Instagram", "WhatsApp", "Phone", "Other"]
+                "Instagram", "WhatsApp", "Phone",
+                "Facebook Ads", "Instagram Ads", "TikTok Ads", "Other"]
 PARTNER_TYPES = ["Developer", "Legal", "Maintenance", "Bank", "Marketing", "Other"]
 DEAL_STATUS = ["Agreed", "Signed", "Collected", "Cancelled"]
 PAYOUT_STATUS = [
@@ -458,6 +461,12 @@ MIGRATIONS = [
     # editing a settled client's notes later never resets it the way
     # updated_at would.
     ("leads", "closed_at", "TEXT"),
+    # External identifier for a lead pulled in automatically from an ad
+    # platform's lead-generation forms — "facebook:<leadgen_id>" or
+    # "tiktok:<lead_id>" (see ads_leads.py). Kept unique (see idx_leads_ad_lead_id
+    # above) so re-running an import never creates the same client twice, even
+    # across overlapping date windows.
+    ("leads", "ad_lead_id", "TEXT"),
 ]
 
 # How much warning the office gets before a tenancy ends. A unit that comes

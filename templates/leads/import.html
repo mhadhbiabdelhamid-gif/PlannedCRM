@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Import from ads') }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">03 · {{ t('Pipeline') }}</div>
+    <h1 class="page-title">{{ t('Import from ads') }}</h1>
+  </div>
+  <div class="actions">
+    <a class="btn btn-quiet" href="{{ url_for('leads.board') }}">{{ t('Back to leads') }}</a>
+  </div>
+</div>
+
+<div class="grid g-main">
+  <div class="grid">
+
+    <div class="card">
+      <div class="card-head"><h3>{{ t('Facebook & Instagram') }}</h3></div>
+      <div class="card-body">
+        <p class="muted small" style="margin-top:0">
+          {{ t("Pulls lead-form submissions live from your connected Meta ad account, through the same Windsor.ai connection used for the marketing report. Instagram lead ads come back through the same connector as Facebook, recorded as Facebook Ads since Meta doesn't say which placement a submission came from.") }}
+        </p>
+        {% if not facebook_ready %}
+          <div class="empty">
+            <span class="mark">◇</span>
+            <p>{{ t('No Windsor.ai key is set up yet.') }}</p>
+            <a class="btn btn-gold" href="{{ url_for('admin.settings') }}#marketing">{{ t('Connect Windsor.ai') }}</a>
+          </div>
+        {% else %}
+          <form method="post" action="{{ url_for('ads_leads.facebook') }}">
+            <div class="field">
+              <label>{{ t('Check for new leads from') }}</label>
+              <select name="range">
+                {% for key, label in ranges %}
+                  <option value="{{ key }}" {{ 'selected' if key == 'last_30d' }}>{{ t(label) }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <button class="btn btn-gold" type="submit">{{ t('Import new leads') }}</button>
+            <p class="small faint" style="margin:8px 0 0">
+              {{ t('Safe to click any time — leads already in the CRM are matched and skipped, never duplicated.') }}
+            </p>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>{{ t('TikTok') }}</h3></div>
+      <div class="card-body">
+        <p class="muted small" style="margin-top:0">
+          {{ t("TikTok doesn't offer an automatic connection yet, so download the CSV from TikTok Ads Manager's Leads Center and upload it here — the CRM works out which column is the name, phone and email.") }}
+        </p>
+        <form method="post" action="{{ url_for('ads_leads.tiktok_upload') }}" enctype="multipart/form-data">
+          <div class="field">
+            <label>{{ t('Leads Center export') }}</label>
+            <input type="file" name="csv_file" accept=".csv" required>
+          </div>
+          <button class="btn btn-gold" type="submit">{{ t('Read the file') }}</button>
+        </form>
+      </div>
+    </div>
+
+  </div>
+
+  {% if recent %}
+  <div class="card">
+    <div class="card-head"><h3>{{ t('Recent imports') }}</h3></div>
+    <div class="card-body" style="padding-top:6px">
+      {% for a in recent %}
+        <div class="feed-item">
+          <span class="feed-dot"></span>
+          <div class="stack">
+            <div class="small"><b>{{ a.user_name or 'System' }}</b></div>
+            <div class="small muted">{{ a.detail }}</div>
+            <div class="mono faint">{{ a.created_at | ago }}</div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -13,6 +13,7 @@ import auth
 import backups
 import mailer
 import views_admin
+import views_ads_leads
 import views_deals
 import views_finance
 import views_imports
@@ -142,6 +143,7 @@ def create_app():
     app.register_blueprint(views_main.bp)
     app.register_blueprint(views_properties.bp)
     app.register_blueprint(views_leads.bp)
+    app.register_blueprint(views_ads_leads.bp)
     app.register_blueprint(views_deals.bp)
     app.register_blueprint(views_imports.bp)
     app.register_blueprint(views_admin.contacts)

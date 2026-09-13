@@ -35,7 +35,8 @@ API_TIMEOUT = 20
 # joins later - the report page and settings card both read this dict.
 CONNECTORS = {
     "facebook": {"label": "Meta Ads (Facebook & Instagram)",
-                 "lead_sources": ["Instagram", "WhatsApp"]},
+                 "lead_sources": ["Instagram", "WhatsApp",
+                                  "Facebook Ads", "Instagram Ads"]},
 }
 
 FIELDS = ["date", "campaign", "spend", "impressions", "clicks", "reach", "currency"]
@@ -78,11 +79,11 @@ def api_key_present():
     return bool(get_setting("windsor_api_key", "").strip())
 
 
-def _request(connector, date_from, date_to):
+def _request(connector, date_from, date_to, fields=None):
     key = get_setting("windsor_api_key", "").strip()
     params = {
         "api_key": key,
-        "fields": ",".join(FIELDS),
+        "fields": ",".join(fields or FIELDS),
         "date_from": date_from,
         "date_to": date_to,
     }
@@ -92,13 +93,19 @@ def _request(connector, date_from, date_to):
         return json.loads(resp.read().decode("utf-8"))
 
 
-def fetch(connector, date_from, date_to):
-    """Returns (ok, rows_or_message). Never raises at the caller."""
+def fetch(connector, date_from, date_to, fields=None):
+    """Returns (ok, rows_or_message). Never raises at the caller.
+
+    `fields` lets another module (ads_leads.py, pulling lead-form data
+    rather than ad-spend figures) reuse this same key and HTTP client
+    against a different connector with a different field set, without
+    duplicating the request/error-handling logic below.
+    """
     if not api_key_present():
         return False, ("No Windsor.ai key is set up yet. An admin can add "
                        "one under Settings.")
     try:
-        payload = _request(connector, date_from, date_to)
+        payload = _request(connector, date_from, date_to, fields=fields)
     except urllib.error.HTTPError as exc:
         if exc.code in (401, 403):
             return False, "Windsor.ai rejected that key. Check it under Settings."

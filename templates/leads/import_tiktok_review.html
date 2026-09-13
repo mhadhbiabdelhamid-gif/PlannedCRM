@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Review TikTok leads') }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">03 · {{ t('Pipeline') }}</div>
+    <h1 class="page-title">{{ t('Review before importing') }}</h1>
+  </div>
+  <div class="actions">
+    <a class="btn btn-quiet" href="{{ url_for('ads_leads.index') }}">{{ t('Back') }}</a>
+  </div>
+</div>
+
+<p class="muted small" style="margin:-6px 0 16px">
+  {{ filename }} — {{ total }} {{ t('row(s) read.') }}
+</p>
+
+<div class="card" style="margin-bottom:16px">
+  <div class="card-body small">
+    <b>{{ t('Columns matched') }}:</b>
+    {% if matched %}
+      {% for field in matched %}
+        <span class="tag tag-plain">{{ mapping[field] }} → {{ field }}</span>
+      {% endfor %}
+    {% else %}
+      <span class="muted">{{ t('none') }}</span>
+    {% endif %}
+    <div class="small faint" style="margin-top:6px">
+      {{ t('Every other column in the file is ignored.') }} ({{ headers|length }} {{ t('total') }})
+    </div>
+  </div>
+</div>
+
+<div class="card table-scroll">
+  <table class="table">
+    <thead><tr>
+      <th>{{ t('Name') }}</th><th>{{ t('Phone') }}</th><th>{{ t('Email') }}</th>
+      <th>{{ t('Context') }}</th><th>{{ t('Status') }}</th>
+    </tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td>{{ r.full_name or '—' }}</td>
+        <td class="mono small">{{ r.phone or '—' }}</td>
+        <td class="small muted">{{ r.email or '—' }}</td>
+        <td class="small muted">{{ r.notes or '—' }}</td>
+        <td>
+          {% if r.usable %}
+            <span class="tag tag-available">{{ t('Will import') }}</span>
+          {% else %}
+            <span class="tag tag-plain">{{ t('Skipped — no usable contact info') }}</span>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if total > rows|length %}
+  <p class="small faint" style="margin-top:8px">
+    {{ t('Showing the first') }} {{ rows|length }} {{ t('of') }} {{ total }}
+    {{ t('rows — the rest will be checked the same way when you import.') }}
+  </p>
+{% endif %}
+
+<div class="modal-foot" style="margin-top:16px;justify-content:flex-start;gap:10px">
+  <form method="post" action="{{ url_for('ads_leads.tiktok_commit', token=token) }}">
+    <button class="btn btn-gold" type="submit">{{ t('Import these leads') }}</button>
+  </form>
+  <form method="post" action="{{ url_for('ads_leads.tiktok_discard', token=token) }}">
+    <button class="btn btn-quiet" type="submit">{{ t('Discard') }}</button>
+  </form>
+</div>
+<p class="small faint" style="margin-top:10px">
+  {{ t("Leads already in the CRM (matched by TikTok's own lead id, or by name/phone/email when the file has none) are skipped automatically, so importing the same file twice is safe.") }}
+</p>
+{% endblock %}

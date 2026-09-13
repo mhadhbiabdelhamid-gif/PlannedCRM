@@ -11,6 +11,9 @@
     <a class="btn" href="{{ url_for('leads.board') }}">{{ t('Board view') }}</a>
     <a class="btn" href="{{ url_for('leads.archive') }}">{{ t('Archived clients') }}
       {% if archived_count %}<span class="pill">{{ archived_count }}</span>{% endif %}</a>
+    {% if can('ads_leads') %}
+      <a class="btn" href="{{ url_for('ads_leads.index') }}">{{ t('Import from ads') }}</a>
+    {% endif %}
     <a class="btn btn-gold" href="{{ url_for('leads.form') }}">{{ t('Capture lead') }}</a>
   </div>
 </div>

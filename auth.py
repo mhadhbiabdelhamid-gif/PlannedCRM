@@ -59,6 +59,12 @@ CAPABILITIES = {
         "Download the listings, leads and deals as Excel or CSV.",
         {"admin": True, "manager": True, "agent": False},
     ),
+    "ads_leads": (
+        "Import leads from ads",
+        "Pull new leads from the connected Facebook/Instagram ad account, "
+        "and import a TikTok leads export file.",
+        {"admin": True, "manager": True, "agent": False},
+    ),
 }
 
 
