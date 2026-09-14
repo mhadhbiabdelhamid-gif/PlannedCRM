@@ -24,6 +24,7 @@
     {% if can('import') %}
       <a class="btn" href="{{ url_for('imports.upload') }}">{{ t('Import from Excel') }}</a>
     {% endif %}
+    <a class="btn" href="{{ url_for('properties.bulk_new') }}">{{ t('Add a building') }}</a>
     <a class="btn btn-gold" href="{{ url_for('properties.form') }}">{{ t('Add listing') }}</a>
   </div>
 </div>

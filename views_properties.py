@@ -381,6 +381,136 @@ def form(pid=None):
                            areas=areas, partners=partners)
 
 
+@bp.route("/bulk-new", methods=("GET", "POST"))
+@login_required
+def bulk_new():
+    """Add a whole building's worth of units in one go.
+
+    Everything a building's units have in common — location, amenities,
+    owner, the title — is entered once. Each row in the table below is just
+    the handful of things that actually differ unit to unit: the flat
+    number, its floor, room count, rent and size. One properties row is
+    inserted per filled-in flat number; empty rows (left over from "Add rows
+    at once") are silently skipped rather than rejected.
+    """
+    from db import EXTRA_ROOMS
+
+    if request.method == "POST":
+        d = request.form
+        ok, map_url = maps.normalise(d.get("map_url", ""))
+        if not ok:
+            flash(map_url, "error")
+            return redirect(request.url)
+
+        title = d.get("title", "").strip()
+        building_no = d.get("building_no", "").strip()
+        if not title:
+            flash("These units need a title.", "error")
+            return redirect(request.url)
+        if not building_no:
+            flash("Enter the building number or name — every unit will share it.", "error")
+            return redirect(request.url)
+
+        shared = dict(
+            address=d.get("address", "").strip(),
+            area=d.get("area", "").strip(),
+            prop_type=d.get("prop_type"),
+            listing_type=d.get("listing_type"),
+            status=d.get("status"),
+            description=d.get("description", "").strip(),
+            features=d.get("features", "").strip(),
+            owner_id=int(d["owner_id"]) if d.get("owner_id") else None,
+            partner_id=int(d["partner_id"]) if d.get("partner_id") else None,
+            agent_id=int(d["agent_id"]) if d.get("agent_id") else None,
+            extras=", ".join(d.getlist("extras") + ([d.get("extras_other", "").strip()]
+                      if d.get("extras_other", "").strip() else [])),
+            map_url=map_url,
+            is_own=1 if d.get("is_own") else 0,
+        )
+
+        unit_nos = d.getlist("unit_no")
+        floor_nos = d.getlist("floor_no")
+        bedrooms_l = d.getlist("bedrooms")
+        bathrooms_l = d.getlist("bathrooms")
+        prices = d.getlist("price")
+        sizes = d.getlist("size_sqm")
+
+        def _at(lst, i):
+            return lst[i].strip() if i < len(lst) else ""
+
+        waiting = not can_publish()
+        approval = "pending" if waiting else "approved"
+        stamp = now()
+        created_refs = []
+        skipped = 0
+
+        for i, raw_unit in enumerate(unit_nos):
+            unit_no = raw_unit.strip()
+            if not unit_no:
+                skipped += 1
+                continue
+            ref = next_ref("PRE-P", "properties")
+            price = _at(prices, i)
+            size = _at(sizes, i)
+            beds = _at(bedrooms_l, i)
+            baths = _at(bathrooms_l, i)
+            pid = execute(
+                "INSERT INTO properties (title,address,area,prop_type,listing_type,status,"
+                "price,size_sqm,bedrooms,bathrooms,description,features,owner_id,partner_id,"
+                "agent_id,building_no,floor_no,unit_no,extras,map_url,is_own,ref,"
+                "created_at,updated_at,last_verified,approval,submitted_by)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (title, shared["address"], shared["area"], shared["prop_type"],
+                 shared["listing_type"], shared["status"], float(price) if price else 0,
+                 float(size) if size else None, int(beds) if beds else None,
+                 int(baths) if baths else None, shared["description"], shared["features"],
+                 shared["owner_id"], shared["partner_id"], shared["agent_id"], building_no,
+                 _at(floor_nos, i), unit_no, shared["extras"], shared["map_url"],
+                 shared["is_own"], ref, stamp, stamp, stamp, approval, g.user["id"]))
+            log(g.user["id"],
+                "Submitted listing for approval" if waiting else "Added listing",
+                "property", pid, f"{ref} — {title} (flat {unit_no})")
+            created_refs.append(ref)
+
+        if not created_refs:
+            flash("Add at least one unit with a flat number.", "error")
+            return redirect(request.url)
+
+        tail = f" {skipped} empty row{'' if skipped == 1 else 's'} left out." if skipped else ""
+        count = len(created_refs)
+        if waiting:
+            for admin_row in query(
+                    "SELECT id FROM users WHERE role = 'admin' AND is_active = 1"):
+                notify(admin_row["id"],
+                       f"{g.user['name']} submitted {count} units in {building_no}"
+                       " for approval", url_for("properties.waiting"))
+            log(g.user["id"], "Submitted listings for approval",
+                detail=f"{count} units in {building_no}: {', '.join(created_refs)}")
+            flash(f"{count} unit{'' if count == 1 else 's'} added and sent for approval."
+                  + tail, "ok")
+            return redirect(url_for("properties.waiting"))
+
+        log(g.user["id"], "Added listings in bulk",
+            detail=f"{count} units in {building_no}: {', '.join(created_refs)}")
+        flash(f"{count} unit{'' if count == 1 else 's'} added to {building_no}." + tail, "ok")
+        return redirect(url_for("properties.index", q=building_no))
+
+    owners = query("SELECT id, name FROM owners ORDER BY name")
+    partners = query("SELECT id, name, partner_type FROM partners ORDER BY name")
+    agents = query("SELECT id, name FROM users WHERE is_active = 1 ORDER BY name")
+    buildings = query(
+        "SELECT building_no, area, COUNT(*) AS units FROM properties"
+        " WHERE building_no IS NOT NULL AND TRIM(building_no) != ''"
+        " GROUP BY building_no, area ORDER BY area, building_no")
+    areas = query(
+        "SELECT DISTINCT area FROM properties"
+        " WHERE area IS NOT NULL AND TRIM(area) != '' ORDER BY area")
+    return render_template("properties/bulk_form.html", owners=owners, agents=agents,
+                           extra_rooms=EXTRA_ROOMS, prop_types=PROP_TYPES,
+                           statuses=PROP_STATUS, listing_types=LISTING_TYPES,
+                           buildings=buildings, areas=areas, partners=partners)
+
+
 @bp.route("/<int:pid>/documents", methods=("POST",))
 @login_required
 def add_document(pid):

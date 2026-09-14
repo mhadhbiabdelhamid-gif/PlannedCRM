@@ -973,6 +973,20 @@ AR = {
     "October": "أكتوبر", "November": "نوفمبر", "December": "ديسمبر",
     "Mon": "الإثنين", "Tue": "الثلاثاء", "Wed": "الأربعاء", "Thu": "الخميس",
     "Fri": "الجمعة", "Sat": "السبت", "Sun": "الأحد",
+
+    # ---- add a building in bulk (properties.bulk_new) ----
+    "Add a building": "إضافة مبنى",
+    "Fill in what every unit in this building shares — location, amenities, owner — once below. Then list each unit at the bottom with just what makes it different: its flat number, rent and room count.":
+        "أدخل أدناه كل ما تتشارك فيه وحدات هذا المبنى — الموقع، المرافق، المالك — مرة واحدة فقط. ثم أضف كل وحدة في الأسفل بما يختلف فيها فقط: رقم الشقة والإيجار وعدد الغرف.",
+    "Used for every unit below — the flat number is what tells them apart.":
+        "يُستخدم لكل الوحدات أدناه — رقم الشقة هو ما يميز كل واحدة.",
+    "Units in this building": "الوحدات في هذا المبنى",
+    "Each row becomes its own listing, sharing everything above. A new row copies the floor, rooms, price and size from the one before it, so you only need to change what is different.":
+        "يتحول كل صف إلى عقار مستقل، يشارك كل ما أعلاه. يأخذ الصف الجديد الطابق وعدد الغرف والسعر والمساحة من الصف الذي قبله، فلا تحتاج لتغيير إلا ما يختلف.",
+    "Add a unit": "إضافة وحدة",
+    "Add rows at once": "إضافة عدة صفوف دفعة واحدة",
+    "Add these units": "إضافة هذه الوحدات",
+    "Add at least one unit with a flat number.": "أضف وحدة واحدة على الأقل برقم شقة.",
 }
 
 

@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Add a building') }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">02 · {{ t('Listings') }}</div>
+    <h1 class="page-title">{{ t('Add a building') }}</h1>
+  </div>
+  <div class="actions">
+    <a class="btn btn-quiet" href="{{ url_for('properties.index') }}">{{ t('Cancel') }}</a>
+  </div>
+</div>
+
+<form method="post" class="card" style="max-width:1100px" id="bulkform">
+  <div class="card-body">
+    <p class="small faint" style="margin-top:0">
+      {{ t("Fill in what every unit in this building shares — location, amenities, owner — once below. Then list each unit at the bottom with just what makes it different: its flat number, rent and room count.") }}
+    </p>
+    <div class="form-grid">
+      <div class="field span-2">
+        <label for="title">{{ t('Title') }}</label>
+        <input id="title" type="text" name="title" required
+               placeholder="e.g. 2 BHK SF, Al Muntazah">
+        <span class="small faint">{{ t('Used for every unit below — the flat number is what tells them apart.') }}</span>
+      </div>
+
+      <div class="field">
+        <label for="address">{{ t('Address') }}</label>
+        <input id="address" type="text" name="address">
+      </div>
+      <div class="field">
+        <label for="building_no">{{ t('Building number') }}</label>
+        <input id="building_no" type="text" name="building_no" list="building-list" required
+               placeholder="{{ t('e.g. Tower 12, Block C, Villa 44') }}" autocomplete="off">
+        <datalist id="building-list">
+          {% for b in buildings %}
+            <option value="{{ b.building_no }}">{{ b.area or '' }}{% if b.units %} — {{ b.units }} {{ t('listed') }}{% endif %}</option>
+          {% endfor %}
+        </datalist>
+      </div>
+
+      <div class="field">
+        <label for="area">{{ t('Location / district') }}</label>
+        <input id="area" type="text" name="area" list="area-list" autocomplete="off"
+               placeholder="e.g. The Pearl, Lusail, West Bay">
+        <datalist id="area-list">
+          {% for a in areas %}<option value="{{ a.area }}"></option>{% endfor %}
+        </datalist>
+      </div>
+      <div class="field">
+        <label for="prop_type">{{ t('Property type') }}</label>
+        <select id="prop_type" name="prop_type">
+          {% for tp in prop_types %}<option value="{{ tp }}">{{ t(tp) }}</option>{% endfor %}
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="listing_type">{{ t('Sale or rent') }}</label>
+        <select id="listing_type" name="listing_type">
+          {% for tp in listing_types %}<option value="{{ tp }}">{{ t(tp) }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="status">{{ t('Status') }}</label>
+        <select id="status" name="status">
+          {% for s in statuses %}<option value="{{ s }}">{{ t(s) }}</option>{% endfor %}
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="owner_id">{{ t('Owner') }}</label>
+        <select id="owner_id" name="owner_id">
+          <option value="">{{ t('None') }}</option>
+          {% for o in owners %}<option value="{{ o.id }}">{{ o.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="partner_id">{{ t('Partner') }}</label>
+        <select id="partner_id" name="partner_id">
+          <option value="">{{ t('None') }}</option>
+          {% for pa in partners %}
+            <option value="{{ pa.id }}">{{ pa.name }}{% if pa.partner_type %} — {{ t(pa.partner_type) }}{% endif %}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="agent_id">{{ t('Agent in charge') }}</label>
+        <select id="agent_id" name="agent_id">
+          <option value="">{{ t('Unassigned') }}</option>
+          {% for a in agents %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field span-2">
+        <label for="map_url">{{ t('Location on the map') }}</label>
+        <input id="map_url" type="text" name="map_url"
+               placeholder="https://maps.app.goo.gl/…   {{ t('or') }}   25.3702, 51.5487">
+      </div>
+
+      <div class="field span-2">
+        <label class="inline" style="gap:9px;text-transform:none;letter-spacing:0;font-size:14px">
+          <input type="checkbox" name="is_own" value="1" style="width:auto">
+          {{ t('Owned by') }} {{ company }}
+        </label>
+      </div>
+
+      <div class="field span-2">
+        <label>{{ t('Extra rooms') }}</label>
+        <div class="chip-row" style="margin-bottom:8px">
+          {% for room in extra_rooms %}
+            <label class="chip" style="cursor:pointer">
+              <input type="checkbox" name="extras" value="{{ room }}" style="width:auto;margin-inline-end:5px">
+              {{ t(room) }}
+            </label>
+          {% endfor %}
+        </div>
+        <input type="text" name="extras_other" placeholder="{{ t('Anything else — separate with commas') }}">
+      </div>
+
+      <div class="field span-2">
+        <label for="features">{{ t('Key features') }} <span class="faint">— separate with commas</span></label>
+        <input id="features" type="text" name="features"
+               placeholder="Sea view, Maid's room, Covered parking, Gym access">
+      </div>
+
+      <div class="field span-2">
+        <label for="description">{{ t('Description') }}</label>
+        <textarea id="description" name="description"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="card-body" style="border-top:1px solid var(--line)">
+    <div class="eyebrow">{{ t('Units in this building') }}</div>
+    <p class="small faint">
+      {{ t('Each row becomes its own listing, sharing everything above. A new row copies the floor, rooms, price and size from the one before it, so you only need to change what is different.') }}
+    </p>
+    <div style="overflow-x:auto">
+      <table class="table" id="unittable">
+        <thead><tr>
+          <th style="width:20%">{{ t('Flat number') }}</th>
+          <th style="width:14%">{{ t('Floor') }}</th>
+          <th style="width:12%">{{ t('Bedrooms') }}</th>
+          <th style="width:12%">{{ t('Bathrooms') }}</th>
+          <th style="width:16%">{{ t('Price') }} ({{ currency }})</th>
+          <th style="width:16%">{{ t('Size') }} (m²)</th>
+          <th></th>
+        </tr></thead>
+        <tbody id="unitrows"></tbody>
+      </table>
+    </div>
+    <div class="small" id="unitserror" style="color:var(--danger,#e0685f)"></div>
+    <div class="field inline" style="margin-top:10px;gap:8px">
+      <a class="btn btn-quiet btn-sm" href="#" onclick="addRow(); return false">{{ t('Add a unit') }}</a>
+      <input type="number" id="quick_count" min="1" max="200" value="5" style="width:70px">
+      <button type="button" class="btn btn-quiet btn-sm" onclick="addRows()">{{ t('Add rows at once') }}</button>
+    </div>
+  </div>
+
+  <div class="modal-foot">
+    <a class="btn btn-quiet" href="{{ url_for('properties.index') }}">{{ t('Cancel') }}</a>
+    <button class="btn btn-gold" type="submit">{{ t('Add these units') }}</button>
+  </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function addRow() {
+  const tb = document.getElementById('unitrows');
+  const rows = tb.querySelectorAll('tr');
+  const last = rows.length ? rows[rows.length - 1] : null;
+  const get = (name) => last ? last.querySelector(`[name="${name}"]`).value : '';
+
+  const tr = document.createElement('tr');
+  tr.innerHTML =
+    `<td><input type="text" name="unit_no" placeholder="{{ t('e.g. 402, 12B, Ground floor') }}" autofocus></td>
+     <td><input type="text" name="floor_no" value="${get('floor_no')}"></td>
+     <td><input type="number" name="bedrooms" min="0" value="${get('bedrooms')}"></td>
+     <td><input type="number" name="bathrooms" min="0" value="${get('bathrooms')}"></td>
+     <td><input type="number" name="price" step="any" min="0" inputmode="decimal" value="${get('price')}"></td>
+     <td><input type="number" name="size_sqm" step="any" min="0" inputmode="decimal" value="${get('size_sqm')}"></td>
+     <td class="right"><a href="#" class="small faint" onclick="this.closest('tr').remove(); return false">{{ t('Remove') }}</a></td>`;
+  tb.appendChild(tr);
+  const unitInput = tr.querySelector('[name="unit_no"]');
+  if (unitInput) unitInput.focus();
+}
+
+function addRows() {
+  const n = Math.max(1, Math.min(200, parseInt(document.getElementById('quick_count').value, 10) || 1));
+  for (let i = 0; i < n; i++) addRow();
+}
+
+document.getElementById('bulkform').addEventListener('submit', function (e) {
+  const rows = [...document.querySelectorAll('#unitrows tr')];
+  const withNumber = rows.filter(r => r.querySelector('[name="unit_no"]').value.trim());
+  const err = document.getElementById('unitserror');
+  if (!withNumber.length) {
+    e.preventDefault();
+    err.textContent = '{{ t("Add at least one unit with a flat number.") }}';
+    err.scrollIntoView({block: 'center'});
+  } else {
+    err.textContent = '';
+  }
+});
+
+// Start with a handful of empty rows — enough for most single visits to a
+// building, and "Add rows at once" covers the rest.
+for (let i = 0; i < 3; i++) addRow();
+</script>
+{% endblock %}
