@@ -17,7 +17,7 @@ from db import (LEASE_NOTICE_DAYS, LISTING_TYPES, PROP_STATUS, PROP_TYPES,
 
 bp = Blueprint("properties", __name__, url_prefix="/properties")
 
-IMG_EXT = {"png", "jpg", "jpeg", "webp", "gif"}
+IMG_EXT = {"png", "jpg", "jpeg", "jfif", "webp", "gif", "heic", "heif", "bmp"}
 DOC_EXT = {"pdf", "doc", "docx", "xls", "xlsx", "png", "jpg", "jpeg", "dwg", "txt"}
 
 
@@ -355,10 +355,18 @@ def form(pid=None):
                        url_for("properties.detail", pid=pid))
             flash("Listing saved.", "ok")
 
+        skipped_names = []
         for fs in request.files.getlist("images"):
-            if fs and fs.filename and _ext_ok(fs.filename, IMG_EXT):
+            if not fs or not fs.filename:
+                continue
+            if _ext_ok(fs.filename, IMG_EXT):
                 execute("INSERT INTO property_images (property_id, filename, is_cover,"
                         " created_at) VALUES (?,?,0,?)", (pid, _save(fs, "images"), now()))
+            else:
+                skipped_names.append(fs.filename)
+        if skipped_names:
+            flash("Couldn't use " + ", ".join(skipped_names) +
+                  " — that file type isn't a supported photo format.", "error")
         return redirect(url_for("properties.detail", pid=pid))
 
     owners = query("SELECT id, name FROM owners ORDER BY name")
