@@ -1109,6 +1109,12 @@ input[type=file] { font-size: 13px; font-family: var(--mono); }
 
 .gallery figure:hover .tools { opacity: 1; }
 
+/* Touch screens have no hover, so the COVER/REMOVE buttons above would
+   otherwise be impossible to reach — keep them visible on phones/tablets. */
+@media (hover: none) {
+  .gallery .tools { opacity: 1; }
+}
+
 .gallery .tools button {
   border: none;
   background: rgba(11,11,13,.82);
