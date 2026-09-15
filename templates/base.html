@@ -49,7 +49,7 @@
              {{ 'open' if request.blueprint in ('properties', 'imports') }}>
       <summary>{{ t('Properties') }}</summary>
       <a class="rail-link sub {{ 'active' if request.endpoint == 'properties.index' }}"
-         href="{{ url_for('properties.index') }}">
+         href="{{ url_for('properties.index', reset=1) }}">
         <span class="idx">1.1</span> {{ t('Properties') }}</a>
       <a class="rail-link sub {{ 'active' if request.endpoint == 'properties.waiting' }}"
          href="{{ url_for('properties.waiting') }}">

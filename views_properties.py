@@ -6,7 +6,7 @@ import areas
 import maps
 
 from flask import (Blueprint, current_app, flash, g, redirect, render_template,
-                   request, url_for)
+                   request, session, url_for)
 from werkzeug.utils import secure_filename
 
 from auth import (can, can_edit, can_publish, can_see_listing, is_admin,
@@ -102,6 +102,19 @@ def _filter_clause(f, prefix="p"):
 @bp.route("/")
 @login_required
 def index():
+    # The search/filter is "sticky": once you search, edit one result and
+    # come back — via "Back to list", "Cancel", or just the browser back
+    # button landing on a bare /properties/ — you land back on that same
+    # search instead of the full unfiltered list. Only an explicit reset
+    # (the sidebar's own "Properties" link) or pressing "Clear" drops it.
+    if request.args.get("reset"):
+        session.pop("properties_filters", None)
+        return redirect(url_for("properties.index"))
+    if not request.args and session.get("properties_filters"):
+        return redirect(url_for("properties.index", **session["properties_filters"]))
+    if request.args:
+        session["properties_filters"] = request.args.to_dict()
+
     f = _read_filters()
     sql = ("SELECT p.*, u.name AS agent_name,"
            " o.name AS owner_name, o.photo AS owner_photo, o.company AS owner_company,"
