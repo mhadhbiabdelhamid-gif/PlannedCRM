@@ -40,6 +40,20 @@
     setTimeout(function () { m.classList.add("lit"); }, 90 * i);
   });
 
+  /* --------------------------------------------- page-level entrance
+     Cards and table rows in the main content column arrive with a short
+     stagger, same spirit as the metric hairlines above — mirrors it for
+     .card and picks up any element opted in with .rise-in-item, so a page
+     with several report cards or a freshly-loaded table feels like it
+     settled into place rather than appearing all at once. */
+  var riseTargets = document.querySelectorAll(
+    "main .card, .rise-in-item, .table tbody tr"
+  );
+  riseTargets.forEach(function (el, i) {
+    el.classList.add("rise-in");
+    el.style.animationDelay = (Math.min(i, 14) * 35) + "ms";
+  });
+
   /* ------------------------------------------------------------ modals */
   window.openModal = function (id, data) {
     var back = document.getElementById(id);

@@ -1288,6 +1288,93 @@ input[type=file] { font-size: 13px; font-family: var(--mono); }
   .col { width: 100%; min-height: 0; }
 }
 
+/* ==========================================================================
+   Energy layer — more dynamic, easier to scan at speed.
+
+   Deliberately additive: every rule below hooks onto a class already used
+   everywhere (.card, .btn, .metric, .rail-link, .table, .bell) so the whole
+   app picks it up without touching every template, and it composes with the
+   existing motion (the .metric "lit" hairline, the rail chevron) rather than
+   replacing it. Nothing here changes colour — only how things arrive and
+   respond to touch. The global "* { transition: none; animation: none; }"
+   reduced-motion rule above already turns all of it off, so no separate
+   opt-out is needed here.
+   ========================================================================== */
+
+.card, .metric, .btn {
+  transition: transform .16s cubic-bezier(.2,.7,.3,1),
+              box-shadow .16s ease,
+              border-color .12s, background .12s, color .12s;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 2px 4px rgba(20,18,12,.06), 0 16px 32px -18px rgba(20,18,12,.28);
+}
+
+/* Clickable summary cards (dashboard's "no follow-up" card, etc.) get the
+   same lift as .card, but only when they're actually a link/button. */
+a.card:hover, button.card:hover { border-color: var(--gold); }
+
+.metric:hover { background: rgba(200,162,74,.035); }
+
+.btn:active, .card:active { transform: translateY(0) scale(.99); }
+
+/* Stagger-in for anything mounted async or worth a first-load flourish —
+   applied from app.js the same way .metric already gets "lit", so a card
+   grid or table body arrives a beat at a time instead of all at once. */
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.rise-in { animation: rise-in .38s cubic-bezier(.2,.7,.3,1) both; }
+
+/* Skeleton placeholder for a value that hasn't loaded yet (async widgets,
+   report tiles) — replaces a bare "…" with something that reads as "still
+   working" rather than "broken". */
+@keyframes skel-shimmer { 0% { background-position: -150% 0; } 100% { background-position: 150% 0; } }
+.skel {
+  display: inline-block;
+  min-width: 2.5em;
+  height: .9em;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--line-soft) 25%, var(--line) 37%, var(--line-soft) 63%);
+  background-size: 300% 100%;
+  animation: skel-shimmer 1.4s ease-in-out infinite;
+  vertical-align: -.1em;
+}
+
+/* Active sidebar link: the colour swap already transitions; give the gold
+   left border the same treatment instead of snapping in. */
+.rail-link { transition: color .12s, background .12s, border-left-color .18s ease; }
+
+/* Notification bell — a short, finite-feeling pulse when there's something
+   new, so it earns a glance without nagging forever. */
+@keyframes bell-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(200,162,74,.5); }
+  70%  { box-shadow: 0 0 0 6px rgba(200,162,74,0); }
+  100% { box-shadow: 0 0 0 0 rgba(200,162,74,0); }
+}
+.bell:has(.dot) { animation: bell-pulse 2.2s cubic-bezier(.2,.7,.3,1) infinite; }
+
+.table tbody tr { transition: background .12s ease; }
+
+/* Chip row (dashboard pipeline stages) — light lift + gold ring so an "on"
+   stage reads as active rather than just a colour change. */
+.chip { transition: transform .12s ease, border-color .12s, background .12s; }
+.chip:hover { transform: translateY(-1px); }
+
+/* Slow ambient drift on the login screen's decorative rings, so the split
+   screen feels alive before anyone touches the form. */
+@keyframes ring-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(-1.5%, -2.5%) scale(1.04); }
+}
+.login-art::after { animation: ring-drift 18s ease-in-out infinite; }
+.login-art::before { animation: ring-drift 14s ease-in-out infinite reverse; }
+
+.login-box { animation: rise-in .5s cubic-bezier(.2,.7,.3,1) both; }
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
   .metric::before { transform: scaleX(1); }
