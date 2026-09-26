@@ -267,12 +267,16 @@ def detail(pid):
     # Tenant follow-up only ever applies to our own rented stock — a
     # third-party owner's tenancy is their business, not ours to track.
     tenant = None
-    if p["is_own"] and p["status"] == "Rented":
+    lease_missing = False
+    if p["status"] == "Rented":
         import leases
-        tenant = leases.current_tenant(pid)
+        if p["is_own"]:
+            tenant = leases.current_tenant(pid)
+        lease_missing = not leases.has_rental_on_record(pid)
 
     return render_template("properties/detail.html", p=p, images=images, docs=docs,
                            comments=comments, leads=leads, trail=trail, tenant=tenant,
+                           lease_missing=lease_missing,
                            editable=can_edit(p), cutoff=days_ago(STALE_DAYS))
 
 
@@ -368,6 +372,15 @@ def form(pid=None):
                        url_for("properties.detail", pid=pid))
             flash("Listing saved.", "ok")
 
+        # Just marked Rented with nothing saying for how long? Go straight to
+        # the rental form, pre-filled, so the lease dates get recorded while
+        # the agent still has them — that is what drives the lease reminders.
+        was_rented = p is not None and p["status"] == "Rented"
+        ask_lease = False
+        if vals[5] == "Rented" and not was_rented:
+            import leases
+            ask_lease = not leases.has_rental_on_record(pid)
+
         skipped_names = []
         for fs in request.files.getlist("images"):
             if not fs or not fs.filename:
@@ -380,6 +393,10 @@ def form(pid=None):
         if skipped_names:
             flash("Couldn't use " + ", ".join(skipped_names) +
                   " — that file type isn't a supported photo format.", "error")
+        if ask_lease:
+            flash("Marked as rented. Enter the rental period and tenant so you "
+                  "get reminded before the lease ends.", "ok")
+            return redirect(url_for("deals.form", property=pid, rent=1))
         return redirect(url_for("properties.detail", pid=pid))
 
     owners = query("SELECT id, name FROM owners ORDER BY name")
@@ -965,6 +982,13 @@ def bulk():
         detail=f"{len(allowed)} listings: {label}")
 
     message = f"{len(allowed)} listing{'' if len(allowed) == 1 else 's'} updated."
+    if field == "status" and new_value == "Rented":
+        import leases
+        no_lease = [r for r in allowed if not leases.has_rental_on_record(r["id"])]
+        if no_lease:
+            flash("Some of them have no rental period on record. Open each one "
+                  "and use \"Add rental period\" so you get reminded before the "
+                  "lease ends.", "error")
     if blocked:
         message += (f" {blocked} skipped — {'it belongs' if blocked == 1 else 'they belong'}"
                     " to another agent.")

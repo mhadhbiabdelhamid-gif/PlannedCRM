@@ -9,6 +9,7 @@ import leases
 from commission import (AGENT_ROLES, BASES, ON_CHOICES, check_shares,
                         commission_amount, split_amounts)
 from db import (DEAL_STATUS, LISTING_TYPES, execute, get_setting, local_now,
+                local_today,
                 log, next_ref, notify, now, paginate, query, to_utc)
 
 bp = Blueprint("deals", __name__, url_prefix="/deals")
@@ -194,6 +195,9 @@ def form(did=None):
             if uid != g.user["id"] and uid not in before:
                 notify(uid, f"You were added to deal {ref} ({share:g}%)",
                        url_for("deals.index"))
+        back_to = f.get("return_property", "")
+        if back_to.isdigit():
+            return redirect(url_for("properties.detail", pid=int(back_to)) + "#tenant")
         return redirect(url_for("deals.index"))
 
     agents = query("SELECT id, name FROM users WHERE is_active = 1 ORDER BY name")
@@ -224,6 +228,23 @@ def form(did=None):
                     "value": lead["price"] or lead["budget"] or 0,
                     "deal_type": lead["listing_type"] or "Sale",
                 }
+        # Coming from a listing that was just marked Rented: start a rental on
+        # that unit, rent pulled from its price, tenancy starting today, and
+        # send the agent back to the listing once it's saved.
+        prop_id = request.args.get("property", "")
+        if prop_id.isdigit():
+            prop = query("SELECT id, price, agent_id FROM properties WHERE id = ?",
+                         (int(prop_id),), one=True)
+            if prop:
+                prefill.update({
+                    "property_id": prop["id"],
+                    "agent_id": prefill.get("agent_id") or prop["agent_id"] or g.user["id"],
+                    "value": prefill.get("value") or prop["price"] or 0,
+                    "return_property": prop["id"],
+                })
+                if request.args.get("rent"):
+                    prefill["deal_type"] = "Rent"
+                    prefill["lease_start"] = local_today()
 
     existing = [{"user_id": r["user_id"], "role": r["role"],
                  "share_pct": r["share_pct"]} for r in _people(did)] if did else []

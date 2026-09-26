@@ -85,10 +85,20 @@
 
       <div class="field">
         <label for="status">{{ t('Status') }}</label>
-        <select id="status" name="status">
+        <select id="status" name="status" onchange="rentedHint()">
           {% for s in statuses %}<option value="{{ s }}" {{ 'selected' if p and p.status == s }}>{{ t(s) }}</option>{% endfor %}
         </select>
+        <span id="rented-hint" class="small faint" style="display:none">
+          {{ t('After saving you will be asked for the rental period and tenant, so the lease is tracked.') }}</span>
       </div>
+      <script>
+        function rentedHint() {
+          var was = {{ ((p.status if p else '') == 'Rented') | tojson }};
+          var el = document.getElementById('status');
+          document.getElementById('rented-hint').style.display =
+            (el.value === 'Rented' && !was) ? '' : 'none';
+        }
+      </script>
       <div class="field">
         <label for="price">{{ t('Price') }} ({{ currency }})</label>
         <input id="price" type="number" name="price" step="any" min="0" inputmode="decimal" value="{{ p.price | round(2) if p else '' }}">

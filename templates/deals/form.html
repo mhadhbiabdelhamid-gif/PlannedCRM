@@ -10,6 +10,9 @@
 </div>
 
 <form method="post" class="card" style="max-width:860px" id="dealform">
+  {% if prefill.get('return_property') %}
+    <input type="hidden" name="return_property" value="{{ prefill.get('return_property') }}">
+  {% endif %}
   <div class="card-body">
     <div class="form-grid">
       <div class="field span-2">
@@ -108,7 +111,7 @@
       <div class="field">
         <label for="lease_start">{{ t('Tenancy starts') }}</label>
         <input id="lease_start" type="date" name="lease_start"
-               value="{{ d.lease_start if d and d.lease_start else '' }}">
+               value="{{ d.lease_start if d and d.lease_start else (prefill.get('lease_start') or '') }}">
         <span class="small faint">{{ t('Leave blank to use the closing date.') }}</span>
       </div>
       <div class="field">
@@ -377,7 +380,7 @@ if (EXISTING.length) {
 } else {
   addRow({{ (prefill.get('agent_id') or (d.agent_id if d else None)) or 'null' }}, 'lead', 100);
 }
-basisChanged();
+{% if not d and prefill.get('deal_type') %}typeChanged();{% else %}basisChanged();{% endif %}
 pullPrice(document.getElementById('property_id'));
 </script>
 {% endblock %}

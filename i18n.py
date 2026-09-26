@@ -101,6 +101,17 @@ AR = {
     "Call": "اتصال",
     "Exports only the listings matching your current search": "يصدّر فقط العقارات المطابقة لبحثك الحالي",
     "Exports every listing": "يصدّر جميع العقارات",
+    "Marked as rented, but no rental period is on record yet. Add it so you get reminded before the lease ends.":
+        "مسجّلة كمؤجرة، لكن لم تُسجَّل مدة الإيجار بعد. أضفها لتصلك تذكرة قبل انتهاء العقد.",
+    "Add rental period": "إضافة مدة الإيجار",
+    "Edit rental period": "تعديل مدة الإيجار",
+    "Rental period": "مدة الإيجار",
+    "After saving you will be asked for the rental period and tenant, so the lease is tracked.":
+        "بعد الحفظ سيُطلب منك إدخال مدة الإيجار والمستأجر لمتابعة العقد.",
+    "Marked as rented. Enter the rental period and tenant so you get reminded before the lease ends.":
+        "تم التعليم كمؤجرة. أدخل مدة الإيجار والمستأجر لتصلك تذكرة قبل انتهاء العقد.",
+    "Some of them have no rental period on record. Open each one and use \"Add rental period\" so you get reminded before the lease ends.":
+        "بعضها بلا مدة إيجار مسجّلة. افتح كل عقار واستخدم \"إضافة مدة الإيجار\" لتصلك تذكرة قبل انتهاء العقد.",
     "Marked as rented, but no active rental deal is on record for it. Add one from Deals.":
         "مسجّلة كمؤجرة، لكن لا توجد صفقة إيجار نشطة مسجّلة لها. أضف واحدة من الصفقات.",
     "Price too high": "السعر مرتفع",

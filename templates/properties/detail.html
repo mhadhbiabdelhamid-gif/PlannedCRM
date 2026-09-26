@@ -259,11 +259,27 @@
             {% endif %}
             <a class="btn btn-sm" href="{{ url_for('properties.leases_ending') }}">
               {{ t('Leases ending') }}</a>
+            <a class="btn btn-sm" href="{{ url_for('deals.form', did=tenant.id) }}">
+              {{ t('Edit rental period') }}</a>
           </div>
         {% else %}
-          <p class="muted small" style="margin:0">
-            {{ t('Marked as rented, but no active rental deal is on record for it. Add one from Deals.') }}</p>
+          <p class="muted small" style="margin:0 0 10px">
+            {{ t('Marked as rented, but no rental period is on record yet. Add it so you get reminded before the lease ends.') }}</p>
+          <a class="btn btn-sm btn-gold" href="{{ url_for('deals.form', property=p.id, rent=1) }}">
+            {{ t('Add rental period') }}</a>
         {% endif %}
+      </div>
+    </div>
+    {% elif lease_missing and editable %}
+    {# A partner's unit we marked rented: no tenant card, but still worth
+       noting how long it's let for, so we know when to chase it again. #}
+    <div class="card" id="tenant">
+      <div class="card-head"><h3>{{ t('Rental period') }}</h3></div>
+      <div class="card-body">
+        <p class="muted small" style="margin:0 0 10px">
+          {{ t('Marked as rented, but no rental period is on record yet. Add it so you get reminded before the lease ends.') }}</p>
+        <a class="btn btn-sm btn-gold" href="{{ url_for('deals.form', property=p.id, rent=1) }}">
+          {{ t('Add rental period') }}</a>
       </div>
     </div>
     {% endif %}

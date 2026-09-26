@@ -165,6 +165,20 @@ def current_tenants_map(property_ids):
     return out
 
 
+def has_rental_on_record(property_id):
+    """Whether this unit already has a live rental deal holding its lease dates.
+
+    Unlike current_tenant() this ignores is_own: the question here is only
+    "has anyone written down how long this unit is let for", which is worth
+    asking of every rented listing so the office knows when it comes back.
+    """
+    return query(
+        "SELECT 1 FROM deals WHERE property_id = ?"
+        " AND lower(COALESCE(deal_type,'')) LIKE 'rent%'"
+        " AND status != 'Cancelled' AND COALESCE(lease_alert,'') != 'done'"
+        " LIMIT 1", (property_id,), one=True) is not None
+
+
 # --------------------------------------------------------------- reminders
 
 def _recipients(row):
