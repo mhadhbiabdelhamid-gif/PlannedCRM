@@ -1,8 +1,9 @@
 <!doctype html>
-<html lang="{{ lang }}" dir="{{ 'rtl' if rtl else 'ltr' }}">
+<html lang="{{ lang }}" dir="{{ 'rtl' if rtl else 'ltr' }}" data-theme="{{ theme }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="{{ theme }}">
 <title>{% block title %}{{ t('Dashboard') }}{% endblock %} · {{ company }}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -189,6 +190,18 @@
       {% for code, label in langs.items() %}
         <a class="{{ 'on' if lang == code }}" href="{{ url_for('set_language', code=code) }}">{{ label }}</a>
       {% endfor %}
+    </div>
+    <div class="lang-switch theme-switch" role="group" aria-label="{{ t('Appearance') }}">
+      <a class="{{ 'on' if theme == 'light' }}" href="{{ url_for('set_theme', mode='light') }}"
+         aria-pressed="{{ 'true' if theme == 'light' else 'false' }}">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+             stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5"/></svg>
+        {{ t('Light') }}</a>
+      <a class="{{ 'on' if theme == 'dark' }}" href="{{ url_for('set_theme', mode='dark') }}"
+         aria-pressed="{{ 'true' if theme == 'dark' else 'false' }}">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>
+        {{ t('Dark') }}</a>
     </div>
     © {{ year }} {{ company }}<br>{{ t('Doha, Qatar') }} · {{ tz_label }}
   </div>

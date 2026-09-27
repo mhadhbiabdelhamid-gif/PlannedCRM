@@ -33,6 +33,17 @@ from restore import restore_bp
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
+THEMES = ("light", "dark")
+
+
+def current_theme():
+    """The signed-in person's own choice, then the session's, then light."""
+    user = g.get("user")
+    if user is not None and "theme" in user.keys() and user["theme"] in THEMES:
+        return user["theme"]
+    mode = session.get("theme", "light")
+    return mode if mode in THEMES else "light"
+
 
 LOGO_EXTS = ("png", "jpg", "jpeg", "webp", "svg", "gif")
 
@@ -162,6 +173,20 @@ def create_app():
             if g.get("user") is not None:
                 from db import execute
                 execute("UPDATE users SET lang = ? WHERE id = ?", (code, g.user["id"]))
+        target = request.referrer
+        return redirect(target if target and target.startswith(request.host_url)
+                        else url_for("main.dashboard"))
+
+    # ---------------------------------------------------------- light / dark
+    # Each person picks the look that suits them; it follows them to any
+    # computer or phone they sign in on. Before sign-in it lives in the session.
+    @app.route("/theme/<mode>")
+    def set_theme(mode):
+        if mode in THEMES:
+            session["theme"] = mode
+            if g.get("user") is not None:
+                from db import execute
+                execute("UPDATE users SET theme = ? WHERE id = ?", (mode, g.user["id"]))
         target = request.referrer
         return redirect(target if target and target.startswith(request.host_url)
                         else url_for("main.dashboard"))
@@ -308,6 +333,7 @@ def create_app():
             lang=current_lang(),
             langs=LANGS,
             rtl=is_rtl(),
+            theme=current_theme(),
             wa=wa_button,
             mail_ready=mailer.is_configured(),
             avatar=avatar,

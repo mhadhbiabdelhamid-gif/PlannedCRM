@@ -9,6 +9,24 @@
   </div>
 </div>
 
+<div class="card appearance-card" style="max-width:560px;margin-bottom:16px">
+  <div class="card-head"><h3>{{ t('Appearance') }}</h3></div>
+  <div class="card-body">
+    <p class="small muted" style="margin:0 0 12px">{{ t('Choose the look that is easiest on your eyes. It only changes the app for you, on every device you sign in on.') }}</p>
+    <div class="theme-choices">
+      <a class="theme-choice {{ 'on' if theme == 'light' }}" href="{{ url_for('set_theme', mode='light') }}"
+         aria-pressed="{{ 'true' if theme == 'light' else 'false' }}">
+        <span class="swatch swatch-light"><i></i><b></b></span>
+        <span><b>{{ t('Light') }}</b><em>{{ t('Bright and clear, best in the office') }}</em></span>
+      </a>
+      <a class="theme-choice {{ 'on' if theme == 'dark' }}" href="{{ url_for('set_theme', mode='dark') }}"
+         aria-pressed="{{ 'true' if theme == 'dark' else 'false' }}">
+        <span class="swatch swatch-dark"><i></i><b></b></span>
+        <span><b>{{ t('Dark') }}</b><em>{{ t('Easier on the eyes at night') }}</em></span>
+      </a>
+    </div>
+  </div>
+</div>
 <form method="post" class="card" style="max-width:560px">
   <div class="card-body">
     <div class="field"><label>{{ t('Full name') }}</label>

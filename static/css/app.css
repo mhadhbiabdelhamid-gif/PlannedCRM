@@ -1923,3 +1923,125 @@ td.pick { text-align: center; }
   .own-table td.own-acts .btn { flex: 1; height: 44px; justify-content: center; margin: 0; }
   .own-table td.own-acts .btn-quiet { flex: 0 0 auto; }
 }
+
+/* ======================================================= light & dark look
+   Each person chooses Light or Dark (My account, or the switch under the
+   language buttons); <html data-theme> carries the choice.
+
+   Light is the default, and its side menu is now light too: the old charcoal
+   band read as heavy next to the paper-coloured pages. Dark keeps the brand
+   gold on a warm near-black, for people working late or on a phone at night.
+   Everything below only redefines colour variables plus the handful of rules
+   that had a colour written in directly. */
+
+:root {
+  --rail-bg:     #FFFFFF;
+  --rail-text:   #2E2B25;
+  --rail-strong: #14141A;
+  --rail-muted:  #6B665A;      /* 5.5:1 on white */
+  --rail-line:   #E7E2D7;
+  --rail-hover:  #FAF6EC;
+  --rail-open:   #FCFAF5;
+  --rail-active: #F6EFDD;
+}
+
+.rail {
+  background: var(--rail-bg);
+  color: var(--rail-text);
+  border-inline-end: 1px solid var(--rail-line);
+}
+.rail-brand { border-bottom-color: var(--rail-line); }
+.rail-brand b { color: var(--rail-strong); }
+.rail-group { color: var(--rail-muted); }
+.rail-sec { border-bottom-color: var(--rail-line); }
+.rail-sec[open] { background: var(--rail-open); }
+.rail-sec > summary { color: var(--rail-muted); }
+.rail-sec > summary:hover { color: var(--rail-strong); background: var(--rail-hover); }
+.rail-sec[open] > summary { color: var(--rail-strong); }
+.rail-link { color: var(--rail-text); }
+.rail-link:hover { color: var(--rail-strong); background: var(--rail-hover); }
+.rail-link.active { color: var(--rail-strong); background: var(--rail-active); font-weight: 550; }
+.rail-foot { border-top-color: var(--rail-line); color: var(--rail-muted); }
+.lang-switch a { border-color: var(--rail-line); color: var(--rail-muted); }
+.lang-switch a:hover { border-color: var(--gold); color: var(--gold-deep); }
+.lang-switch a.on { background: var(--gold); border-color: var(--gold); color: var(--ink); }
+.theme-switch a { display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+@media (max-width: 860px) {
+  .rail.open { box-shadow: 0 0 40px rgba(20,18,12,.25); }
+}
+
+/* ---- the choice on My account */
+.theme-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.theme-choice {
+  display: flex; align-items: center; gap: 12px; padding: 12px;
+  border: 2px solid var(--line); border-radius: var(--radius-lg); color: var(--text);
+}
+.theme-choice:hover { border-color: var(--gold); color: var(--text); }
+.theme-choice.on { border-color: var(--gold); background: var(--gold-tint); }
+.theme-choice > span:last-child { display: flex; flex-direction: column; gap: 2px; }
+.theme-choice em { font-style: normal; font-size: 13px; color: var(--muted); }
+.swatch {
+  flex: 0 0 56px; height: 42px; border-radius: var(--radius); overflow: hidden;
+  display: flex; border: 1px solid var(--line);
+}
+.swatch i { width: 16px; }
+.swatch b { flex: 1; }
+.swatch-light i { background: #FFFFFF; border-inline-end: 1px solid #E7E2D7; }
+.swatch-light b { background: #F6F2E9; }
+.swatch-dark i { background: #1B1914; border-inline-end: 1px solid #3A352C; }
+.swatch-dark b { background: #15130F; }
+@media (max-width: 640px) { .theme-choices { grid-template-columns: 1fr; } }
+
+/* ---- dark */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --ink:        #2E2A23;
+  --ink-soft:   #3A352C;
+  --ink-line:   #4A443A;
+
+  --gold-deep:  #D9BC7A;      /* gold used as text: lifted so it reads on dark */
+  --gold-tint:  #332B1C;
+
+  --canvas:     #15130F;
+  --card:       #1F1C17;
+  --line:       #3A352C;
+  --line-soft:  #2A2620;
+
+  --text:       #EEEAE1;
+  --text-soft:  #DAD5CA;
+  --muted:      #BDB7AA;
+  --faint:      #A39D90;
+
+  --ok:         #74B592;
+  --warn:       #DDA45E;
+  --cool:       #93A8C2;
+  --bad:        #E38C84;
+
+  --shadow:     0 1px 2px rgba(0,0,0,.35), 0 8px 24px -16px rgba(0,0,0,.7);
+
+  --rail-bg:     #1B1914;
+  --rail-text:   #DDD8CD;
+  --rail-strong: #FFFFFF;
+  --rail-muted:  #A39D90;
+  --rail-line:   #2E2A23;
+  --rail-hover:  rgba(200,162,74,.08);
+  --rail-open:   rgba(0,0,0,.18);
+  --rail-active: rgba(200,162,74,.14);
+}
+[data-theme="dark"] body { background: var(--canvas); color: var(--text); }
+[data-theme="dark"] .topbar { background: rgba(21,19,15,.92); border-bottom-color: var(--line); }
+[data-theme="dark"] .table tbody tr:hover { background: rgba(255,255,255,.03); }
+[data-theme="dark"] .col { background: #1A1814; }
+[data-theme="dark"] .prop-wrap .pick { background: var(--card); }
+[data-theme="dark"] .own-thumb span { background-color: #2A2620; }
+[data-theme="dark"] .btn-dark { background: var(--gold-lift); border-color: var(--gold-lift); color: #15130F; }
+[data-theme="dark"] .btn-dark:hover { background: #D4B774; border-color: #D4B774; color: #15130F; }
+[data-theme="dark"] .btn-wa { border-color: #4E8F6B; color: #8FD0AB; }
+[data-theme="dark"] .btn-wa:hover { background: rgba(116,181,146,.12); color: #A8E0C0; }
+[data-theme="dark"] .own-tabs a.on { background: var(--gold-lift); color: #15130F; }
+[data-theme="dark"] .today-commission { background: #2A251C; border-color: #3A352C; }
+[data-theme="dark"] .rail-new-menu { box-shadow: 0 12px 28px -12px rgba(0,0,0,.8); }
+[data-theme="dark"] .rail-brand img { border-radius: var(--radius); }
+[data-theme="dark"] .swatch-light i, [data-theme="dark"] .swatch-light b { border-color: #3A352C; }
+@media print { [data-theme="dark"] { color-scheme: light; } }

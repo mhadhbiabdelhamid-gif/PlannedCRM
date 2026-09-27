@@ -390,6 +390,8 @@ def execute(sql, args=()):
 
 MIGRATIONS = [
     ("users", "lang", "TEXT DEFAULT 'en'"),
+    # Light or dark look, chosen by each person for themselves.
+    ("users", "theme", "TEXT DEFAULT 'light'"),
     # Per-person exceptions to what their role normally allows, as JSON.
     ("users", "permissions", "TEXT"),
     ("properties", "building_no", "TEXT"),

@@ -1046,6 +1046,14 @@ AR = {
     "Listing intake": "استلام العقارات",
     "Social posts": "منشورات التواصل",
     "Social settings": "إعدادات التواصل",
+    # ---- light / dark look
+    "Appearance": "المظهر",
+    "Light": "فاتح",
+    "Dark": "داكن",
+    "Choose the look that is easiest on your eyes. It only changes the app for you, on every device you sign in on.":
+        "اختر المظهر المريح لعينيك. يتغيّر التطبيق لك وحدك، على كل جهاز تسجّل الدخول منه.",
+    "Bright and clear, best in the office": "واضح ومشرق، الأنسب في المكتب",
+    "Easier on the eyes at night": "أريح للعين في الليل",
 }
 
 
