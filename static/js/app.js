@@ -16,6 +16,19 @@
     });
   }
 
+  /* ------------------------------------------- "New…" menu in the rail
+     A <details> stays open until clicked again; close it on any click outside
+     or on Escape, like every other dropdown people are used to. */
+  var newMenu = document.querySelector(".rail-new");
+  if (newMenu) {
+    document.addEventListener("click", function (e) {
+      if (newMenu.open && !newMenu.contains(e.target)) newMenu.open = false;
+    });
+    newMenu.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") { newMenu.open = false; newMenu.querySelector("summary").focus(); }
+    });
+  }
+
   /* ------------------------------------------ one nav section at a time
      The sections in the left rail are <details name="railsec">, and a shared
      name is all a current browser needs to close the others when one opens.
@@ -243,7 +256,7 @@
   var printOpened = [];
   window.addEventListener("beforeprint", function () {
     printOpened = [];
-    document.querySelectorAll("details:not([open]):not(.rail-sec)").forEach(function (d) {
+    document.querySelectorAll("details:not([open]):not(.rail-sec):not(.rail-new)").forEach(function (d) {
       d.open = true;
       printOpened.push(d);
     });

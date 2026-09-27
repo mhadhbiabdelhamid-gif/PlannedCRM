@@ -26,6 +26,24 @@
   </a>
 
   {% set is_accountant = user and user.role == 'accountant' %}
+  {#
+    One button to create anything, so nobody has to remember which section a
+    new lead or listing starts from. A <details> dropdown: no JavaScript.
+  #}
+  {% if user and not (user.role == 'accountant') %}
+  <details class="rail-new">
+    <summary>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      {{ t('New…') }}
+    </summary>
+    <div class="rail-new-menu">
+      <a href="{{ url_for('leads.form') }}">{{ t('New lead') }}</a>
+      <a href="{{ url_for('properties.form') }}">{{ t('New listing') }}</a>
+      <a href="{{ url_for('deals.form') }}">{{ t('New deal') }}</a>
+    </div>
+  </details>
+  {% endif %}
   {% set sees_finance = user and user.role in ('admin', 'manager', 'accountant') %}
   {% set is_admin_user = user and user.role == 'admin' %}
   {#
@@ -36,9 +54,9 @@
     JavaScript at all (app.js carries a fallback for browsers without it).
 
     The section covering the current page is rendered already open, so the menu
-    is never in a state that hides where you actually are. Item numbers are
-    fixed per section rather than counted at render time: a screen should keep
-    the same number whoever is looking at it, and roles hide different rows.
+    is never in a state that hides where you actually are. The old "1.1 / 2.3"
+    item numbers were dropped: plain labels read faster for people who don't
+    think in outlines.
   #}
   <nav class="rail-nav">
     <a class="rail-link rail-solo {{ 'active' if request.endpoint == 'main.dashboard' }}"
@@ -50,26 +68,23 @@
       <summary>{{ t('Properties') }}</summary>
       <a class="rail-link sub {{ 'active' if request.endpoint == 'properties.index' }}"
          href="{{ url_for('properties.index', reset=1) }}">
-        <span class="idx">1.1</span> {{ t('Properties') }}</a>
+        {{ t('Properties') }}</a>
       <a class="rail-link sub {{ 'active' if request.endpoint == 'properties.waiting' }}"
          href="{{ url_for('properties.waiting') }}">
-        <span class="idx">1.2</span> {{ t('Waiting for approval') }}
+        {{ t('Waiting for approval') }}
         {% if waiting_count %}<span class="pill">{{ waiting_count }}</span>{% endif %}</a>
       <a class="rail-link sub {{ 'active' if request.endpoint == 'properties.stale' }}"
          href="{{ url_for('properties.stale') }}">
-        <span class="idx">1.3</span> {{ t('Stale listings') }}
+        {{ t('Stale listings') }}
         {% if stale_count %}<span class="pill">{{ stale_count }}</span>{% endif %}</a>
       <a class="rail-link sub {{ 'active' if request.endpoint == 'properties.leases_ending' }}"
          href="{{ url_for('properties.leases_ending') }}">
-        <span class="idx">1.4</span> {{ t('Leases ending') }}
+        {{ t('Leases ending') }}
         {% if lease_count %}<span class="pill">{{ lease_count }}</span>{% endif %}</a>
       {% if can('import') %}
-      <a class="rail-link sub {{ 'active' if request.endpoint == 'imports.upload' }}"
+      <a class="rail-link sub {{ 'active' if request.endpoint in ('imports.upload', 'imports.history') }}"
          href="{{ url_for('imports.upload') }}">
-        <span class="idx">1.5</span> {{ t('Import listings') }}</a>
-      <a class="rail-link sub {{ 'active' if request.endpoint == 'imports.history' }}"
-         href="{{ url_for('imports.history') }}">
-        <span class="idx">1.6</span> {{ t('Import history') }}</a>
+        {{ t('Import listings') }}</a>
       {% endif %}
     </details>
 
@@ -78,16 +93,16 @@
       <summary>{{ t('Clients') }}</summary>
       <a class="rail-link sub {{ 'active' if request.endpoint == 'leads.board' }}"
          href="{{ url_for('leads.board') }}">
-        <span class="idx">2.1</span> {{ t('Leads') }}</a>
+        {{ t('Leads') }}</a>
       <a class="rail-link sub {{ 'active' if request.endpoint == 'leads.index' }}"
          href="{{ url_for('leads.index') }}">
-        <span class="idx">2.2</span> {{ t('All leads') }}</a>
+        {{ t('All leads') }}</a>
       <a class="rail-link sub {{ 'active' if request.endpoint == 'leads.priority' }}"
          href="{{ url_for('leads.priority') }}">
-        <span class="idx">2.3</span> {{ t("Today's priorities") }}</a>
+        {{ t("Today's priorities") }}</a>
       <a class="rail-link sub {{ 'active' if request.endpoint == 'leads.archive' }}"
          href="{{ url_for('leads.archive') }}">
-        <span class="idx">2.4</span> {{ t('Archived clients') }}</a>
+        {{ t('Archived clients') }}</a>
     </details>
     {% endif %}
 
@@ -96,11 +111,11 @@
       <summary>{{ t('Money') }}</summary>
       <a class="rail-link sub {{ 'active' if request.blueprint == 'deals' }}"
          href="{{ url_for('deals.index') }}">
-        <span class="idx">3.1</span> {{ t('Deals') }}</a>
+        {{ t('Deals') }}</a>
       {% if sees_finance %}
       <a class="rail-link sub {{ 'active' if request.blueprint == 'finance' }}"
          href="{{ url_for('finance.index') }}">
-        <span class="idx">3.2</span> {{ t('Financial') }}</a>
+        {{ t('Financial') }}</a>
       {% endif %}
     </details>
 
@@ -110,10 +125,10 @@
       <summary>{{ t('Directory') }}</summary>
       <a class="rail-link sub {{ 'active' if request.endpoint == 'contacts.owners' }}"
          href="{{ url_for('contacts.owners') }}">
-        <span class="idx">4.1</span> {{ t('Owners') }}</a>
+        {{ t('Owners') }}</a>
       <a class="rail-link sub {{ 'active' if request.endpoint == 'contacts.partners' }}"
          href="{{ url_for('contacts.partners') }}">
-        <span class="idx">4.2</span> {{ t('Partners') }}</a>
+        {{ t('Partners') }}</a>
     </details>
     {% endif %}
 
@@ -125,19 +140,19 @@
       {% if is_admin_user %}
       <a class="rail-link sub {{ 'active' if request.endpoint == 'admin.users' }}"
          href="{{ url_for('admin.users') }}">
-        <span class="idx">5.1</span> {{ t('Team members') }}</a>
+        {{ t('Team members') }}</a>
       {% endif %}
       <a class="rail-link sub {{ 'active' if request.endpoint == 'reports.index' }}"
          href="{{ url_for('reports.index') }}">
-        <span class="idx">5.2</span> {{ t('Agent reports') }}</a>
+        {{ t('Agent reports') }}</a>
       {% if is_admin_user %}
       <a class="rail-link sub {{ 'active' if request.endpoint == 'main.activity' }}"
          href="{{ url_for('main.activity') }}">
-        <span class="idx">5.3</span> {{ t('Activity log') }}</a>
+        {{ t('Activity log') }}</a>
       {% endif %}
       <a class="rail-link sub {{ 'active' if request.endpoint == 'reports.marketing_report' }}"
          href="{{ url_for('reports.marketing_report') }}">
-        <span class="idx">5.4</span> {{ t('Marketing performance') }}</a>
+        {{ t('Marketing performance') }}</a>
     </details>
     {% endif %}
 
@@ -147,13 +162,13 @@
       <summary>{{ t('Assistants') }}</summary>
       <a class="rail-link sub {{ 'active' if request.blueprint == 'intake' }}"
          href="{{ url_for('intake.index') }}">
-        <span class="idx">6.1</span> {{ t('Listing intake') }}</a>
+        {{ t('Listing intake') }}</a>
       <a class="rail-link sub {{ 'active' if request.endpoint == 'social.index' }}"
          href="{{ url_for('social.index') }}">
-        <span class="idx">6.2</span> {{ t('Social posts') }}</a>
+        {{ t('Social posts') }}</a>
       <a class="rail-link sub {{ 'active' if request.endpoint == 'social.settings' }}"
          href="{{ url_for('social.settings') }}">
-        <span class="idx">6.3</span> {{ t('Social settings') }}</a>
+        {{ t('Social settings') }}</a>
     </details>
     {% endif %}
 

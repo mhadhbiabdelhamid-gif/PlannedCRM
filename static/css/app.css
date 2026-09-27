@@ -1764,3 +1764,162 @@ td.pick { text-align: center; }
 @media (max-width: 860px) {
   .bulkbar { position: static; }
 }
+
+/* ================================================================ today
+   The dashboard: one to-do list for the day, then the company's own stock.
+   Everything here uses logical properties so Arabic (RTL) mirrors itself. */
+.today-head { align-items: center; }
+.today-search {
+  display: flex; align-items: center; gap: 10px;
+  width: min(460px, 100%); height: 48px; padding: 0 16px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+  color: var(--faint);
+}
+.today-search:focus-within { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-tint); }
+.today-search input {
+  flex: 1; min-width: 0; border: none; outline: none; background: transparent;
+  font: inherit; font-size: 15px; color: var(--text); height: 100%; padding: 0;
+}
+
+.today-tiles {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px;
+  margin-bottom: 16px;
+}
+.today-tile {
+  display: flex; align-items: center; gap: 16px; padding: 16px 20px;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-lg);
+  color: var(--text); box-shadow: var(--shadow); transition: border-color .12s;
+}
+.today-tile:hover { border-color: var(--gold); color: var(--text); }
+.today-tile .num { font-family: var(--mono); font-size: 34px; font-weight: 500; line-height: 1; min-width: 44px; }
+.today-tile .num.bad { color: var(--bad); }
+.today-tile .num.warn { color: var(--gold-deep); }
+.today-tile .txt { display: flex; flex-direction: column; gap: 2px; }
+.today-tile .txt b { font-size: 15px; }
+.today-tile .txt em { font-style: normal; font-size: 13px; color: var(--muted); }
+
+.today-todo { overflow: hidden; }
+.today-main > .grid { align-content: start; }
+.todo-group + .todo-group, .todo-note + .todo-group { border-top: 1px solid var(--line); }
+.todo-title {
+  display: flex; align-items: center; gap: 8px; padding: 14px 16px 6px;
+  font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+}
+.todo-title .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.todo-title a { margin-inline-start: auto; text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 13px; }
+.todo-title.bad  { color: var(--bad); }
+.todo-title.gold { color: var(--gold-deep); }
+.todo-title.warn { color: var(--warn); }
+.todo-title.cool { color: var(--cool); }
+[dir="rtl"] .todo-title { letter-spacing: 0; text-transform: none; font-size: 13px; }
+
+.todo-row {
+  display: flex; align-items: center; gap: 14px; padding: 10px 16px;
+  border-top: 1px solid var(--line-soft);
+}
+.todo-row .who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.todo-row .who a { color: var(--text); }
+.todo-row .who a:hover { color: var(--gold-deep); }
+.todo-row .who > span { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+.todo-row .when { font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+.todo-row .when.bad { color: var(--bad); font-weight: 600; }
+.todo-row .acts { display: flex; gap: 6px; flex-shrink: 0; }
+.todo-row .acts form { margin: 0; }
+.todo-row .acts .btn { height: 36px; padding: 0 14px; font-size: 14px; }
+
+.todo-note {
+  display: flex; align-items: center; gap: 6px; padding: 10px 16px;
+  background: var(--gold-tint); color: var(--text); font-size: 14px;
+  border-top: 1px solid var(--line-soft);
+}
+.todo-note span { margin-inline-start: auto; color: var(--gold-deep); font-weight: 500; }
+
+.btn-wa { border-color: #3F7D5C; color: #2F6148; }
+.btn-wa:hover { background: rgba(63,125,92,.08); border-color: #2F6148; color: #2F6148; }
+
+.today-viewings .vrow {
+  display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+  border-top: 1px solid var(--line-soft);
+}
+.today-viewings .vrow:first-child { border-top: none; }
+.today-viewings .vwho .vdate { font-size: 12px; color: var(--gold-deep); }
+.today-viewings .vwho { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.today-viewings .vwho a { color: var(--text); }
+.today-viewings .vwho span { font-size: 13px; color: var(--muted); }
+.today-viewings form { margin: 0; }
+
+.today-commission { background: var(--ink); border-color: var(--ink); color: #EFE9DA; }
+.today-commission .label { font-size: 13px; color: var(--gold-lift); }
+.today-commission .value { font-size: 30px; color: #fff; margin: 4px 0 6px; }
+.today-commission a { color: var(--gold-lift); font-size: 14px; }
+
+.today-own { margin-top: 16px; border-top: 4px solid var(--gold); }
+.own-head { flex-wrap: wrap; gap: 12px; align-items: center; }
+.own-head h3 { display: flex; align-items: center; gap: 8px; font-size: 16px; }
+.own-head > div:first-child { flex: 1; min-width: 260px; display: flex; flex-direction: column; gap: 4px; }
+.own-tabs { display: flex; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.own-tabs a { padding: 8px 14px; font-size: 14px; color: var(--text-soft); background: var(--card); }
+.own-tabs a + a { border-inline-start: 1px solid var(--line); }
+.own-tabs a.on { background: var(--ink); color: #fff; font-weight: 600; }
+.own-table td { vertical-align: middle; }
+.own-table .tag { margin-inline-start: 6px; }
+.own-thumb { width: 72px; }
+.own-thumb span {
+  display: flex; align-items: center; justify-content: center;
+  width: 64px; height: 48px; border-radius: var(--radius);
+  background: #EFE9DA center / cover no-repeat; color: var(--gold-deep); font-weight: 600;
+}
+.own-acts .btn { margin-inline-start: 4px; }
+.age-warn { color: var(--warn); }
+.age-bad { color: var(--bad); }
+.own-foot { padding: 12px 16px; border-top: 1px solid var(--line-soft); font-size: 14px; }
+
+@media (max-width: 1080px) {
+  .today-main { grid-template-columns: 1fr; }
+}
+@media (max-width: 860px) {
+  .today-tiles { grid-template-columns: 1fr; gap: 10px; }
+  .today-search { width: 100%; }
+  .todo-row { flex-wrap: wrap; }
+  .todo-row .who { flex-basis: calc(100% - 120px); }
+  .todo-row .acts { width: 100%; }
+  .todo-row .acts > *, .todo-row .acts form, .todo-row .acts form .btn { flex: 1; }
+  .todo-row .acts .btn { height: 44px; justify-content: center; width: 100%; }
+  .own-acts .btn { margin: 4px 0 0; }
+}
+
+/* ---- "New…" button at the top of the menu */
+.rail-new { position: relative; margin: 4px 16px 12px; }
+.rail-new > summary {
+  list-style: none; cursor: pointer; user-select: none;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  height: 42px; border-radius: 6px; background: var(--gold-lift); color: var(--ink);
+  font-weight: 600; font-size: 15px;
+}
+.rail-new > summary::-webkit-details-marker { display: none; }
+.rail-new > summary:hover { background: #D4B774; }
+.rail-new-menu {
+  position: absolute; inset-inline: 0; top: calc(100% + 6px); z-index: 30;
+  background: var(--card); border: 1px solid var(--line); border-radius: 6px;
+  box-shadow: 0 12px 28px -12px rgba(0,0,0,.45); overflow: hidden;
+}
+.rail-new-menu a { display: block; padding: 11px 14px; color: var(--text); font-size: 14.5px; }
+.rail-new-menu a + a { border-top: 1px solid var(--line-soft); }
+.rail-new-menu a:hover { background: var(--gold-tint); color: var(--text); }
+
+/* Own listings on a phone: each row becomes a card, so the WhatsApp button is
+   always on screen instead of hidden at the end of a sideways-scrolling table. */
+@media (max-width: 860px) {
+  .today-own .table-scroll { overflow: visible; }
+  .own-table thead { display: none; }
+  .own-table, .own-table tbody { display: block; }
+  .own-table tr {
+    display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 4px 12px;
+    padding: 14px 16px; border-top: 1px solid var(--line-soft);
+  }
+  .own-table td { display: block; padding: 0; border: none; white-space: normal; }
+  .own-table td.own-thumb { grid-row: span 5; }
+  .own-table td.own-acts { grid-column: 1 / -1; display: flex; gap: 8px; margin-top: 8px; text-align: start; }
+  .own-table td.own-acts .btn { flex: 1; height: 44px; justify-content: center; margin: 0; }
+  .own-table td.own-acts .btn-quiet { flex: 0 0 auto; }
+}
