@@ -34,16 +34,18 @@
     <div class="field"><label>{{ t('Phone') }}</label>
       <input type="tel" name="phone" value="{{ user.phone or '' }}"></div>
     <div class="field"><label>{{ t('Email') }}</label>
-      <input type="email" value="{{ user.email }}" disabled>
-      <span class="small faint">An admin changes this for you.</span></div>
+      <input type="email" name="email" value="{{ user.email }}" required autocomplete="username">
+      <span class="small faint">{{ t('This is the email you sign in with. Changing it needs your current password.') }}</span></div>
 
     <div class="hairline"></div>
     <div class="eyebrow" style="margin-bottom:10px">{{ t('Change password') }}</div>
-    <div class="field"><label>{{ t('Current password') }}</label>
-      <input type="password" name="current_password" autocomplete="current-password"></div>
     <div class="field"><label>{{ t('New password') }}</label>
       <input type="password" name="new_password" autocomplete="new-password"
-             placeholder="At least 8 characters"></div>
+             placeholder="{{ t('At least 8 characters') }}">
+      <span class="small faint">{{ t('Leave empty to keep your current password.') }}</span></div>
+    <div class="field"><label>{{ t('Current password') }}</label>
+      <input type="password" name="current_password" autocomplete="current-password">
+      <span class="small faint">{{ t('Needed only when you change your email or password.') }}</span></div>
   </div>
   <div class="modal-foot"><button class="btn btn-gold" type="submit">{{ t('Save changes') }}</button></div>
 </form>

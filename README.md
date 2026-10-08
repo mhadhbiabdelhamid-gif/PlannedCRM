@@ -94,6 +94,17 @@ folder onto the window, press Enter, then run `start-office.bat`. The message st
 
 ## If you get locked out
 
+**Forgot password (self-service).** The sign-in page has a *Forgot password?* link. It
+emails a reset link that works once and expires after 1 hour. This needs the mail account
+set up under **Settings → Email**; without it, the page tells people to ask an admin.
+Links use the address the site was opened on; set `PUBLIC_URL` (e.g.
+`https://crm.plannedrealestate.qa`) to force a specific one.
+
+**Change email, name or phone.** Under **My account**. Changing the sign-in email or the
+password needs the current password, and a notice is emailed to the old address.
+
+If none of that works, use the rescue tool below.
+
 `manage.py` is the rescue tool. Stop the server, then run these from the project folder:
 
 ```bash
@@ -341,6 +352,7 @@ and every sleep — the database and all uploaded photos would vanish. The disk 
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | First admin account, created on first boot only |
 | `HTTPS_ONLY` | Set to `1` so session cookies are HTTPS-only |
 | `TZ_OFFSET_HOURS` | Display offset from UTC. Defaults to `3` for Doha. |
+| `PUBLIC_URL` | Optional. Base address used in password-reset emails. |
 
 `.env.example` has the full list.
 

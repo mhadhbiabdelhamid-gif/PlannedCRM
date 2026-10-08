@@ -802,6 +802,39 @@ AR = {
     "Save changes": "حفظ التغييرات",
     "Interface language": "لغة الواجهة",
 
+    # ---- password reset and account details
+    "Forgot password?": "نسيت كلمة المرور؟",
+    "Forgot password": "نسيت كلمة المرور",
+    "Type the email you sign in with. We'll send you a link to choose a new password.":
+        "اكتب البريد الإلكتروني الذي تسجّل به الدخول، وسنرسل لك رابطاً لاختيار كلمة مرور جديدة.",
+    "Send reset link": "إرسال رابط إعادة التعيين",
+    "Back to sign in": "العودة لتسجيل الدخول",
+    "Choose a new password": "اختر كلمة مرور جديدة",
+    "Type it again": "أعد كتابتها",
+    "Save new password": "حفظ كلمة المرور الجديدة",
+    "At least 8 characters": "8 أحرف على الأقل",
+    "Leave empty to keep your current password.": "اتركها فارغة للإبقاء على كلمة المرور الحالية.",
+    "Needed only when you change your email or password.":
+        "مطلوبة فقط عند تغيير البريد الإلكتروني أو كلمة المرور.",
+    "This is the email you sign in with. Changing it needs your current password.":
+        "هذا هو البريد الذي تسجّل به الدخول. تغييره يتطلب كلمة المرور الحالية.",
+    "Email isn't set up in this CRM yet, so a reset link can't be sent. Ask an admin to reset your password.":
+        "لم يتم إعداد البريد الإلكتروني في النظام بعد، لذلك لا يمكن إرسال رابط. اطلب من المدير إعادة تعيين كلمة المرور.",
+    "If that email belongs to an account, a reset link is on its way. Check your inbox and spam folder.":
+        "إذا كان هذا البريد مرتبطاً بحساب، فسيصلك رابط إعادة التعيين. تحقق من صندوق الوارد ومجلد الرسائل غير المرغوب فيها.",
+    "That reset link has expired or was already used. Ask for a new one.":
+        "انتهت صلاحية رابط إعادة التعيين أو تم استخدامه. اطلب رابطاً جديداً.",
+    "The two passwords don't match.": "كلمتا المرور غير متطابقتين.",
+    "Password changed. Sign in with your new password.":
+        "تم تغيير كلمة المرور. سجّل الدخول بكلمة المرور الجديدة.",
+    "Use at least 8 characters for a password.": "استخدم 8 أحرف على الأقل لكلمة المرور.",
+    "Current password is wrong, so your email and password weren't changed.":
+        "كلمة المرور الحالية غير صحيحة، لذلك لم يتم تغيير البريد أو كلمة المرور.",
+    "That doesn't look like an email address.": "هذا لا يبدو بريداً إلكترونياً صحيحاً.",
+    "Another account already uses that email.": "هذا البريد مستخدم في حساب آخر.",
+    "Your name can't be empty.": "لا يمكن ترك الاسم فارغاً.",
+    "Account updated.": "تم تحديث الحساب.",
+
     # ---- search and misc
     "Quick find": "بحث سريع",
     "Results for": "نتائج البحث عن",

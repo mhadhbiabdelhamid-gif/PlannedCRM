@@ -1,9 +1,13 @@
 """Session-based sign-in and role guards."""
 import functools
+import hashlib
 import json
+import os
+import time
 
-from flask import (Blueprint, flash, g, redirect, render_template, request,
-                   session, url_for)
+from flask import (Blueprint, current_app, flash, g, redirect,
+                   render_template, request, session, url_for)
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from db import execute, log, now, query
@@ -284,23 +288,182 @@ def account():
     if request.method == "POST":
         name = request.form.get("name", "").strip()
         phone = request.form.get("phone", "").strip()
+        new_email = request.form.get("email", "").strip().lower()
+        new_pw = request.form.get("new_password", "")
+        current_pw = request.form.get("current_password", "")
+        old_email = g.user["email"]
+        email_changing = bool(new_email) and new_email != old_email.lower()
+
+        if not name:
+            flash("Your name can't be empty.", "error")
+            return redirect(url_for("auth.account"))
+
+        # Changing the address you sign in with, or the password, both need
+        # the current password, so a laptop left signed in can't be used to
+        # take the account over.
+        if email_changing or new_pw:
+            if not check_password_hash(g.user["password_hash"], current_pw):
+                flash("Current password is wrong, so your email and password "
+                      "weren't changed.", "error")
+                return redirect(url_for("auth.account"))
+
+        if email_changing:
+            import mailer
+            if not mailer.valid_address(new_email):
+                flash("That doesn't look like an email address.", "error")
+                return redirect(url_for("auth.account"))
+            taken = query("SELECT id FROM users WHERE lower(email) = ? AND id != ?",
+                          (new_email, g.user["id"]), one=True)
+            if taken:
+                flash("Another account already uses that email.", "error")
+                return redirect(url_for("auth.account"))
+
+        if new_pw and len(new_pw) < 8:
+            flash("Use at least 8 characters for a password.", "error")
+            return redirect(url_for("auth.account"))
+
         execute("UPDATE users SET name = ?, phone = ? WHERE id = ?",
                 (name, phone, g.user["id"]))
-        new_pw = request.form.get("new_password", "")
+        if email_changing:
+            execute("UPDATE users SET email = ? WHERE id = ?",
+                    (new_email, g.user["id"]))
+            log(g.user["id"], "Changed own email", detail=f"{old_email} → {new_email}")
+            _notify(old_email, "Your CRM sign-in email was changed",
+                    f"Hello {name},\n\nThe email you use to sign in to the CRM "
+                    f"was changed from {old_email} to {new_email}.\n\nIf you "
+                    f"didn't do this, tell an admin straight away.")
         if new_pw:
-            if len(new_pw) < 8:
-                flash("Use at least 8 characters for a password.", "error")
-                return redirect(url_for("auth.account"))
-            if not check_password_hash(g.user["password_hash"],
-                                       request.form.get("current_password", "")):
-                flash("Current password is wrong, so the password wasn't changed.", "error")
-                return redirect(url_for("auth.account"))
             execute("UPDATE users SET password_hash = ? WHERE id = ?",
                     (generate_password_hash(new_pw), g.user["id"]))
             log(g.user["id"], "Changed own password")
+            _notify(new_email if email_changing else old_email,
+                    "Your CRM password was changed",
+                    f"Hello {name},\n\nYour CRM password was just changed.\n\n"
+                    f"If you didn't do this, tell an admin straight away.")
         flash("Account updated.", "ok")
         return redirect(url_for("auth.account"))
     return render_template("account.html")
+
+
+# ------------------------------------------------------------ password reset
+#
+# A reset link carries a signed token rather than a row in the database. It
+# expires after an hour, and it includes a fingerprint of the current
+# password hash and email, so it stops working the moment it has been used
+# (the hash changes) or the email on the account changes.
+
+RESET_MAX_AGE = 60 * 60          # one hour
+_RESET_SALT = "planned-crm-password-reset"
+_last_sent = {}                  # email -> time of last reset mail, per worker
+
+
+def _serializer():
+    return URLSafeTimedSerializer(current_app.secret_key, salt=_RESET_SALT)
+
+
+def _fingerprint(user):
+    raw = f"{user['password_hash']}|{user['email'].lower()}".encode()
+    return hashlib.sha256(raw).hexdigest()[:20]
+
+
+def make_reset_token(user):
+    return _serializer().dumps({"id": user["id"], "f": _fingerprint(user)})
+
+
+def user_from_reset_token(token):
+    """The account a token belongs to, or None if it's bad, used or expired."""
+    try:
+        data = _serializer().loads(token, max_age=RESET_MAX_AGE)
+    except (SignatureExpired, BadSignature):
+        return None
+    if not isinstance(data, dict):
+        return None
+    user = query("SELECT * FROM users WHERE id = ?", (data.get("id"),), one=True)
+    if user is None or data.get("f") != _fingerprint(user):
+        return None
+    return user
+
+
+def _site_url():
+    """Base address for links in emails. PUBLIC_URL wins if set; otherwise the
+    address the request came in on, honouring Render's HTTPS proxy."""
+    fixed = (os.environ.get("PUBLIC_URL") or "").strip().rstrip("/")
+    if fixed:
+        return fixed
+    root = request.host_url.rstrip("/")
+    if request.headers.get("X-Forwarded-Proto", "").split(",")[0].strip() == "https":
+        root = "https://" + root.split("://", 1)[-1]
+    return root
+
+
+def _notify(to, subject, body):
+    """Best-effort security notice. Never blocks the change if mail is off."""
+    try:
+        import mailer
+        if mailer.is_configured():
+            mailer.send(to, subject, body)
+    except Exception:
+        pass
+
+
+@bp.route("/forgot-password", methods=("GET", "POST"))
+def forgot_password():
+    import mailer
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        user = query("SELECT * FROM users WHERE lower(email) = ?", (email,), one=True)
+        if not mailer.is_configured():
+            flash("Email isn't set up in this CRM yet, so a reset link can't "
+                  "be sent. Ask an admin to reset your password.", "error")
+            return redirect(url_for("auth.forgot_password"))
+
+        recently = time.time() - _last_sent.get(email, 0) < 120
+        if user is not None and user["is_active"] and not recently:
+            link = _site_url() + url_for("auth.reset_password",
+                                         token=make_reset_token(user))
+            ok, detail = mailer.send(
+                user["email"], "Reset your CRM password",
+                f"Hello {user['name']},\n\n"
+                f"Someone asked to reset the password for your CRM account. "
+                f"To choose a new password, open this link:\n\n{link}\n\n"
+                f"The link works once and expires in 1 hour.\n\n"
+                f"If you didn't ask for this, you can ignore this email; your "
+                f"password stays the same.")
+            if ok:
+                _last_sent[email] = time.time()
+                log(user["id"], "Requested a password reset link")
+            else:
+                current_app.logger.warning("Reset mail failed: %s", detail)
+        # Same answer whether or not the email exists, so this page can't be
+        # used to find out who has an account.
+        flash("If that email belongs to an account, a reset link is on its "
+              "way. Check your inbox and spam folder.", "ok")
+        return redirect(url_for("auth.login"))
+    return render_template("forgot_password.html", mail_ready=mailer.is_configured())
+
+
+@bp.route("/reset-password/<token>", methods=("GET", "POST"))
+def reset_password(token):
+    user = user_from_reset_token(token)
+    if user is None:
+        flash("That reset link has expired or was already used. Ask for a "
+              "new one.", "error")
+        return redirect(url_for("auth.forgot_password"))
+    if request.method == "POST":
+        pw = request.form.get("password", "")
+        if len(pw) < 8:
+            flash("Use at least 8 characters for a password.", "error")
+            return redirect(request.path)
+        if pw != request.form.get("confirm", ""):
+            flash("The two passwords don't match.", "error")
+            return redirect(request.path)
+        execute("UPDATE users SET password_hash = ? WHERE id = ?",
+                (generate_password_hash(pw), user["id"]))
+        log(user["id"], "Reset password from email link")
+        session.clear()
+        flash("Password changed. Sign in with your new password.", "ok")
+        return redirect(url_for("auth.login"))
+    return render_template("reset_password.html", person=user)
 
 
 def create_user(name, email, password, role="agent", phone=""):
