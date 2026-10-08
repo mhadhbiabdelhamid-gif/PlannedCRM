@@ -802,6 +802,35 @@ AR = {
     "Save changes": "حفظ التغييرات",
     "Interface language": "لغة الواجهة",
 
+    # ---- bulk actions on clients
+    "Move to a pipeline stage": "نقل إلى مرحلة في المسار",
+    "Move to archive": "نقل إلى الأرشيف",
+    "Restore to pipeline": "إعادة إلى المسار",
+    "Print / save as PDF": "طباعة / حفظ PDF",
+    "Select all": "تحديد الكل",
+    "Why were they lost?": "لماذا خسرناهم؟",
+    "What happened? (a few words)": "ماذا حدث؟ (بضع كلمات)",
+    "Archived": "مؤرشف",
+    "Archived by hand": "مؤرشف يدوياً",
+    "You can also select clients on the Leads list and choose Move to archive.":
+        "يمكنك أيضاً تحديد عملاء من قائمة العملاء واختيار «نقل إلى الأرشيف».",
+    "Delete the selected clients and their whole history? A backup is taken first, but this cannot be undone from this page.":
+        "حذف العملاء المحددين وكامل سجلهم؟ يتم أخذ نسخة احتياطية أولاً، لكن لا يمكن التراجع من هذه الصفحة.",
+    "Selected clients": "العملاء المحددون",
+    "Client file": "ملف العميل",
+    "clients": "عملاء",
+    "Printed": "طُبع في",
+    "By": "بواسطة",
+    "Confidential: for internal use": "سري: للاستخدام الداخلي",
+    "Nothing was selected.": "لم يتم تحديد أي شيء.",
+    "Pick what to do with the selected clients.": "اختر ما تريد فعله بالعملاء المحددين.",
+    "Choose the stage to move them to.": "اختر المرحلة المراد النقل إليها.",
+    "Choose a reason before marking clients lost.": "اختر سبباً قبل تحديد العملاء كخاسرين.",
+    "Only admins can delete clients.": "الحذف متاح للمدير فقط.",
+    "Only managers and admins can reassign clients.": "إعادة التعيين متاحة للمديرين فقط.",
+    "You don't have access to export data.": "ليست لديك صلاحية تصدير البيانات.",
+    "That client no longer exists.": "هذا العميل لم يعد موجوداً.",
+
     # ---- password reset and account details
     "Forgot password?": "نسيت كلمة المرور؟",
     "Forgot password": "نسيت كلمة المرور",

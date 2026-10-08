@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="{{ lang }}" dir="{{ 'rtl' if rtl else 'ltr' }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ t(title) }} · {{ company }}</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --gold:#B8963E; --ink:#1A1A1A; --muted:#6B675E; --line:#E4DFD3; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#fff; color:var(--ink);
+         font:13px/1.45 "IBM Plex Sans","IBM Plex Sans Arabic",system-ui,sans-serif; }
+  .page { max-width:1100px; margin:0 auto; padding:28px 32px; }
+  header { display:flex; align-items:center; gap:14px; padding-bottom:14px;
+           border-bottom:3px solid var(--gold); margin-bottom:18px; }
+  header img { width:54px; height:54px; object-fit:contain; }
+  header .co { font-weight:700; font-size:16px; }
+  header .meta { margin-inline-start:auto; text-align:end; color:var(--muted); font-size:12px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .sub { color:var(--muted); margin:0 0 16px; }
+  table { width:100%; border-collapse:collapse; }
+  th { text-align:start; font-size:11px; text-transform:uppercase; letter-spacing:.06em;
+       color:var(--muted); border-bottom:1.5px solid var(--ink); padding:7px 8px; }
+  td { padding:7px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  tr { break-inside:avoid; }
+  .mono { font-variant-numeric:tabular-nums; }
+  .small { font-size:11.5px; color:var(--muted); }
+  .note { white-space:pre-wrap; }
+  footer { margin-top:18px; color:var(--muted); font-size:11px; display:flex; justify-content:space-between; }
+  .toolbar { position:sticky; top:0; background:#FBF8F1; border-bottom:1px solid var(--line);
+             padding:10px 32px; display:flex; gap:10px; justify-content:flex-end; }
+  .toolbar button { font:inherit; padding:7px 14px; border-radius:6px; border:1px solid var(--line);
+                    background:#fff; cursor:pointer; }
+  .toolbar button.gold { background:var(--gold); border-color:var(--gold); color:#fff; font-weight:600; }
+  @media print { .toolbar { display:none; } .page { padding:0; } @page { margin:14mm; } }
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <button type="button" onclick="window.close()">{{ t('Close') }}</button>
+  <button type="button" class="gold" onclick="window.print()">{{ t('Print / save as PDF') }}</button>
+</div>
+<div class="page">
+  <header>
+    {% if logo_exists %}<img src="{{ logo_url }}" alt="">{% endif %}
+    <div class="co">{{ company }}</div>
+    <div class="meta">{{ t('Printed') }} {{ printed_at }}<br>{{ t('By') }} {{ user.name }}</div>
+  </header>
+
+  <h1>{{ t(title) }}</h1>
+  <p class="sub">{{ rows|length }} {{ t('clients') }}</p>
+
+  <table>
+    <thead><tr>
+      <th>#</th><th>{{ t('Name') }}</th><th>{{ t('Phone') }}</th><th>{{ t('Source') }}</th>
+      <th>{{ t('Status') }}</th><th>{{ t('Budget') }}</th><th>{{ t('Interested in') }}</th>
+      <th>{{ t('Agent') }}</th><th>{{ t('Date') }}</th>
+    </tr></thead>
+    <tbody>
+    {% for l in rows %}
+      <tr>
+        <td class="mono small">{{ l.ref }}</td>
+        <td><b>{{ l.full_name }}</b>{% if l.email %}<div class="small">{{ l.email }}</div>{% endif %}</td>
+        <td class="mono">{{ l.phone or '—' }}</td>
+        <td>{{ t(l.source) if l.source else '—' }}</td>
+        <td>{{ t(l.status) }}
+          {% if l.status == 'Lost' and l.lost_reason %}<div class="small">{{ t(lost_labels.get(l.lost_reason, l.lost_reason)) }}</div>{% endif %}
+          {% if l.archived_at %}<div class="small">{{ t('Archived') }}</div>{% endif %}</td>
+        <td class="mono">{% if l.budget %}{{ currency }} {{ l.budget | money }}{% else %}—{% endif %}</td>
+        <td>{{ l.prop_title or '—' }}</td>
+        <td>{{ l.agent_name or t('Unassigned') }}</td>
+        <td class="mono small">{{ l.created_at | nice_date }}</td>
+      </tr>
+      {% if rows|length == 1 and l.notes %}
+      <tr><td></td><td colspan="8" class="note small">{{ l.notes }}</td></tr>
+      {% endif %}
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <footer><span>{{ company }}</span><span>{{ t('Confidential: for internal use') }}</span></footer>
+</div>
+<script>window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 300); });</script>
+</body>
+</html>

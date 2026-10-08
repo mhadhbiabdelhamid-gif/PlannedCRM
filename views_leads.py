@@ -1,10 +1,12 @@
 """Leads: drag-and-drop pipeline board, list view, detail file and viewings."""
 import json
 
-from flask import (Blueprint, flash, g, jsonify, redirect, render_template,
-                   request, url_for)
+from datetime import datetime
 
-from auth import can_edit, is_admin, login_required, sees_all
+from flask import (Blueprint, current_app, flash, g, jsonify, redirect,
+                   render_template, request, send_file, url_for)
+
+from auth import can, can_edit, is_admin, login_required, sees_all
 from datetime import timedelta
 
 from db import (ARCHIVE_DAYS, CLOSED_STAGES, LEAD_SOURCES, LEAD_STAGES,
@@ -52,7 +54,8 @@ is nothing worth saying beyond the picks themselves."""
 
 def follow_up_clause(kind, prefix="l"):
     """SQL for the three states an agent actually cares about."""
-    closed = " AND {p}.status NOT IN ('Won','Lost')".format(p=prefix)
+    closed = (" AND {p}.status NOT IN ('Won','Lost')"
+              " AND {p}.archived_at IS NULL").format(p=prefix)
     day_start, day_end = utc_day_bounds(local_today())
     if kind == "overdue":
         return (f" AND {prefix}.next_follow_up IS NOT NULL"
@@ -82,7 +85,17 @@ def _not_archived(prefix="l"):
     """Everything still worth showing day to day: open leads, plus anyone won
     or lost within the last few days. Older closed clients have moved to the
     archive, so the board and lists don't just grow forever."""
-    return (f" AND ({prefix}.closed_at IS NULL OR {prefix}.closed_at > ?)",
+    return (f" AND ({prefix}.closed_at IS NULL OR {prefix}.closed_at > ?)"
+            f" AND {prefix}.archived_at IS NULL",
+            [days_ago(ARCHIVE_DAYS)])
+
+
+def _archived(prefix="l"):
+    """The other side of _not_archived: settled long enough ago, or filed
+    away by hand."""
+    return (f" AND ({prefix}.archived_at IS NOT NULL OR"
+            f" ({prefix}.status IN ('Won','Lost') AND {prefix}.closed_at IS NOT NULL"
+            f" AND {prefix}.closed_at <= ?))",
             [days_ago(ARCHIVE_DAYS)])
 
 
@@ -152,12 +165,13 @@ def index():
                              + base + c, base_args + a, one=True)["n"]
 
     base, base_args = _scope()
-    archived_count = query(
-        "SELECT COUNT(*) n FROM leads l WHERE l.status IN ('Won','Lost')"
-        " AND l.closed_at IS NOT NULL AND l.closed_at <= ?" + base,
-        [days_ago(ARCHIVE_DAYS)] + base_args, one=True)["n"]
+    arch, arch_args = _archived()
+    archived_count = query("SELECT COUNT(*) n FROM leads l WHERE 1=1" + arch + base,
+                           arch_args + base_args, one=True)["n"]
 
     return render_template("leads/index.html", rows=rows, q=q, due=due,
+                           stages=LEAD_STAGES, lost_reasons=LOST_REASONS,
+                           agents=_agents(), bulk_actions=_bulk_menu(archived=False),
                            counts=counts, today=local_today(), pager=pager,
                            archived_count=archived_count,
                            args={k: v for k, v in (("q", q), ("due", due)) if v})
@@ -181,20 +195,260 @@ def archive():
     if status in ("Won", "Lost"):
         where += " AND l.status = ?"
         args.append(status)
-    where += (" AND l.status IN ('Won','Lost')"
-              " AND l.closed_at IS NOT NULL AND l.closed_at <= ?")
-    args.append(days_ago(ARCHIVE_DAYS))
+    elif status == "filed":
+        where += " AND l.archived_at IS NOT NULL"
+    clause, extra = _archived()
+    where += clause
+    args += extra
 
-    pager = paginate("SELECT l.*, u.name AS agent_name, p.title AS prop_title"
-                     " FROM leads l LEFT JOIN users u ON u.id = l.agent_id"
-                     " LEFT JOIN properties p ON p.id = l.property_id"
-                     " WHERE 1=1" + where + " ORDER BY l.closed_at DESC",
-                     args, request.args.get("page", 1))
+    sql = ("SELECT l.*, u.name AS agent_name, p.title AS prop_title"
+           " FROM leads l LEFT JOIN users u ON u.id = l.agent_id"
+           " LEFT JOIN properties p ON p.id = l.property_id"
+           " WHERE 1=1" + where +
+           " ORDER BY COALESCE(l.archived_at, l.closed_at) DESC")
+
+    # The whole filtered archive, as a branded workbook or a printable page.
+    out = request.args.get("format", "")
+    if out in ("xlsx", "print"):
+        rows = query(sql, args)
+        title = "Archived clients"
+        if out == "xlsx":
+            if not can("export"):
+                flash("You don't have access to export data.", "error")
+                return redirect(url_for("leads.archive"))
+            return _xlsx(rows, title)
+        return _print(rows, title)
+
+    pager = paginate(sql, args, request.args.get("page", 1))
     return render_template("leads/archive.html", rows=pager["rows"], q=q,
                            status=status, pager=pager,
+                           bulk_actions=_bulk_menu(archived=True),
                            lost_labels=LOST_REASON_LABELS,
                            args={k: v for k, v in
                                  (("q", q), ("status", status)) if v})
+
+
+# ------------------------------------------------------------ bulk actions
+#
+# Same shape as the listings page: tick clients, pick one action, apply.
+# Every client is still checked on its own, so an agent who selects a
+# colleague's client along with their own only changes their own.
+
+BULK_ACTIONS = {
+    "stage": "Move to a pipeline stage",
+    "agent": "Assign an agent",
+    "archive": "Move to archive",
+    "unarchive": "Restore to pipeline",
+    "export": "Export to Excel",
+    "print": "Print / save as PDF",
+    "delete": "Delete",
+}
+
+
+def _bulk_menu(archived):
+    menu = {}
+    for key, label in BULK_ACTIONS.items():
+        if key == "archive" and archived:
+            continue
+        if key == "unarchive" and not archived:
+            continue
+        if key == "agent" and not sees_all():
+            continue
+        if key == "export" and not can("export"):
+            continue
+        if key == "delete" and not is_admin():
+            continue
+        menu[key] = label
+    return menu
+
+
+def _agents():
+    return query("SELECT id, name FROM users WHERE is_active = 1 ORDER BY name")
+
+
+def _xlsx(rows, title):
+    import excel_export
+    from openpyxl import Workbook
+    from i18n import is_rtl
+    co = excel_export.company()
+    wb = Workbook()
+    wb.remove(wb.active)
+    excel_export.leads_sheet(wb, co, rows, g.user["name"], is_rtl())
+    import io
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    log(g.user["id"], "Exported clients", detail=f"{title}: {len(rows)} clients")
+    stamp = datetime.now().strftime("%Y-%m-%d")
+    name = title.lower().replace(" ", "-")
+    return send_file(
+        buf, as_attachment=True, download_name=f"planned-{name}-{stamp}.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+def _visible(rows):
+    """Agents only see their own clients plus the unassigned pool."""
+    if sees_all():
+        return list(rows)
+    return [r for r in rows if r["agent_id"] in (None, g.user["id"])]
+
+
+def _print(rows, title):
+    log(g.user["id"], "Printed clients", detail=f"{title}: {len(rows)} clients")
+    return render_template("leads/print.html", rows=rows, title=title,
+                           lost_labels=LOST_REASON_LABELS,
+                           printed_at=local_now().strftime("%d %b %Y, %H:%M"))
+
+
+@bp.route("/<int:lid>/print")
+@login_required
+def print_one(lid):
+    rows = query("SELECT l.*, u.name AS agent_name, p.title AS prop_title"
+                 " FROM leads l LEFT JOIN users u ON u.id = l.agent_id"
+                 " LEFT JOIN properties p ON p.id = l.property_id WHERE l.id = ?",
+                 (lid,))
+    rows = _visible(rows)
+    if not rows:
+        flash("That client no longer exists.", "error")
+        return redirect(url_for("leads.index"))
+    return _print(rows, "Client file")
+
+
+@bp.route("/bulk", methods=("POST",))
+@login_required
+def bulk():
+    ids = [int(i) for i in request.form.getlist("ids") if i.isdigit()]
+    action = request.form.get("action", "")
+    back = request.form.get("back") or url_for("leads.index")
+    if not back.startswith("/"):
+        back = url_for("leads.index")
+
+    if not ids:
+        flash("Nothing was selected.", "error")
+        return redirect(back)
+    if action not in BULK_ACTIONS:
+        flash("Pick what to do with the selected clients.", "error")
+        return redirect(back)
+
+    rows = query("SELECT l.*, u.name AS agent_name, p.title AS prop_title"
+                 " FROM leads l LEFT JOIN users u ON u.id = l.agent_id"
+                 " LEFT JOIN properties p ON p.id = l.property_id"
+                 " WHERE l.id IN (%s) ORDER BY l.id" % ",".join("?" * len(ids)), ids)
+
+    # Reading actions: anything the person can already see.
+    if action == "export":
+        if not can("export"):
+            flash("You don't have access to export data.", "error")
+            return redirect(back)
+        return _xlsx(_visible(rows), "Selected clients")
+    if action == "print":
+        return _print(_visible(rows), "Selected clients")
+
+    allowed = [r for r in rows if can_edit(r)]
+    blocked = len(rows) - len(allowed)
+    n = len(allowed)
+    plural = "client" if n == 1 else "clients"
+    names = ", ".join(r["ref"] or str(r["id"]) for r in allowed[:10]) \
+        + (" …" if n > 10 else "")
+
+    if action == "delete":
+        if not is_admin():
+            flash("Only admins can delete clients.", "error")
+            return redirect(back)
+        try:
+            import backups
+            backups.make_backup(current_app, "before-bulk-delete-clients")
+        except Exception:
+            pass
+        for r in allowed:
+            execute("DELETE FROM leads WHERE id = ?", (r["id"],))
+        log(g.user["id"], "Deleted clients in bulk", detail=f"{n} clients: {names}")
+        flash(f"{n} {plural} deleted. A backup was taken first, so this can be "
+              "undone from Settings.", "ok")
+        return redirect(back)
+
+    if action == "archive":
+        for r in allowed:
+            execute("UPDATE leads SET archived_at = ?, updated_at = ? WHERE id = ?",
+                    (now(), now(), r["id"]))
+        log(g.user["id"], "Archived clients in bulk", detail=f"{n} clients: {names}")
+        flash(f"{n} {plural} moved to the archive.", "ok")
+
+    elif action == "unarchive":
+        for r in allowed:
+            execute("UPDATE leads SET archived_at = NULL, updated_at = ? WHERE id = ?",
+                    (now(), r["id"]))
+        log(g.user["id"], "Restored clients in bulk", detail=f"{n} clients: {names}")
+        settled = sum(1 for r in allowed if r["status"] in CLOSED_STAGES)
+        msg = f"{n} {plural} restored to the pipeline."
+        if settled:
+            msg += (f" {settled} of them are Won or Lost, so they stay in the archive "
+                    "until you move them to an open stage.")
+        flash(msg, "ok")
+
+    elif action == "agent":
+        if not sees_all():
+            flash("Only managers and admins can reassign clients.", "error")
+            return redirect(back)
+        value = request.form.get("value", "")
+        agent_id = int(value) if value.isdigit() else None
+        who = query("SELECT name FROM users WHERE id = ?", (agent_id,), one=True) \
+            if agent_id else None
+        for r in allowed:
+            execute("UPDATE leads SET agent_id = ?, updated_at = ? WHERE id = ?",
+                    (agent_id, now(), r["id"]))
+            if agent_id and agent_id != g.user["id"]:
+                notify(agent_id, f"You were assigned {r['full_name']}",
+                       url_for("leads.detail", lid=r["id"]))
+        log(g.user["id"], "Reassigned clients in bulk",
+            detail=f"{n} clients → {who['name'] if who else 'unassigned'}: {names}")
+        flash(f"{n} {plural} assigned to {who['name'] if who else 'nobody'}.", "ok")
+
+    elif action == "stage":
+        stage = request.form.get("value", "")
+        if stage not in LEAD_STAGES:
+            flash("Choose the stage to move them to.", "error")
+            return redirect(back)
+        reason = note = None
+        if stage == "Lost":
+            reason = (request.form.get("lost_reason") or "").strip()
+            note = (request.form.get("lost_note") or "").strip()
+            if reason not in LOST_REASON_LABELS:
+                flash("Choose a reason before marking clients lost.", "error")
+                return redirect(back)
+            if len(note) < 10:
+                flash("Write a line about what happened — at least a few words, "
+                      "so the reason is useful later.", "error")
+                return redirect(back)
+        moved = 0
+        for r in allowed:
+            if r["status"] == stage:
+                continue
+            moved += 1
+            if stage == "Lost":
+                execute("UPDATE leads SET status = ?, lost_reason = ?, lost_note = ?,"
+                        " lost_at = ?, closed_at = ?, updated_at = ? WHERE id = ?",
+                        (stage, reason, note, now(), now(), now(), r["id"]))
+                execute("INSERT INTO comments (entity_type, entity_id, user_id, body,"
+                        " created_at) VALUES ('lead',?,?,?,?)",
+                        (r["id"], g.user["id"],
+                         f"{LOST_REASON_LABELS[reason]} — {note}", now()))
+            else:
+                execute("UPDATE leads SET status = ?, lost_reason = NULL,"
+                        " lost_note = NULL, lost_at = NULL, closed_at = ?,"
+                        " updated_at = ? WHERE id = ?",
+                        (stage, now() if stage in CLOSED_STAGES else None, now(),
+                         r["id"]))
+            log(g.user["id"], "Moved lead", "lead", r["id"], f"{r['status']} → {stage}")
+            if r["agent_id"] and r["agent_id"] != g.user["id"]:
+                notify(r["agent_id"], f"{r['full_name']} moved to {stage}",
+                       url_for("leads.detail", lid=r["id"]))
+        flash(f"{moved} {'client' if moved == 1 else 'clients'} moved to {stage}.", "ok")
+
+    if blocked:
+        flash(f"{blocked} of the selected belong to another agent and weren't "
+              "changed.", "error")
+    return redirect(back)
 
 
 @bp.route("/priority")

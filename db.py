@@ -469,6 +469,10 @@ MIGRATIONS = [
     # above) so re-running an import never creates the same client twice, even
     # across overlapping date windows.
     ("leads", "ad_lead_id", "TEXT"),
+    # Set when someone files a client away by hand (bulk "Move to archive").
+    # Won/lost clients still archive themselves via closed_at; this covers
+    # anyone else the office wants off the board but kept for reports.
+    ("leads", "archived_at", "TEXT"),
 ]
 
 # How much warning the office gets before a tenancy ends. A unit that comes

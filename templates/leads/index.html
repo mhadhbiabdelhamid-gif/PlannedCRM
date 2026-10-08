@@ -41,15 +41,68 @@
 </form>
 
 {% if rows %}
+<form method="post" action="{{ url_for('leads.bulk') }}" id="bulkform"
+      data-confirm-delete="{{ t('Delete the selected clients and their whole history? A backup is taken first, but this cannot be undone from this page.') }}">
+  <input type="hidden" name="back" value="{{ request.full_path }}">
+</form>
+
+<div class="bulkbar" id="bulkbar" hidden>
+  <label class="inline small" style="gap:7px;white-space:nowrap">
+    <input type="checkbox" id="pick-all" onchange="pickAll(this.checked)">
+    <span id="pick-count">0</span> {{ t('selected') }}
+  </label>
+  <select name="action" form="bulkform" id="bulk-action" onchange="bulkAction()" style="max-width:230px">
+    <option value="">{{ t('Choose an action') }}</option>
+    {% for key, label in bulk_actions.items() %}<option value="{{ key }}">{{ t(label) }}</option>{% endfor %}
+  </select>
+  {% if stages is defined %}
+  <select name="value" form="bulkform" id="bulk-stage" class="bulk-value" hidden style="max-width:170px"
+          onchange="bulkLost()">
+    {% for s in stages %}<option value="{{ s }}">{{ t(s) }}</option>{% endfor %}
+  </select>
+  <select name="lost_reason" form="bulkform" id="bulk-lost-reason" hidden disabled style="max-width:200px">
+    <option value="">{{ t('Why were they lost?') }}</option>
+    {% for key, label in lost_reasons %}<option value="{{ key }}">{{ t(label) }}</option>{% endfor %}
+  </select>
+  <input type="text" name="lost_note" form="bulkform" id="bulk-lost-note" hidden disabled
+         placeholder="{{ t('What happened? (a few words)') }}" style="max-width:240px;height:32px">
+  {% endif %}
+  {% if agents is defined %}
+  <select name="value" form="bulkform" id="bulk-agent" class="bulk-value" hidden style="max-width:200px">
+    <option value="">{{ t('Unassigned') }}</option>
+    {% for a in agents %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}
+  </select>
+  {% endif %}
+  <button class="btn btn-gold btn-sm" type="submit" form="bulkform" id="bulk-go" disabled>{{ t('Apply') }}</button>
+  <button class="btn btn-quiet btn-sm" type="button" onclick="pickAll(false)">{{ t('Clear') }}</button>
+  <span class="small faint" style="margin-left:auto">{{ t('Applies to this page only') }}</span>
+</div>
+<script>
+function bulkLost() {
+  var lost = document.getElementById("bulk-action").value === "stage"
+          && document.getElementById("bulk-stage").value === "Lost";
+  ["bulk-lost-reason", "bulk-lost-note"].forEach(function (id) {
+    var el = document.getElementById(id);
+    el.hidden = !lost; el.disabled = !lost;
+  });
+}
+document.getElementById("bulk-action").addEventListener("change", bulkLost);
+document.getElementById("bulkform").addEventListener("submit", function () {
+  // the printable report opens in its own tab so the list stays put
+  this.target = document.getElementById("bulk-action").value === "print" ? "_blank" : "";
+});
+</script>
 <div class="card table-scroll">
   <table class="table">
     <thead><tr>
-      <th>#</th><th>{{ t('Name') }}</th><th>{{ t('Phone') }}</th><th>{{ t('Source') }}</th>
+      <th class="pick" style="width:34px"><input type="checkbox" aria-label="{{ t('Select all') }}" onclick="event.stopPropagation();pickAll(this.checked)"></th><th>#</th><th>{{ t('Name') }}</th><th>{{ t('Phone') }}</th><th>{{ t('Source') }}</th>
       <th>{{ t('Status') }}</th><th>{{ t('Interested in') }}</th><th>{{ t('Agent') }}</th><th>{{ t('Follow-up') }}</th><th class="right">{{ t('Date') }}</th>
     </tr></thead>
     <tbody>
     {% for l in rows %}
       <tr onclick="location.href='{{ url_for('leads.detail', lid=l.id) }}'" style="cursor:pointer">
+        <td class="pick" onclick="event.stopPropagation()"><input type="checkbox" name="ids" value="{{ l.id }}" form="bulkform"
+              onchange="bulkChanged()" onclick="event.stopPropagation()" aria-label="{{ t('Select') }} {{ l.full_name }}"></td>
         <td class="mono faint">{{ l.ref }}</td>
         <td><b>{{ l.full_name }}</b>{% if l.email %}<div class="small muted">{{ l.email }}</div>{% endif %}</td>
         <td class="mono small">{{ l.phone or '—' }}</td>

@@ -45,7 +45,7 @@ def dashboard():
 
     # --- follow-ups: the thing an agent opens the CRM to find out
     scope = "" if sees_all() else " AND l.agent_id = %d" % g.user["id"]
-    open_stages = " AND l.status NOT IN ('Won','Lost')"
+    open_stages = " AND l.status NOT IN ('Won','Lost') AND l.archived_at IS NULL"
 
     overdue = query(
         "SELECT l.*, u.name AS agent_name FROM leads l"

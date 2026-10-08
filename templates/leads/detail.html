@@ -8,6 +8,7 @@
     <h1 class="page-title">{{ l.full_name }}</h1>
     <div class="inline" style="margin-top:8px">
       <span class="tag tag-plain">{{ t(l.status) }}</span>
+      {% if l.archived_at %}<span class="tag tag-reserved">{{ t('Archived') }}</span>{% endif %}
       <span class="muted">{{ l.agent_name or t('Unassigned') }}</span>
       {% if l.budget %}<span class="mono muted">{{ t('Budget') }} {{ currency }} {{ l.budget | money }}</span>{% endif %}
     </div>
@@ -18,6 +19,14 @@
       <form method="post" action="{{ url_for('leads.claim', lid=l.id) }}">
         <button class="btn" type="submit">{{ t('Claim this lead') }}</button></form>
     {% endif %}
+    {% if editable %}
+      <form method="post" action="{{ url_for('leads.bulk') }}">
+        <input type="hidden" name="ids" value="{{ l.id }}">
+        <input type="hidden" name="back" value="{{ request.path }}">
+        <input type="hidden" name="action" value="{{ 'unarchive' if l.archived_at else 'archive' }}">
+        <button class="btn" type="submit">{{ t('Restore to pipeline') if l.archived_at else t('Move to archive') }}</button></form>
+    {% endif %}
+    <a class="btn" href="{{ url_for('leads.print_one', lid=l.id) }}" target="_blank">{{ t('Print') }}</a>
     {% if editable %}<a class="btn btn-gold" href="{{ url_for('leads.form', lid=l.id) }}">{{ t('Edit') }}</a>{% endif %}
     <a class="btn btn-dark" href="{{ url_for('deals.form', lead=l.id) }}">{{ t('Record this deal') }}</a>
     {% if user.role == 'admin' %}
