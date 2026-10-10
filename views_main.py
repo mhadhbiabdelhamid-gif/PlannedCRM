@@ -235,12 +235,15 @@ def search():
     props, leads, owners = [], [], []
     if q:
         like = f"%{q}%"
+        # the same word-by-word reading as the Properties search box, so
+        # "2 bed pearl" here finds what it finds there
+        from views_properties import FILTER_FIELDS, _filter_clause
+        f = {k: "" for k in FILTER_FIELDS}
+        f["q"] = q
+        clause, args = _filter_clause(f)
         props = query(
-            "SELECT * FROM properties p WHERE (p.title LIKE ? OR p.address LIKE ?"
-            " OR p.area LIKE ? OR p.ref LIKE ? OR p.building_no LIKE ?"
-            " OR p.unit_no LIKE ?)" + published_only("p") +
-            " ORDER BY p.id DESC LIMIT 25",
-            (like,) * 6)
+            "SELECT * FROM properties p WHERE 1=1" + clause + published_only("p") +
+            " ORDER BY p.id DESC LIMIT 25", args)
         leads = query(
             "SELECT l.*, u.name AS agent_name FROM leads l"
             " LEFT JOIN users u ON u.id = l.agent_id"

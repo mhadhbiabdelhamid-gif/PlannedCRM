@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Tidy existing listings') }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">{{ t('Listings') }}</div>
+    <h1 class="page-title">{{ t('Tidy existing listings') }}</h1>
+  </div>
+  <div class="actions">
+    <a class="btn" href="{{ url_for('imports.history') }}">{{ t('Import history') }}</a>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:16px">
+  <div class="card-body">
+    <p style="margin:0 0 10px">
+      {{ t('This applies the same standard as a new import to the listings already in the CRM: one spelling for each district, building names in normal case, and furnishing, view, balcony and bills read out of the features and description into their own fields so search can find them.') }}
+    </p>
+    <p class="small faint" style="margin:0">
+      {{ t('Only gaps are filled. A value someone typed is never replaced with a different one. A backup is taken first, and the whole run can be rolled back from the import history.') }}
+    </p>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:16px">
+  <div class="card-body between">
+    <div>
+      <b>{{ total }}</b> {{ t('of') }} {{ rows }} {{ t('listings would change') }}
+      <div class="small muted" style="margin-top:4px">
+        {% for k, n in counts.items() if n %}
+          {{ t({'area': 'District', 'building_no': 'Building name', 'furnishing': 'Furnishing',
+                'view': 'View', 'balcony': 'Balcony', 'bills': 'Bills',
+                'title': 'Title'}[k]) }}: {{ n }}{{ ' · ' if not loop.last }}
+        {% endfor %}
+      </div>
+      {% if missing_area %}
+        <div class="small" style="color:var(--warn);margin-top:4px">
+          {{ missing_area }} {{ t('listings still have no district after this — open them and pick one; every later import of the same building will then fill it in by itself.') }}
+        </div>
+      {% endif %}
+    </div>
+    <form method="get" class="inline" style="gap:8px">
+      <label class="inline small" style="gap:6px">
+        <input type="checkbox" name="titles" value="1" style="width:auto"
+               {{ 'checked' if rewrite_titles }} onchange="this.form.submit()">
+        {{ t('Also rewrite titles of listings typed in by hand') }}
+      </label>
+    </form>
+  </div>
+</div>
+
+{% if changes %}
+<div class="card table-scroll" style="margin-bottom:16px">
+  <table class="table">
+    <thead><tr>
+      <th>{{ t('Listing') }}</th><th>{{ t('What changes') }}</th>
+    </tr></thead>
+    <tbody>
+    {% for row, new in changes %}
+      <tr>
+        <td class="small">
+          <a href="{{ url_for('properties.detail', pid=row.id) }}">{{ row.ref }}</a>
+          <div class="muted">{{ row.title }}</div>
+        </td>
+        <td class="small">
+          {% for k, v in new.items() %}
+            <div><span class="faint">{{ k.replace('_no', '').replace('_', ' ') }}:</span>
+              {% if row[k] %}<s class="faint">{{ row[k] }}</s> → {% endif %}<b>{{ v }}</b></div>
+          {% endfor %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if total > changes|length %}
+  <p class="small faint">{{ t('Showing the first') }} {{ changes|length }} {{ t('of') }} {{ total }}.
+    {{ t('All of them will be changed.') }}</p>
+{% endif %}
+
+<form method="post" class="card">
+  {% if rewrite_titles %}<input type="hidden" name="titles" value="1">{% endif %}
+  <div class="card-body between">
+    <span class="muted">{{ t('A backup is taken first. You can roll this back from the import history.') }}</span>
+    <button class="btn btn-gold" type="submit">{{ t('Tidy these listings') }}</button>
+  </div>
+</form>
+{% else %}
+  <div class="card"><div class="card-body muted">{{ t('Everything already follows the standard. Nothing to tidy.') }}</div></div>
+{% endif %}
+{% endblock %}

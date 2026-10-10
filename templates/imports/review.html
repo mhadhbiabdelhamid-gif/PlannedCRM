@@ -24,7 +24,8 @@
       <div class="field">
         <label>{{ t('Sale or rent') }}</label>
         <select name="listing_type">
-          {% for tp in listing_types %}<option value="{{ tp }}">{{ t(tp) }}</option>{% endfor %}
+          {# partner availability lists are almost always rentals #}
+          {% for tp in listing_types %}<option value="{{ tp }}" {{ 'selected' if tp == 'Rent' }}>{{ t(tp) }}</option>{% endfor %}
         </select>
       </div>
       <div class="field">
@@ -32,6 +33,13 @@
         <select name="owner_id">
           <option value="">{{ t('None') }}</option>
           {% for o in owners %}<option value="{{ o.id }}">{{ o.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>{{ t('Partner') }}</label>
+        <select name="partner_id">
+          <option value="">{{ t('None') }}</option>
+          {% for p in partners %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
         </select>
       </div>
       <div class="field">
@@ -116,11 +124,11 @@
       </div>
       <div class="field">
         <label>{{ t('Building, if the file has no column for it') }}</label>
-        <input type="text" name="building__{{ sheet.name }}" value="{{ sheet.context if 'building_no' not in sheet.mapping else '' }}">
+        <input type="text" name="building__{{ sheet.name }}" value="{{ sheet.building if 'building_no' not in sheet.mapping else '' }}">
       </div>
       <div class="field">
         <label>{{ t('Location / district') }}</label>
-        <input type="text" name="area__{{ sheet.name }}" list="area-list" value="">
+        <input type="text" name="area__{{ sheet.name }}" list="area-list" value="{{ sheet.area }}">
       </div>
       <div class="field" style="grid-column:span 2">
         <label>{{ t('Blank cells') }}</label>
@@ -147,7 +155,7 @@
                   style="height:auto;padding:4px">
             {% for head in sheet.headers %}
               <option value="{{ loop.index }}"
-                {{ 'selected' if sheet.mapping.get(field) == loop.index }}>
+                {{ 'selected' if loop.index in sheet.mapping.get(field, []) }}>
                 {{ loop.index }}. {{ head or t('(no heading)') }}
               </option>
             {% endfor %}
@@ -175,22 +183,24 @@
       <div class="table-scroll">
         <table class="table">
           <thead><tr>
-            <th>{{ t('Building') }}</th><th>{{ t('Flat') }}</th><th>{{ t('Title') }}</th>
-            <th>{{ t('Type') }}</th><th class="right">{{ t('Beds') }}</th>
-            <th class="right">{{ t('Baths') }}</th><th class="right">{{ t('Size') }}</th>
-            <th class="right">{{ t('Price') }}</th><th>{{ t('Status') }}</th>
+            <th>{{ t('Title') }}</th><th>{{ t('Area') }}</th>
+            <th class="right">{{ t('Size') }}</th>
+            <th class="right">{{ t('Price') }}</th>
+            <th>{{ t('Furnishing') }}</th><th>{{ t('View') }}</th>
+            <th>{{ t('Balcony') }}</th><th>{{ t('Bills') }}</th><th>{{ t('Status') }}</th>
           </tr></thead>
           <tbody>
           {% for l in sheet.preview %}
             <tr>
-              <td>{{ l.building_no or '—' }}</td>
-              <td class="mono">{{ l.unit_no or '—' }}</td>
-              <td class="small">{{ l.title }}</td>
-              <td class="small muted">{{ t(l.prop_type) }}</td>
-              <td class="right mono">{{ l.bedrooms if l.bedrooms is not none else '—' }}</td>
-              <td class="right mono">{{ l.bathrooms or '—' }}</td>
+              <td class="small">{{ l.title }}
+                {% if l.address %}<div class="faint">{{ l.address }}</div>{% endif %}</td>
+              <td class="small">{{ l.area or '—' }}</td>
               <td class="right mono">{{ l.size_sqm | money if l.size_sqm else '—' }}</td>
               <td class="right price">{{ l.price | money if l.price else '—' }}</td>
+              <td class="small">{{ t(l.furnishing) if l.furnishing else '—' }}</td>
+              <td class="small">{{ l.view or '—' }}</td>
+              <td class="small">{{ t(l.balcony) if l.balcony else '—' }}</td>
+              <td class="small">{{ t(l.bills) if l.bills else '—' }}</td>
               <td><span class="tag tag-{{ l.status|lower }}">{{ t(l.status) }}</span>
                 {% if l.issues %}
                   <div class="small" style="color:var(--warn)">{{ l.issues | join(', ') }}</div>

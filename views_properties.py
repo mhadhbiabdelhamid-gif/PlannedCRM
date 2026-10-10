@@ -4,6 +4,7 @@ import uuid
 
 import areas
 import maps
+import normalize
 
 from flask import (Blueprint, current_app, flash, g, redirect, render_template,
                    request, session, url_for)
@@ -35,7 +36,22 @@ def _save(file_storage, kind):
 
 
 FILTER_FIELDS = ("q", "prop_type", "status", "listing_type", "area", "agent",
-                 "owner", "min_price", "max_price", "beds", "owned", "floor")
+                 "owner", "min_price", "max_price", "beds", "owned", "floor",
+                 "furnishing", "bills", "partner")
+
+# Every column a typed word may be found in. Anything a partner wrote about a
+# unit — its description, features, address, the list it came from — counts.
+TEXT_COLUMNS = ("title", "address", "ref", "building_no", "unit_no", "floor_no",
+                "extras", "area", "description", "features", "furnishing", "view",
+                "bills", "import_source")
+
+
+def _area_clause(name, prefix):
+    """A district under every spelling on record (English, Arabic, aliases,
+    and the districts inside it), so 'The Pearl' also finds Porto Arabia."""
+    spellings = areas.variants(name) or [name]
+    sql = " OR ".join([f"{prefix}.area LIKE ?"] * len(spellings))
+    return sql, [f"%{s}%" for s in spellings]
 
 
 def _read_filters():
@@ -52,10 +68,52 @@ def _filter_clause(f, prefix="p"):
     """
     sql, args = "", []
     if f["q"]:
-        sql += (f" AND ({prefix}.title LIKE ? OR {prefix}.address LIKE ? OR {prefix}.ref LIKE ?"
-                f" OR {prefix}.building_no LIKE ? OR {prefix}.unit_no LIKE ?"
-                f" OR {prefix}.floor_no LIKE ? OR {prefix}.extras LIKE ?)")
-        args += [f"%{f['q']}%"] * 7
+        # Read the search the way it was typed: "2 bed furnished pearl sea
+        # view" becomes exact filters (see normalize.parse_search), and every
+        # word left over must appear somewhere in the listing. It used to be
+        # matched as one whole phrase against seven columns, so anything but
+        # an exact title fragment found nothing.
+        got, words = normalize.parse_search(f["q"])
+        if "beds" in got and not f["beds"]:
+            sql += f" AND COALESCE({prefix}.bedrooms, 0) = ?"
+            args.append(got["beds"])
+        for key in ("prop_type", "listing_type", "furnishing"):
+            if got.get(key) and not f.get(key):
+                sql += f" AND {prefix}.{key} = ?"
+                args.append(got[key])
+        if got.get("bills") and not f["bills"]:
+            sql += f" AND {prefix}.bills IN ('All included', 'Utilities included')"
+        for v in got.get("view", []):
+            sql += f" AND {prefix}.view LIKE ?"
+            args.append(f"%{v}%")
+        if got.get("area") and not f["area"]:
+            # a building can carry a district's name without being in it,
+            # so the words themselves in the title also count
+            a_sql, a_args = _area_clause(got["area"], prefix)
+            sql += f" AND ({a_sql} OR {prefix}.title LIKE ? OR {prefix}.building_no LIKE ?)"
+            args += a_args + [f"%{got['area_words']}%"] * 2
+        for w in words:
+            if w.isdigit():
+                # a number is a flat, floor or building number: match it as a
+                # whole, so '2' does not bring up every unit with a 2 in it
+                sql += (f" AND ({prefix}.unit_no = ? OR {prefix}.floor_no = ?"
+                        f" OR {prefix}.ref LIKE ?"
+                        f" OR (' ' || COALESCE({prefix}.building_no,'') || ' ') LIKE ?"
+                        f" OR (' ' || COALESCE({prefix}.title,'') || ' ') LIKE ?)")
+                args += [w, w, f"%{w}%", f"% {w} %", f"% {w} %"]
+            else:
+                ors = " OR ".join(f"{prefix}.{c} LIKE ?" for c in TEXT_COLUMNS)
+                sql += f" AND ({ors})"
+                args += [f"%{w}%"] * len(TEXT_COLUMNS)
+    if f["furnishing"]:
+        sql += f" AND {prefix}.furnishing = ?"
+        args.append(f["furnishing"])
+    if f["bills"]:
+        sql += f" AND {prefix}.bills = ?"
+        args.append(f["bills"])
+    if f["partner"]:
+        sql += f" AND {prefix}.partner_id = ?"
+        args.append(f["partner"])
     for col in ("prop_type", "status", "listing_type"):
         if f[col]:
             sql += f" AND {prefix}.{col} = ?"
@@ -67,9 +125,9 @@ def _filter_clause(f, prefix="p"):
         # someone actually typed, so widen the search to every spelling on
         # record for that place. Unrecognised text (a custom location not in
         # areas.py) just falls back to the old plain substring match.
-        spellings = areas.variants(f["area"]) or [f["area"]]
-        sql += " AND (" + " OR ".join([f"{prefix}.area LIKE ?"] * len(spellings)) + ")"
-        args += [f"%{s}%" for s in spellings]
+        a_sql, a_args = _area_clause(f["area"], prefix)
+        sql += f" AND ({a_sql})"
+        args += a_args
     if f["agent"]:
         sql += f" AND {prefix}.agent_id = ?"
         args.append(f["agent"])
@@ -215,7 +273,10 @@ def index():
     rented_ids = [r["id"] for r in rows if r["is_own"] and r["status"] == "Rented"]
     tenants = leases.current_tenants_map(rented_ids)
 
+    understood = normalize.describe_search(normalize.parse_search(f["q"])[0]) if f["q"] else ""
     return render_template("properties/index.html", rows=rows, f=f, agents=agents,
+                           understood=understood,
+                           furnishings=normalize.FURNISHING, bills_options=normalize.BILLS,
                            prop_types=PROP_TYPES, statuses=PROP_STATUS,
                            listing_types=LISTING_TYPES, groups=groups, sort=sort,
                            view=view, pager=pager, args=args_out,
@@ -372,6 +433,14 @@ def form(pid=None):
                        url_for("properties.detail", pid=pid))
             flash("Listing saved.", "ok")
 
+        # The standard fields, kept to their fixed lists so search stays exact.
+        furnishing = d.get("furnishing") if d.get("furnishing") in normalize.FURNISHING else None
+        bills = d.get("bills") if d.get("bills") in normalize.BILLS else None
+        balcony = d.get("balcony") if d.get("balcony") in ("Yes", "No") else None
+        view = ", ".join(v for v in normalize.VIEW_NAMES if v in d.getlist("view")) or None
+        execute("UPDATE properties SET furnishing=?, view=?, balcony=?, bills=? WHERE id=?",
+                (furnishing, view, balcony, bills, pid))
+
         # Just marked Rented with nothing saying for how long? Go straight to
         # the rental form, pre-filled, so the lease dates get recorded while
         # the agent still has them — that is what drives the lease reminders.
@@ -416,7 +485,9 @@ def form(pid=None):
                            extra_rooms=EXTRA_ROOMS,
                            prop_types=PROP_TYPES, statuses=PROP_STATUS,
                            listing_types=LISTING_TYPES, buildings=buildings,
-                           areas=areas, partners=partners)
+                           areas=areas, partners=partners,
+                           furnishings=normalize.FURNISHING, views=normalize.VIEW_NAMES,
+                           bills_options=normalize.BILLS)
 
 
 @bp.route("/bulk-new", methods=("GET", "POST"))
@@ -608,14 +679,16 @@ def duplicate(pid):
     new_id = execute(
         "INSERT INTO properties (title,address,area,prop_type,listing_type,status,price,"
         "size_sqm,bedrooms,bathrooms,description,features,owner_id,agent_id,building_no,"
-        "floor_no,unit_no,extras,map_url,is_own,ref,created_at,updated_at,last_verified)"
-        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "floor_no,unit_no,extras,map_url,is_own,ref,created_at,updated_at,last_verified,"
+        "furnishing,view,balcony,bills,partner_id)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (title, src["address"], src["area"], src["prop_type"], src["listing_type"],
          request.form.get("status") or src["status"], src["price"], src["size_sqm"],
          src["bedrooms"], src["bathrooms"], src["description"], src["features"],
          src["owner_id"], src["agent_id"] or g.user["id"], src["building_no"],
          request.form.get("floor_no", "").strip() or src["floor_no"], unit_no,
-         src["extras"], src["map_url"], src["is_own"], ref, now(), now(), now()))
+         src["extras"], src["map_url"], src["is_own"], ref, now(), now(), now(),
+         src["furnishing"], src["view"], src["balcony"], src["bills"], src["partner_id"]))
 
     copied_images = 0
     if request.form.get("copy_images"):

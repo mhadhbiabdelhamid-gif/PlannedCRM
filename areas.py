@@ -45,10 +45,10 @@ AREAS = {
     "Madinat Khalifa":    ("مدينة خليفة", ["khalifa city", "madinat khalifa north",
                                             "madinat khalifa south"]),
     "Onaiza":             ("عنيزة", ["unaiza"]),
-    "Msheireb":           ("مشيرب", ["mushayrib", "msheireb downtown"]),
+    "Msheireb":           ("مشيرب", ["mushayrib", "msheireb downtown", "mushereib", "msheirib"]),
     "Al Bidda":           ("البدع", ["bidda"]),
     "Al Mirqab":          ("المرقاب", ["mirqab", "al mirqab al jadeed"]),
-    "Al Nasr":            ("النصر", ["nasr"]),
+    "Al Nasr":            ("النصر", ["nasr", "fereej al nasr", "freej al nasr"]),
     "Bin Omran":          ("بن عمران", ["fereej bin omran"]),
     "Al Messila":         ("المسيلة", ["messila", "musaila"]),
     "Al Luqta":           ("اللقطة", ["luqta"]),
@@ -77,6 +77,14 @@ AREAS = {
     "Muraikh":            ("المريخ", ["al muraikh"]),
     "Al Themaid":         ("الثميد", []),
     "Old Al Ghanim":      ("الغانم القديم", []),
+}
+
+# Districts that sit inside a bigger one. A search for the bigger one finds
+# them too, so "The Pearl" also brings up Porto Arabia and Viva Bahriya units.
+PARENT = {
+    "Porto Arabia": "The Pearl",
+    "Viva Bahriya": "The Pearl",
+    "Qanat Quartier": "The Pearl",
 }
 
 # Arabic definite article and the filler words that vary between spellings.
@@ -142,9 +150,11 @@ def variants(text):
     hit = lookup(text)
     if not hit:
         return []
-    ar, aliases = AREAS[hit["en"]]
+    places = [hit["en"]] + [c for c, parent in PARENT.items() if parent == hit["en"]]
     seen = []
-    for name in [hit["en"], ar] + list(aliases):
-        if name not in seen:
-            seen.append(name)
+    for place in places:
+        ar, aliases = AREAS[place]
+        for name in [place, ar] + list(aliases):
+            if name not in seen:
+                seen.append(name)
     return seen

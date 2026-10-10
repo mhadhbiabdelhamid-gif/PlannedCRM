@@ -205,6 +205,47 @@
         </span>
       </div>
 
+      <div class="field">
+        <label for="furnishing">{{ t('Furnishing') }}</label>
+        <select id="furnishing" name="furnishing">
+          <option value="">{{ t('Not stated') }}</option>
+          {% for o in furnishings %}
+            <option value="{{ o }}" {{ 'selected' if p and p.furnishing == o }}>{{ t(o) }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="bills">{{ t('Bills') }}</label>
+        <select id="bills" name="bills">
+          <option value="">{{ t('Not stated') }}</option>
+          {% for o in bills_options %}
+            <option value="{{ o }}" {{ 'selected' if p and p.bills == o }}>{{ t(o) }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="balcony">{{ t('Balcony') }}</label>
+        <select id="balcony" name="balcony">
+          <option value="">{{ t('Not stated') }}</option>
+          {% for o in ('Yes', 'No') %}
+            <option value="{{ o }}" {{ 'selected' if p and p.balcony == o }}>{{ t(o) }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field span-2">
+        <label>{{ t('View') }}</label>
+        {% set seen = ((p.view or '') if p else '').split(', ') %}
+        <div class="chip-row">
+          {% for v in views %}
+            <label class="chip {{ 'on' if v in seen }}" style="cursor:pointer">
+              <input type="checkbox" name="view" value="{{ v }}"
+                     style="width:auto;margin-inline-end:5px" {{ 'checked' if v in seen }}>
+              {{ t(v) }}
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+
       <div class="field span-2">
         <label for="features">{{ t('Key features') }} <span class="faint">— separate with commas</span></label>
         <input id="features" type="text" name="features" value="{{ p.features if p else '' }}"

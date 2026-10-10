@@ -108,6 +108,10 @@
           <div><dt>{{ t('Size') }}</dt><dd>{{ (p.size_sqm | money) + ' m²' if p.size_sqm else '—' }}</dd></div>
           <div><dt>{{ t('Bedrooms') }}</dt><dd>{{ p.bedrooms or '—' }}</dd></div>
           <div><dt>{{ t('Bathrooms') }}</dt><dd>{{ p.bathrooms or '—' }}</dd></div>
+          {% if p.furnishing %}<div><dt>{{ t('Furnishing') }}</dt><dd>{{ t(p.furnishing) }}</dd></div>{% endif %}
+          {% if p.view %}<div><dt>{{ t('View') }}</dt><dd>{{ p.view }}</dd></div>{% endif %}
+          {% if p.balcony %}<div><dt>{{ t('Balcony') }}</dt><dd>{{ t(p.balcony) }}</dd></div>{% endif %}
+          {% if p.bills %}<div><dt>{{ t('Bills') }}</dt><dd>{{ t(p.bills) }}</dd></div>{% endif %}
           <div><dt>{{ t('Agent in charge') }}</dt><dd>{{ p.agent_name or t('Unassigned') }}</dd></div>
           <div><dt>{{ t('Listed') }}</dt><dd>{{ p.created_at | nice_date }}</dd></div>
           <div><dt>{{ t('Last verified') }}</dt>

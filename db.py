@@ -428,6 +428,13 @@ MIGRATIONS = [
     ("properties", "reviewed_by", "INTEGER"),
     ("properties", "reviewed_at", "TEXT"),
     ("properties", "review_note", "TEXT"),
+    # One standard value each, whoever sent the listing (see normalize.py),
+    # so a search for "furnished, bills included, sea view" is exact instead
+    # of hoping the words happen to appear in a free-text features box.
+    ("properties", "furnishing", "TEXT"),
+    ("properties", "view", "TEXT"),
+    ("properties", "balcony", "TEXT"),
+    ("properties", "bills", "TEXT"),
     # Flexible commission — these were previously applied by running
     # migrate_deals.py by hand, which is easy to forget on a deployed copy and
     # leaves every Deals page erroring on the missing columns.

@@ -14,11 +14,36 @@ from flask import (Blueprint, current_app, flash, g, redirect, render_template,
                    request, url_for)
 
 import importer
+import normalize
 from auth import admin_required, login_required, requires
 from db import (IMPORT_MODES, LISTING_TYPES, PROP_STATUS, PROP_TYPES, execute,
                 log, next_ref, now, query)
 
 bp = Blueprint("imports", __name__, url_prefix="/import")
+
+
+def known_buildings():
+    """Building -> district, learned from what is already in the CRM.
+
+    Once anyone has saved 'Retaj La Plage' with its district, every later
+    list from any partner that mentions that building gets the same district
+    without asking again. The most common answer wins if listings disagree."""
+    rows = query("SELECT lower(TRIM(building_no)) AS b, area, COUNT(*) AS n"
+                 " FROM properties WHERE COALESCE(TRIM(building_no),'') != ''"
+                 " AND COALESCE(TRIM(area),'') != '' GROUP BY 1, 2 ORDER BY n")
+    known = {}
+    for r in rows:
+        known[r["b"]] = normalize.find_area(r["area"]) or r["area"]
+    return known
+
+
+def _area_names():
+    import areas
+    return areas.all_names()
+
+
+def _mapping_lists(mapping):
+    return {k: importer.as_columns(v) for k, v in mapping.items()}
 
 MAX_PREVIEW = 12
 
@@ -73,6 +98,8 @@ def review(token):
 
     wb = importer.open_workbook(path)
     sheets = []
+    known = known_buildings()
+    file_area = normalize.find_area(request.args.get("name", "")) or ""
     for name in wb.sheetnames:
         ws = wb[name]
         if ws.max_row < 2:
@@ -84,8 +111,14 @@ def review(token):
         infos = importer.read_sheet_blocks(ws)
         listings = []
         banner_labels = []
+        primary = infos[0]
+        sheet_area = primary.get("area_hint") or ""
+        if not sheet_area and "area" not in primary["mapping"]:
+            sheet_area = file_area
         for info in infos:
-            block_defaults = {"listing_type": "Rent"}
+            block_defaults = {"listing_type": "Rent", "known_buildings": known,
+                              "building_no": primary.get("building", ""),
+                              "area": sheet_area, "file_area": file_area}
             # A block's own section heading ('Studio', 'One Bedroom') fills in
             # the bedroom count when no column in that block gives one — see
             # importer.guess_banner_bedrooms. Only that block's rows get it;
@@ -95,7 +128,6 @@ def review(token):
                 if info["banner_bedrooms_label"] not in banner_labels:
                     banner_labels.append(info["banner_bedrooms_label"])
             listings += importer.extract(info, info["mapping"], block_defaults)
-        primary = infos[0]
         flagged = [l for l in listings if l.get("issues")]
         summary = {}
         for l in flagged:
@@ -108,8 +140,10 @@ def review(token):
             "name": name,
             "header_row": primary["header_row"],
             "headers": primary["headers"],
-            "mapping": primary["mapping"],
+            "mapping": _mapping_lists(primary["mapping"]),
             "context": primary["context"],
+            "building": primary.get("building", ""),
+            "area": sheet_area,
             "count": len(listings),
             "preview": listings[:MAX_PREVIEW],
             "total_rows": sum(len(i["rows"]) for i in infos),
@@ -118,6 +152,7 @@ def review(token):
         })
 
     owners = query("SELECT id, name FROM owners ORDER BY name")
+    partners = query("SELECT id, name FROM partners ORDER BY name")
     agents = query("SELECT id, name FROM users WHERE is_active = 1 ORDER BY name")
     sources = [r["import_source"] for r in query(
         "SELECT import_source, COUNT(*) n FROM properties"
@@ -137,7 +172,8 @@ def review(token):
     return render_template(
         "imports/review.html", token=token, sheets=sheets,
         filename=raw_name,
-        fields=importer.FIELDS, owners=owners, agents=agents, areas=areas,
+        fields=importer.FIELDS, owners=owners, partners=partners, agents=agents,
+        areas=sorted(set(areas) | set(_area_names())),
         modes=IMPORT_MODES,
         sources=sources, suggested_source=suggested_source,
         prop_types=PROP_TYPES, statuses=PROP_STATUS, listing_types=LISTING_TYPES)
@@ -164,6 +200,8 @@ def commit(token):
         mode = "update"
     overwrite_existing = mode in ("update", "replace")
 
+    known = known_buildings()
+    file_area = normalize.find_area(d.get("filename", "")) or ""
     seen_keys = set()          # (building, unit) present in the file just read
     stamp = now()
     rows_read = failed = 0
@@ -196,6 +234,8 @@ def commit(token):
         defaults = {
             "building_no": d.get(f"building__{name}", "").strip(),
             "area": d.get(f"area__{name}", "").strip(),
+            "known_buildings": known,
+            "file_area": file_area,
             "listing_type": d.get("listing_type", "Rent"),
             "prop_type": d.get("prop_type", "Apartment"),
             "status": d.get("status", "Available"),
@@ -215,6 +255,7 @@ def commit(token):
                 fill_numbers=bool(d.get(f"fillnumbers__{name}")))
 
         owner_id = int(d["owner_id"]) if d.get("owner_id") else None
+        partner_id = int(d["partner_id"]) if d.get("partner_id") else None
         agent_id = int(d["agent_id"]) if d.get("agent_id") else None
         overwrite = overwrite_existing
         rows_read += len(listings)
@@ -247,23 +288,28 @@ def commit(token):
             seen_keys.add((building.strip().lower(), unit.strip().lower()))
 
             values = (
-                item["title"], "", item["area"] or defaults["area"],
+                item["title"], item.get("address", ""), item["area"] or defaults["area"],
                 item["prop_type"], item["listing_type"], item["status"],
                 item["price"] or 0, item["size_sqm"], item["bedrooms"],
                 item["bathrooms"], item["description"], item["features"],
                 owner_id, agent_id, building, item.get("floor_no", ""), unit,
                 item.get("extras", ""), item["map_url"], 0, source, stamp,
+                item.get("furnishing"), item.get("view"), item.get("balcony"),
+                item.get("bills"), partner_id,
             )
 
             if existing:
                 undo["updated"].append(snapshot(existing))
                 execute(
-                    "UPDATE properties SET title=?,address=?,area=?,prop_type=?,"
+                    "UPDATE properties SET title=?,address=COALESCE(NULLIF(?,''),address),"
+                    "area=COALESCE(NULLIF(?,''),area),prop_type=?,"
                     "listing_type=?,status=?,price=?,size_sqm=?,bedrooms=?,bathrooms=?,"
                     "description=?,features=?,owner_id=COALESCE(?, owner_id),"
                     "agent_id=COALESCE(?, agent_id),building_no=?,floor_no=?,"
                     "unit_no=?,extras=?,map_url=?,is_own=?,import_source=?,"
-                    "imported_at=?,updated_at=? WHERE id=?",
+                    "imported_at=?,furnishing=COALESCE(?,furnishing),view=COALESCE(?,view),"
+                    "balcony=COALESCE(?,balcony),bills=COALESCE(?,bills),"
+                    "partner_id=COALESCE(?, partner_id),updated_at=? WHERE id=?",
                     values + (stamp, existing["id"]))
                 updated += 1
             else:
@@ -271,8 +317,9 @@ def commit(token):
                     "INSERT INTO properties (title,address,area,prop_type,listing_type,"
                     "status,price,size_sqm,bedrooms,bathrooms,description,features,"
                     "owner_id,agent_id,building_no,floor_no,unit_no,extras,map_url,"
-                    "is_own,import_source,imported_at,ref,created_at,updated_at)"
-                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "is_own,import_source,imported_at,furnishing,view,balcony,bills,"
+                    "partner_id,ref,created_at,updated_at)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     values + (next_ref("PRE-P", "properties"), stamp, stamp))
                 undo["inserted"].append(new_id)
                 added += 1
@@ -443,3 +490,118 @@ def discard(token):
             pass
     flash("Upload discarded. Nothing was saved.", "ok")
     return redirect(url_for("imports.upload"))
+
+
+# ------------------------------------------------------------ tidy existing
+TIDY_FIELDS = ("area", "building_no", "furnishing", "view", "balcony", "bills", "title")
+
+
+def _tidy_proposal(row, known, rewrite_titles):
+    """What the standard rules would change on one listing already saved.
+
+    Only fills gaps and settles spellings: a value someone typed is never
+    replaced by a different value, except a district spelled another way
+    ('AL SADD' -> 'Al Sadd') and a SHOUTED building name put in title case.
+    Titles are only rewritten on imported listings unless asked, since a
+    hand-typed title may have been written for an advert."""
+    new = {}
+    building = normalize.tidy_name(row["building_no"])
+    if building and building != (row["building_no"] or ""):
+        new["building_no"] = building
+
+    area = (row["area"] or "").strip()
+    if area:
+        canon = normalize.find_area(area)
+        if canon and canon != area:
+            new["area"] = canon
+    else:
+        guess = (importer.building_area(building, known)
+                 or normalize.find_area(row["title"]))
+        if guess:
+            new["area"] = guess
+
+    text = " | ".join(x for x in (row["title"], row["features"], row["extras"],
+                                  row["description"]) if x)
+    if not row["furnishing"]:
+        v = normalize.parse_furnishing(row["features"], row["title"], row["description"])
+        if v:
+            new["furnishing"] = v
+    if not row["view"]:
+        feats = re.sub(r"car\s*park\w*|parking|gym|swimming pool|pool access", " ",
+                       row["features"] or "", flags=re.IGNORECASE)
+        v = normalize.parse_view(feats)
+        if v:
+            new["view"] = v
+    if not row["balcony"]:
+        v = normalize.parse_balcony(text)
+        if v:
+            new["balcony"] = v
+    if not row["bills"]:
+        v = normalize.parse_bills(row["features"], row["description"])
+        if v:
+            new["bills"] = v
+
+    if row["import_source"] or rewrite_titles:
+        title = normalize.standard_title(
+            row["prop_type"], row["bedrooms"], new.get("building_no", building),
+            row["unit_no"], new.get("area", area))
+        if title != row["title"]:
+            new["title"] = title
+    return new
+
+
+@bp.route("/tidy", methods=("GET", "POST"))
+@admin_required
+def tidy():
+    """Bring listings already in the CRM up to the same standard as a fresh
+    import. A preview first; nothing changes until the button is pressed, a
+    backup is taken before, and the whole run can be rolled back from the
+    import history like any import."""
+    rewrite_titles = bool(request.values.get("titles"))
+    known = known_buildings()
+    rows = query("SELECT * FROM properties ORDER BY id")
+    changes = []
+    for row in rows:
+        new = _tidy_proposal(row, known, rewrite_titles)
+        if new:
+            changes.append((row, new))
+
+    if request.method == "POST":
+        try:
+            import backups
+            backups.make_backup(current_app._get_current_object(), label="before-tidy")
+        except Exception as exc:          # a backup failure must stop the run
+            flash(f"Could not take a backup first, so nothing was changed ({exc}).",
+                  "error")
+            return redirect(url_for("imports.tidy"))
+        undo = {"inserted": [], "updated": [], "deleted": []}
+        stamp = now()
+        for row, new in changes:
+            undo["updated"].append({k: row[k] for k in row.keys()})
+            sets = ", ".join(f"{k} = ?" for k in new)
+            execute(f"UPDATE properties SET {sets}, updated_at = ? WHERE id = ?",
+                    list(new.values()) + [stamp, row["id"]])
+        execute(
+            "INSERT INTO imports (user_id, filename, source, mode, sheets, rows_read,"
+            " added, updated, skipped, removed, failed, status, undo_data, created_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (g.user["id"], "Tidy existing listings", "", "tidy", "", len(rows),
+             0, len(changes), 0, 0, 0, "complete",
+             json.dumps(undo) if changes else None, stamp))
+        log(g.user["id"], "Tidied listings",
+            detail=f"{len(changes)} of {len(rows)} listings brought to the standard format")
+        flash(f"{len(changes)} listings tidied. This can be rolled back from the "
+              "import history.", "ok")
+        return redirect(url_for("imports.history"))
+
+    counts = {f: 0 for f in TIDY_FIELDS}
+    for _row, new in changes:
+        for k in new:
+            counts[k] += 1
+    missing_area = sum(1 for r in rows if not (r["area"] or "").strip())
+    for row, new in changes:
+        if "area" in new and not (row["area"] or "").strip():
+            missing_area -= 1
+    return render_template("imports/tidy.html", changes=changes[:300],
+                           total=len(changes), counts=counts, rows=len(rows),
+                           missing_area=missing_area, rewrite_titles=rewrite_titles)

@@ -9,6 +9,9 @@
   </div>
   <div class="actions">
     <a class="btn" href="{{ url_for('imports.history') }}">{{ t('Import history') }}</a>
+    {% if user.role == 'admin' %}
+      <a class="btn" href="{{ url_for('imports.tidy') }}">{{ t('Tidy existing listings') }}</a>
+    {% endif %}
     <a class="btn btn-quiet" href="{{ url_for('properties.index') }}">{{ t('Back to list') }}</a>
   </div>
 </div>

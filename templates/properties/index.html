@@ -32,6 +32,14 @@
 <form class="card" method="get" style="margin-bottom:16px">
   <input type="hidden" name="view" value="{{ view }}">
   <div class="card-body">
+    <div class="field" style="margin:0 0 12px">
+      <label>{{ t('Search') }}</label>
+      <input type="search" name="q" value="{{ f.q }}"
+             placeholder="{{ t('e.g. 2 bed furnished Pearl sea view, or a building / flat') }}">
+      {% if understood %}
+        <span class="small muted" style="margin-top:4px">{{ t('Looking for') }}: <b>{{ understood }}</b></span>
+      {% endif %}
+    </div>
     <div class="filters">
       <div class="field">
         <label>{{ t('Location') }}</label>
@@ -54,19 +62,27 @@
           <option value="6+" {{ 'selected' if f.beds == '6+' }}>6+</option>
         </select>
       </div>
+      <div class="field">
+        <label>{{ t('Furnishing') }}</label>
+        <select name="furnishing"><option value="">{{ t('Any') }}</option>
+          {% for o in furnishings %}<option value="{{ o }}" {{ 'selected' if f.furnishing == o }}>{{ t(o) }}</option>{% endfor %}
+        </select>
+      </div>
       <div class="field inline">
         <button class="btn btn-dark" type="submit">{{ t('Apply') }}</button>
         <a class="btn btn-quiet" href="{{ url_for('properties.index', view=view) }}">{{ t('Clear') }}</a>
       </div>
     </div>
 
-    {% set more_active = f.q or f.listing_type or f.status or f.min_price or f.max_price or f.floor or f.owned or f.agent or f.owner %}
+    {% set more_active = f.bills or f.listing_type or f.status or f.min_price or f.max_price or f.floor or f.owned or f.agent or f.owner %}
     <details class="more-filters" {{ 'open' if more_active }}>
       <summary>{{ t('More filters') }}</summary>
       <div class="filters">
         <div class="field">
-          <label>{{ t('Search') }}</label>
-          <input type="text" name="q" value="{{ f.q }}" placeholder="{{ t('Title, address, building or flat') }}">
+          <label>{{ t('Bills') }}</label>
+          <select name="bills"><option value="">{{ t('Any') }}</option>
+            {% for o in bills_options %}<option value="{{ o }}" {{ 'selected' if f.bills == o }}>{{ t(o) }}</option>{% endfor %}
+          </select>
         </div>
         <div class="field">
           <label>{{ t('Sale / Rent') }}</label>

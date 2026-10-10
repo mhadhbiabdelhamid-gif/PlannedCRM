@@ -1128,6 +1128,67 @@ def current_lang():
     return lang if lang in LANGS else "en"
 
 
+# Standard listing fields and the tidy-up tool (see normalize.py).
+AR.update({
+    "Furnishing": "التأثيث",
+    "Furnished": "مفروش",
+    "Semi Furnished": "نصف مفروش",
+    "Unfurnished": "غير مفروش",
+    "View": "الإطلالة",
+    "Balcony": "الشرفة",
+    "Bills": "الفواتير",
+    "All included": "شامل الخدمات والإنترنت",
+    "Utilities included": "شامل الكهرباء والماء",
+    "Internet only": "شامل الإنترنت فقط",
+    "Not included": "غير شامل الفواتير",
+    "Not stated": "غير محدد",
+    "Yes": "نعم",
+    "No": "لا",
+    "Sea": "البحر",
+    "Marina": "المارينا",
+    "Beach": "الشاطئ",
+    "Corniche": "الكورنيش",
+    "Lagoon": "البحيرة",
+    "Canal": "القناة",
+    "Pool": "المسبح",
+    "Park": "الحديقة",
+    "City": "المدينة",
+    "Porto Arabia": "بورتو أرابيا",
+    "Road": "الشارع",
+    "Entrance": "المدخل",
+    "Side": "جانبية",
+    "Front": "أمامية",
+    "Partner": "الشريك",
+    "Area": "المنطقة",
+    "District": "المنطقة",
+    "Building name": "اسم المبنى",
+    "Listing": "العقار",
+    "Looking for": "نبحث عن",
+    "e.g. 2 bed furnished Pearl sea view, or a building / flat":
+        "مثال: غرفتين مفروش اللؤلؤة إطلالة بحر، أو اسم مبنى / رقم شقة",
+    "Street, building no., zone": "الشارع ورقم المبنى والمنطقة",
+    "Bills / internet included": "الفواتير / الإنترنت مشمولة",
+    "Offer (e.g. 1 month free)": "عرض (مثل شهر مجاني)",
+    "Features, amenities": "المميزات والمرافق",
+    "Extra rooms (office, maid's)": "غرف إضافية (مكتب، غرفة خادمة)",
+    "Tidy existing listings": "توحيد العقارات الحالية",
+    "Tidy these listings": "توحيد هذه العقارات",
+    "What changes": "ما الذي سيتغير",
+    "listings would change": "عقار سيتم تعديله",
+    "All of them will be changed.": "سيتم تعديلها كلها.",
+    "Also rewrite titles of listings typed in by hand": "إعادة كتابة عناوين العقارات المدخلة يدوياً أيضاً",
+    "Everything already follows the standard. Nothing to tidy.": "كل العقارات موحدة بالفعل. لا شيء للتعديل.",
+    "A backup is taken first. You can roll this back from the import history.":
+        "يتم أخذ نسخة احتياطية أولاً، ويمكن التراجع من سجل الاستيراد.",
+    "Only gaps are filled. A value someone typed is never replaced with a different one. A backup is taken first, and the whole run can be rolled back from the import history.":
+        "يتم ملء الحقول الفارغة فقط، ولا تُستبدل أي قيمة أدخلها شخص بقيمة مختلفة. تؤخذ نسخة احتياطية أولاً ويمكن التراجع عن العملية كاملة من سجل الاستيراد.",
+    "This applies the same standard as a new import to the listings already in the CRM: one spelling for each district, building names in normal case, and furnishing, view, balcony and bills read out of the features and description into their own fields so search can find them.":
+        "يطبق هذا نفس معايير الاستيراد الجديد على العقارات الموجودة: كتابة موحدة لكل منطقة، وأسماء مبانٍ منسقة، واستخراج التأثيث والإطلالة والشرفة والفواتير من المميزات والوصف إلى حقولها الخاصة ليسهل البحث عنها.",
+    "listings still have no district after this — open them and pick one; every later import of the same building will then fill it in by itself.":
+        "عقار سيبقى بدون منطقة — افتحها واختر المنطقة، وبعدها سيملؤها كل استيراد لاحق لنفس المبنى تلقائياً.",
+})
+
+
 def t(text):
     if current_lang() == "ar":
         return AR.get(text, text)

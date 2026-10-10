@@ -11,6 +11,10 @@ import re
 
 from openpyxl import load_workbook
 
+import areas as areas_module
+import normalize
+from normalize import joined
+
 # Fields the CRM can fill from a spreadsheet.
 FIELDS = [
     ("unit_no", "Flat / unit number"),
@@ -26,8 +30,14 @@ FIELDS = [
     ("area", "Location / district"),
     ("description", "Description or notes"),
     ("map_url", "Map link"),
-    ("features", "Features, view, furnishing"),
-    ("extras", "Extra rooms (office, maid's, balcony)"),
+    ("address", "Street, building no., zone"),
+    ("furnishing", "Furnishing"),
+    ("view", "View"),
+    ("balcony", "Balcony"),
+    ("bills", "Bills / internet included"),
+    ("offer", "Offer (e.g. 1 month free)"),
+    ("features", "Features, amenities"),
+    ("extras", "Extra rooms (office, maid's)"),
 ]
 
 # Words that suggest a column holds a given field. Matched against the header
@@ -53,13 +63,26 @@ SYNONYMS = {
     "price": ["monthly rent", "rent per month", "asking price", "rate", "rent",
               "price", "amount", "monthly", "sale price"],
     "status": ["booking status", "availability", "status", "vacant", "available"],
-    "area": ["location", "district", "area", "zone", "neighbourhood",
-             "neighborhood", "address"],
-    "description": ["description", "remarks", "notes", "comment", "details"],
+    "area": ["location", "district", "area", "neighbourhood", "neighborhood"],
+    "description": ["description", "remarks", "notes", "comment", "details",
+                    "maintenance status", "maintinance status", "broker note",
+                    "caretaker", "keys with", "contact person"],
     "map_url": ["map", "google map", "location link", "maps link", "pin"],
-    "features": ["view", "furniture", "furnishing", "balcony", "features",
-                 "amenities", "facing"],
+    "address": ["street name", "street no", "street", "bldg #", "bldg no", "bldg",
+                "zone", "address", "plot"],
+    "furnishing": ["furniture", "furnishing", "furnished"],
+    "view": ["view", "facing"],
+    "balcony": ["balcony"],
+    "bills": ["included in rent", "utilities", "utilites", "utility", "wifi",
+              "wi-fi", "internet", "bills"],
+    "offer": ["month free", "free month", "promotion", "promo", "offer"],
+    "features": ["features", "amenities", "facilities"],
 }
+
+# Fields that may legitimately come from several columns at once: a partner
+# splits the address over street / building / zone, or keeps WIFI and a
+# utilities charge in two columns.
+MULTI = {"address", "bills", "description", "features"}
 
 # Header text that means the row is a header rather than data.
 HEADER_HINTS = set()
@@ -498,6 +521,18 @@ def guess_mapping(headers):
                 mapping[field] = i
                 used.add(i)
                 break
+    # second pass: extra columns for fields that can join several
+    for field, syn in ordered:
+        if field not in MULTI:
+            continue
+        for i, head in enumerate(headers, start=1):
+            if i in used:
+                continue
+            text = clean(head).lower()
+            if text and (text == syn or text.startswith(syn) or syn in text):
+                current = as_columns(mapping.get(field))
+                mapping[field] = current + [i] if current else i
+                used.add(i)
     return mapping
 
 
@@ -509,7 +544,7 @@ def infer_from_values(headers, rows, mapping):
     """Some columns have no heading at all — the Pearl list keeps bedroom
     descriptions ('Studio', '1br+Off') under a blank header. Judge those by
     what is in them instead."""
-    used = set(mapping.values())
+    used = {c for v in mapping.values() for c in as_columns(v)}
     for i in range(1, len(headers) + 1):
         if i in used:
             continue
@@ -532,11 +567,57 @@ def infer_from_values(headers, rows, mapping):
             if hits >= max(2, len(sample) * 0.7):
                 mapping["status"] = i
                 used.add(i)
+                continue
+
+        # A column of door numbers under a vague heading ('Room', '#'):
+        # mostly 2-4 digit numbers, all different, and not just 1, 2, 3...
+        # counting down the rows, which is a row counter rather than a flat.
+        if "unit_no" not in mapping:
+            nums = [v for v in sample if re.fullmatch(r"[A-Za-z]?\d{2,4}[A-Za-z]?", v)]
+            if len(nums) >= max(3, len(sample) * 0.8) and len(set(nums)) == len(nums):
+                digits = [int(re.sub(r"\D", "", v)) for v in nums]
+                counting = digits == list(range(digits[0], digits[0] + len(digits)))
+                if not counting:
+                    mapping["unit_no"] = i
+                    used.add(i)
     return mapping
 
 
 STRONG = ("building", "tower", "compound", "block", "project")
 WEAK = ("residence", "villa", "apartments", "gardens", "plaza")
+
+
+TITLE_NOISE = re.compile(
+    r"\b(availability|vacant|vacancy|property|properties|available)?\s*"
+    r"(list(ing)?s?|rates?|offers?)\b.*$|\bcoming soon\b\s*-?|"
+    r"\byearly contract.*$|\bbroker offer.*$|\(.*?\)|\d{1,2}[-./]\d{1,2}[-./]\d{2,4}",
+    re.IGNORECASE)
+NOT_A_BUILDING = ("including", "included", "utilit", "wifi", "internet", "promotion",
+                  "free", "updated", "note", "commission", "broker", "why ", "starting",
+                  "available units", "residential", "commercial", "compounds", "flats",
+                  "villas", "prorated", "excluding", "subject to", "contract")
+
+
+def clean_title(text):
+    """'Retaj La Plage Availability List' -> 'Retaj La Plage';
+    'RETAJ BAYWALK RESIDENCE | YEARLY CONTRACT OFFER' -> 'Retaj Baywalk Residence'."""
+    text = clean(text)
+    text = re.split(r"\s*[|•]\s*", text)[0]
+    text = TITLE_NOISE.sub("", text)
+    return normalize.tidy_name(text.strip(" -–:"))
+
+
+def split_building_area(text):
+    """'Al Darwish Tower - West Bay' -> ('Al Darwish Tower', 'West Bay')."""
+    text = clean(text)
+    if not text:
+        return "", ""
+    parts = re.split(r"\s+[-–,]\s+|\s*,\s*", text)
+    if len(parts) > 1:
+        tail = normalize.find_area(parts[-1])
+        if tail and not normalize.find_area(" ".join(parts[:-1])):
+            return " - ".join(parts[:-1]).strip(), tail
+    return text, normalize.find_area(text) or ""
 
 
 def guess_context(ws, header_row, col_range=None):
@@ -546,18 +627,29 @@ def guess_context(ws, header_row, col_range=None):
     c_start, c_end = col_range or (1, min(ws.max_column, 8))
     c_end = min(c_end, c_start + 7)
     best, best_score = "", 0
+    first_text_row = next((r for r in range(1, header_row)
+                           if any(clean(ws.cell(row=r, column=c).value)
+                                  for c in range(c_start, c_end + 1))), 0)
     for r in range(header_row - 1, 0, -1):
         for c in range(c_start, c_end + 1):
-            text = clean(ws.cell(row=r, column=c).value)
+            raw = clean(ws.cell(row=r, column=c).value)
+            if not raw or raw.startswith(("✓", "*", "-", "•")):
+                continue
+            text = clean_title(raw)
             if not text or len(text) < 4 or len(text) > 60:
                 continue
             if re.match(r"^[\d\s./-]+$", text):
                 continue
             low = text.lower()
-            if any(w in low for w in ("list", "availability", "rates", "including",
-                                      "coming soon", "updated", "note")):
+            if any(w in low for w in NOT_A_BUILDING):
                 continue                      # a banner, not a building
+            if parse_bedrooms(text) is not None and len(text) < 25:
+                continue                      # a 'Studio' / 'One Bedroom' heading
+            if re.fullmatch(r"[a-z]+\s+\d{4}|\d+\s*(weeks?|months?|days?)", low):
+                continue                      # 'October 2026', '2 Weeks'
             score = 1
+            if r == first_text_row:
+                score += 1.5                  # the sheet's own title line
             if any(w in low for w in STRONG):
                 score = 4
             elif any(w in low for w in WEAK):
@@ -622,16 +714,84 @@ def read_sheet(ws, header_row=None, col_range=None):
             # address hidden behind it, so read the link as well as the text.
             if cell.hyperlink is not None and cell.hyperlink.target:
                 targets.append(cell.hyperlink.target)
-        if any(clean(v) for v in values):
-            rows.append(values)
-            links.append(targets)
+        if not any(clean(v) for v in values):
+            continue
+        # a heading merged over two rows repeats itself once the merge is
+        # filled; that second copy is not a listing
+        same = sum(1 for v, h in zip(values, headers) if clean(v) and clean(v) == h)
+        if same >= 2:
+            continue
+        rows.append(values)
+        links.append(targets)
     mapping = infer_from_values(headers, rows, guess_mapping(headers))
     banner_beds, banner_label = guess_banner_bedrooms(ws, header_row, (c_start, c_end))
+    context = (guess_context(ws, header_row, col_range=(c_start, c_end))
+               or guess_context(ws, header_row, col_range=(1, min(ws.max_column, 25))))
+    building, area_hint = split_building_area(context)
+    notes = sheet_notes(ws, header_row)
+    if not area_hint:
+        # 'The Pearl-Qatar • Ready-to-move-in 1BR Apartments' under the title.
+        # Only lines above the table: a 'PEARL PROPERTY' heading halfway down
+        # applies to the rows under it, not to the whole sheet.
+        above = sheet_notes(ws, header_row, above_only=True)
+        area_hint = normalize.find_area(*above[:6]) or ""
     return {"header_row": header_row, "headers": headers, "rows": rows,
             "links": links, "mapping": mapping,
-            "context": guess_context(ws, header_row, col_range=(c_start, c_end)),
+            "building": building, "area_hint": area_hint, "notes": notes,
+            "notes_bedrooms": notes_bedrooms(notes),
+            "context": context,
             "col_range": (c_start, c_end),
             "banner_bedrooms": banner_beds, "banner_bedrooms_label": banner_label}
+
+
+def sheet_notes(ws, header_row, max_col=25, above_only=False):
+    """Every line of text written around the table rather than in it: the
+    title, 'Including Utilities Only No WIFI', 'One Month Free - One Bedroom
+    Apartments Only', a ticked list of what the rent covers, a footnote saying
+    'Non Commissionable'. These apply to every unit on the sheet, and used to
+    be thrown away."""
+    lines = []
+    width = min(ws.max_column, max_col)
+    for r in range(1, ws.max_row + 1):
+        if r == header_row:
+            continue
+        texts = [clean(ws.cell(row=r, column=c).value) for c in range(1, width + 1)]
+        texts = [t for t in texts if t]
+        if not texts:
+            continue
+        if above_only and r > header_row:
+            break
+        if r < header_row:
+            lines.extend(t for t in texts if not re.fullmatch(r"[\d.,\s]+", t))
+        elif (len(texts) == 1 and len(texts[0]) > 6
+              and not re.search(r"\d{3,}", re.sub(r"\b20\d\d\b", "", texts[0]))):
+            lines.append(texts[0])              # a footnote under the table
+    seen, out = set(), []
+    for line in lines:
+        if line.lower() not in seen:
+            seen.add(line.lower())
+            out.append(line)
+    return out
+
+
+def notes_bedrooms(notes):
+    """'Ready-to-move-in 1BR Apartments' in a title means every unit on the
+    sheet is a one-bedroom. Used only when nothing nearer says otherwise, and
+    only if the notes name a single bedroom count."""
+    found = set()
+    for line in notes:
+        if re.search(r"\bonly\b|free|promotion", line, re.IGNORECASE):
+            continue
+        for m in re.finditer(r"\b(studio|\d\s*-?\s*(?:br|bhk|bed(?:room)?s?))\b",
+                             line, re.IGNORECASE):
+            beds = parse_bedrooms(m.group(1))
+            if beds is not None:
+                found.add(beds)
+    return found.pop() if len(found) == 1 else None
+
+
+OFFER_WORDS = re.compile(r"free|promotion|promo|offer|discount|commission|"
+                         r"valid|till|until|prorated", re.IGNORECASE)
 
 
 def read_sheet_blocks(ws, header_row=None):
@@ -655,8 +815,47 @@ def read_sheet_blocks(ws, header_row=None):
 
 
 # ------------------------------------------------------------- extraction
+# Buildings whose district is well known, for when a partner's file never
+# says. Anything learned from listings already in the CRM is checked first
+# (see views_imports.known_buildings), so this list only needs the names a
+# new partner might send before we have ever stored them.
+KNOWN_BUILDINGS = {
+    "west walk": "Al Waab",
+    "giardino": "The Pearl",
+    "regency pearl": "The Pearl",
+    "floresta garden": "The Pearl",
+}
+
+UNIT_IN_NAME = re.compile(r"^(.*?[A-Za-z].*?)\s+([A-Za-z]?\d{2,4}[A-Za-z]?)$")
+
+
+def building_area(building, known):
+    """District for a building we have seen before, or one that names it."""
+    key = clean(building).lower()
+    if not key:
+        return ""
+    if known and key in known:
+        return known[key]
+    hit = normalize.find_area(building)
+    if hit:
+        return hit
+    for name, area in KNOWN_BUILDINGS.items():
+        if name in key:
+            return area
+    return ""
+
+
 def extract(sheet, mapping, defaults, fill_down=True, fill_numbers=False):
-    """Turn raw rows into listings ready for review.
+    """Turn raw rows into listings ready for review, every one in the same
+    standard shape whatever the partner's layout:
+
+      * building and flat number separated ('Bilal Tower 603' -> Bilal Tower, 603)
+      * district matched to one spelling from areas.py, never left as a zone
+        number or 'Ain Khaled (Keys with security)'
+      * furnishing, view, balcony and bills boiled down to a fixed list
+        (see normalize.py), read from the row, its section heading and the
+        notes written around the table
+      * one title format for every listing (normalize.standard_title)
 
     fill_down copies a blank building, location or description from the row
     above — the usual shape when a partner lists several units under one
@@ -667,30 +866,23 @@ def extract(sheet, mapping, defaults, fill_down=True, fill_numbers=False):
     out = []
     carried = {}
     seen_in_file = set()
-    # Structural facts repeat down a list and are safe to carry. A description
-    # belongs to one unit, so it only carries when the fuller option is chosen.
+    headers = sheet.get("headers") or []
+    notes = sheet.get("notes") or []
+    known = defaults.get("known_buildings") or {}
     inherit = ["building_no", "area", "map_url", "prop_type"]
     if fill_numbers:
         inherit += ["price", "bedrooms", "bathrooms", "size_sqm", "description"]
 
     def cell(values, field):
-        """One field may draw on more than one column.
-
-        Text fields join what they find, so a description split across three
-        columns arrives whole. Everything else takes the first column that
-        actually holds something, so an empty column does not mask a later one.
-        """
-        columns = as_columns(mapping.get(field))
+        """One field may draw on more than one column. Text fields join what
+        they find; everything else takes the first column that has a value."""
         picked = []
-        for idx in columns:
-            if idx > len(values):
-                continue
-            value = values[idx - 1]
-            if clean(value):
-                picked.append(value)
+        for idx in as_columns(mapping.get(field)):
+            if idx <= len(values) and clean(values[idx - 1]):
+                picked.append(values[idx - 1])
         if not picked:
             return None
-        if field in JOINABLE and len(picked) > 1:
+        if (field in JOINABLE or field in MULTI) and len(picked) > 1:
             seen, parts = set(), []
             for v in picked:
                 text = clean(v)
@@ -700,11 +892,38 @@ def extract(sheet, mapping, defaults, fill_down=True, fill_numbers=False):
             return " · ".join(parts)
         return picked[0]
 
+    def labelled(values, field):
+        """'WIFI: Yes', 'Street: 920' — the heading matters when the cell is
+        only a yes, a no or a bare number."""
+        out_ = []
+        for idx in as_columns(mapping.get(field)):
+            if idx <= len(values) and clean(values[idx - 1]):
+                head = headers[idx - 1] if idx - 1 < len(headers) else ""
+                out_.append((clean(head), clean(values[idx - 1])))
+        return out_
+
+    # how often each name appears, so 'Bilal Tower 603' / 'Bilal Tower 601'
+    # can be told apart from a building genuinely called 'Khalid Building 2'
+    has_unit_column = bool(as_columns(mapping.get("unit_no")))
+    base_counts = {}
+    if not has_unit_column:
+        for values in sheet["rows"]:
+            m = UNIT_IN_NAME.match(clean(cell(values, "building_no")))
+            if m:
+                k = m.group(1).strip().lower()
+                base_counts[k] = base_counts.get(k, 0) + 1
+
+    # notes around the table that apply to every unit on the sheet
+    # (a banner such as 'X | YEARLY CONTRACT OFFER FOR BROKERS' is the title,
+    # not a note; it has already given us the building and the area)
+    sheet_offer = [n for n in notes if OFFER_WORDS.search(n) and 15 <= len(n) < 200
+                   and not re.search(r"[|•]", n)]
+    group_text = ""                # a section heading's own description
+
     all_links = sheet.get("links") or [[] for _ in sheet["rows"]]
     for index, values in enumerate(sheet["rows"]):
         row_links = all_links[index] if index < len(all_links) else []
         raw = {f: cell(values, f) for f, _ in FIELDS}
-        # remember what was actually in the row before anything is carried down
         own_building = clean(raw.get("building_no"))
         own_title = clean(raw.get("title"))
         own_unit = parse_unit(raw.get("unit_no"))
@@ -718,49 +937,55 @@ def extract(sheet, mapping, defaults, fill_down=True, fill_numbers=False):
                 elif field in carried:
                     raw[field] = carried[field]
 
-        unit = parse_unit(raw.get("unit_no"))
-        title_text = clean(raw.get("title"))
-        price = parse_number(raw.get("price"))
-        beds = parse_bedrooms(raw.get("bedrooms"))
-        if beds is None:
-            beds = parse_bedrooms(raw.get("prop_type"))
-        if beds is None:
-            beds = parse_bedrooms(title_text)
-        if beds is None:
-            # Nothing in the row itself says the bedroom count — fall back to
-            # a section heading above this block, if one was found ('Studio',
-            # 'One Bedroom'; see guess_banner_bedrooms). Still None when the
-            # file has neither, so the review screen flags it as before.
-            beds = defaults.get("bedrooms")
-        size = parse_number(raw.get("size_sqm"))
-
         # A row with no unit, no price and no size is a section heading or a
-        # footnote — unless its text names a unit ("Villa No. A-16"), which is
-        # how some lists write a unit whose rent matches the one above.
+        # footnote — unless its text names a unit ("Villa No. A-16").
         looks_like_unit = bool(UNIT_LABEL.match(own_title))
         if (not own_unit and own_price is None and own_size is None
                 and not looks_like_unit):
-            # a heading names the building for the rows beneath it
-            if own_title and not own_building:
-                carried["building_no"] = own_title
-                raw["building_no"] = own_title
+            heading = own_title or own_building
+            if heading:
+                carried["building_no"] = heading
+                raw["building_no"] = heading
+            row_text = " ".join(clean(v) for v in values if clean(v))
+            hint = normalize.find_area(row_text)
+            if hint:
+                carried["area_hint"] = hint
+            group_text = joined(raw.get("description"), raw.get("features"))
             heading_link = find_map_link(*row_links, *values)
             if heading_link:
                 carried["map_url"] = heading_link
             continue
 
+        # ---------------------------------------------------- building, flat
         building = clean(raw.get("building_no")) or defaults.get("building_no", "")
-        # some sheets put the unit label in the title column instead
+        unit = parse_unit(raw.get("unit_no"))
+        title_text = clean(raw.get("title"))
+        if not unit and not has_unit_column and building:
+            m = UNIT_IN_NAME.match(building)
+            if m and (len(re.sub(r"\D", "", m.group(2))) >= 3
+                      or base_counts.get(m.group(1).strip().lower(), 0) >= 2):
+                building, unit = m.group(1).strip(), m.group(2).upper()
         if not unit and title_text:
             unit = parse_unit(title_text)
+        building = normalize.tidy_name(building)
+
+        # ------------------------------------------------------- the numbers
+        price = parse_number(raw.get("price"))
+        beds = parse_bedrooms(raw.get("bedrooms"))
+        if beds is None:
+            beds = parse_bedrooms(raw.get("prop_type"))
+        if beds is None and title_text and not UNIT_LABEL.match(title_text):
+            beds = parse_bedrooms(title_text)
+        if beds is None:
+            beds = defaults.get("bedrooms")          # a 'Studio' heading above
+        if beds is None:
+            beds = sheet.get("notes_bedrooms")       # '1BR Apartments' in the title
+        size = parse_number(raw.get("size_sqm"))
 
         prop_type = parse_type(raw.get("prop_type"), raw.get("bedrooms"),
                                title_text, building,
                                default=defaults.get("prop_type", "Apartment"))
 
-        # "1 bd + office" means one bedroom and an office; keep the office
-        # Extra rooms are their own field now, so "1 bd + office" records the
-        # office as a room rather than burying it in the features text.
         found_extras = [clean(raw.get("extras"))]
         for source in (raw.get("bedrooms"), title_text, raw.get("prop_type")):
             more = describe_extras(source)
@@ -770,41 +995,130 @@ def extract(sheet, mapping, defaults, fill_down=True, fill_numbers=False):
         for chunk in found_extras:
             for piece in re.split(r"[,;·]", chunk or ""):
                 piece = piece.strip()
+                if piece.lower() in ("balcony", "terrace"):
+                    continue                     # balcony has its own field now
                 if piece and piece.lower() not in seen:
                     seen.add(piece.lower())
                     parts.append(piece)
         extras_text = ", ".join(parts)
+
+        # -------------------------------------- the standard descriptive fields
         features = clean(raw.get("features"))
+        view_col = clean(raw.get("view"))
+        # 'Caretaker No: Ganesh 6622 3999', 'MAINTINANCE STATUS: RFO' — a bare
+        # name or code means nothing later without the heading it sat under
+        desc_bits = []
+        for head, val in labelled(values, "description"):
+            if re.search(r"caretaker|contact|keys|maint", head, re.IGNORECASE):
+                desc_bits.append(f"{normalize.tidy_name(head)}: {val}")
+            else:
+                desc_bits.append(val)
+        description = " · ".join(dict.fromkeys(desc_bits))
+        unit_raw = clean(raw.get("unit_no"))
+        furnishing = normalize.parse_furnishing(
+            raw.get("furnishing"), raw.get("prop_type"), raw.get("bedrooms"),
+            title_text, features, unit_raw, description, group_text, *notes)
+        # amenities ('Car Park, Gym, Pool') are not what the window looks onto,
+        # so they are only read for a view when the file has no view column
+        view = normalize.parse_view(view_col) if view_col else normalize.parse_view(
+            re.sub(r"car\s*park\w*|parking|gym|swimming pool|pool access", " ",
+                   features, flags=re.IGNORECASE))
+        balcony = normalize.parse_balcony(
+            unit_raw, view_col, features, description,
+            column_value=raw.get("balcony"))
+        bill_bits = [f"{h}: {v}" for h, v in labelled(values, "bills")]
+        bills = normalize.parse_bills(*bill_bits, features, description,
+                                      group_text, *notes)
+
+        # ------------------------------------------------------ address, area
+        address_parts = []
+        area, zone = normalize.canonical_area(raw.get("area"))
+        for head, val in labelled(values, "address"):
+            if re.fullmatch(r"[\d\s/-]+", val):
+                label = re.sub(r"\s*(#|no\.?|number|name)\s*$", "", head,
+                               flags=re.IGNORECASE).strip() or head
+                address_parts.append(f"{label} {val}")
+            else:
+                address_parts.append(val)
+        if zone:
+            address_parts.append(zone)
+        address = ", ".join(address_parts)
+
+        keys_note = ""
+        area_raw = clean(raw.get("area"))
+        m = re.search(r"\((.*?)\)", area_raw)
+        if m and re.search(r"key|caretaker|security|contact|call", m.group(1), re.I):
+            keys_note = m.group(1).strip()
+
+        area_from_street = False
+        if not area:
+            area = (defaults.get("area")
+                    or building_area(building, known)
+                    or carried.get("area_hint")
+                    or sheet.get("area_hint")
+                    or defaults.get("file_area")
+                    or "")
+        if not area and address:
+            # a street name is a weaker clue than anything above — 'Al Nasr
+            # Street' runs through more than one district — so say so
+            area = normalize.find_area(address) or ""
+            area_from_street = bool(area)
+        area = normalize.find_area(area) or area
+
+        # --------------------------------------------------------- status
+        status_raw = clean(raw.get("status"))
+        status = parse_status(status_raw, defaults.get("status", "Available"))
+        status_note = ""
+        if status_raw and status_raw.lower() not in {
+                w for group, _ in STATUS_WORDS for w in group}:
+            if parse_status(status_raw, default="") == "":
+                status_note = status_raw         # 'Coming soon 1st of SEP'
+
+        # ---------------------------------------------------- description
+        offers = []
+        for head, val in labelled(values, "offer"):
+            low = val.lower()
+            if low in normalize.YES:
+                offers.append(head)
+            elif low not in normalize.NO:
+                offers.append(f"{head}: {val}")
+        desc_parts = [description]
+        if group_text and group_text != description:
+            desc_parts.append(group_text)
+        if status_note:
+            desc_parts.append(status_note)
+        if keys_note:
+            desc_parts.append(f"Keys: {keys_note}")
+        if offers:
+            desc_parts.append("Offer: " + ", ".join(offers))
+        if sheet_offer:
+            desc_parts.append("Partner notes: " + " · ".join(sheet_offer))
+        full_description = "\n".join(p for p in desc_parts if p)
 
         listing = {
             "unit_no": unit,
             "building_no": building,
-            "floor_no": parse_floor(raw.get("floor_no"),
-                                    clean(raw.get("unit_no")) or title_text),
+            "floor_no": parse_floor(raw.get("floor_no"), unit_raw or title_text),
             "prop_type": prop_type,
             "bedrooms": beds,
             "bathrooms": parse_bathrooms(raw.get("bathrooms")) or
                          parse_bathrooms(raw.get("bedrooms")),
             "size_sqm": size,
             "price": price or 0,
-            "status": parse_status(raw.get("status"),
-                                   defaults.get("status", "Available")),
-            "area": clean(raw.get("area")) or defaults.get("area", ""),
-            "description": clean(raw.get("description")),
+            "status": status,
+            "area": area,
+            "address": address,
+            "description": full_description,
             "features": features,
+            "furnishing": furnishing,
+            "view": view,
+            "balcony": balcony,
+            "bills": bills,
             "extras": extras_text,
-            # any column can hold the pin, and it may be a hyperlink rather
-            # than visible text
             "map_url": find_map_link(raw.get("map_url"), *row_links, *values),
             "listing_type": defaults.get("listing_type", "Rent"),
         }
-
-        bits = [b for b in (building, f"unit {unit}" if unit else "") if b]
-        listing["title"] = (title_text if title_text and not unit
-                            else " · ".join(bits) or title_text or "Untitled listing")
-        if beds is not None and listing["title"] and unit:
-            label = "Studio" if beds == 0 else f"{beds}-bed"
-            listing["title"] = f"{label} · {' · '.join(bits)}"
+        listing["title"] = normalize.standard_title(prop_type, beds, building, unit, area)
 
         # Flag anything a person should look at before it is saved.
         issues = []
@@ -814,6 +1128,12 @@ def extract(sheet, mapping, defaults, fill_down=True, fill_numbers=False):
             issues.append("no price")
         if listing["bedrooms"] is None and listing["prop_type"] == "Apartment":
             issues.append("no bedroom count")
+        if not area:
+            issues.append("no area")
+        elif area not in areas_module.AREAS:
+            issues.append("area not recognised")
+        elif area_from_street:
+            issues.append("area guessed from the street name — check it")
         if clean(raw.get("map_url")) and not listing["map_url"]:
             issues.append("map link not recognised")
         listing["issues"] = issues
@@ -828,4 +1148,28 @@ def extract(sheet, mapping, defaults, fill_down=True, fill_numbers=False):
 
 
 def open_workbook(path):
-    return load_workbook(path, data_only=True)
+    wb = load_workbook(path, data_only=True)
+    for ws in wb.worksheets:
+        fill_vertical_merges(ws)
+    return wb
+
+
+def fill_vertical_merges(ws):
+    """A partner who merges the rent cell down three rows means all three
+    villas share that rent. openpyxl only keeps the value in the top cell, so
+    the other two used to arrive with no price at all. Copy it down.
+
+    Only merges that span rows are filled. A title merged across the width of
+    the sheet is left alone, otherwise its text would land in every column and
+    look like a row of headings."""
+    for rng in list(ws.merged_cells.ranges):
+        if rng.max_row == rng.min_row:
+            continue
+        value = ws.cell(row=rng.min_row, column=rng.min_col).value
+        link = ws.cell(row=rng.min_row, column=rng.min_col).hyperlink
+        ws.unmerge_cells(str(rng))
+        for r in range(rng.min_row, rng.max_row + 1):
+            cell = ws.cell(row=r, column=rng.min_col)
+            cell.value = value
+            if link is not None and cell.hyperlink is None:
+                cell.hyperlink = link.target

@@ -8,6 +8,9 @@
     <h1 class="page-title">{{ t('Import history') }}</h1>
   </div>
   <div class="actions">
+    {% if user.role == 'admin' %}
+      <a class="btn" href="{{ url_for('imports.tidy') }}">{{ t('Tidy existing listings') }}</a>
+    {% endif %}
     <a class="btn btn-gold" href="{{ url_for('imports.upload') }}">{{ t('Import from Excel') }}</a>
   </div>
 </div>
