@@ -246,6 +246,50 @@
           </div>
         {% endif %}
 
+        <div class="hairline"></div>
+        <div class="eyebrow" id="media">{{ t('Send photos & videos') }}</div>
+        {% if media_listings %}
+          <form method="post" action="{{ url_for('media.share', lid=l.id) }}" target="_blank"
+                onsubmit="setTimeout(function(){ location.reload(); }, 1500)"
+                class="stack" style="margin-top:10px;gap:8px">
+            <select name="property_id" required>
+              {% for m in media_listings %}
+                <option value="{{ m.id }}" {{ 'selected' if l.property_id == m.id }}>
+                  {{ m.ref }} — {{ m.title }} ({{ m.photos }} {{ t('photos') }}{% if m.videos %} · {{ m.videos }} {{ t('videos') }}{% endif %}){% if m.status in ('Sold', 'Rented') %} · {{ t(m.status) }}{% endif %}
+                </option>
+              {% endfor %}
+            </select>
+            <button class="btn btn-gold btn-sm" type="submit">{{ t('Send on WhatsApp') }}</button>
+            <div class="small faint">{{ t('Opens WhatsApp with a private link to every photo and video of the listing. The link works for 30 days.') }}</div>
+          </form>
+        {% else %}
+          <p class="small muted" style="margin:8px 0 0">{{ t('No published listing has photos or videos yet.') }}</p>
+        {% endif %}
+
+        {% if media_shares %}
+          <div class="share-log">
+            {% for s in media_shares %}
+              {% set live = not s.revoked_at and s.expires_at > now_stamp %}
+              <div class="row {{ '' if live else 'off' }}">
+                <div class="what">
+                  <b>{{ s.prop_title }}</b>
+                  <span class="faint">{{ s.created_at | ago }} · {{ s.sender or '—' }} ·
+                  {% if not live %}{{ t('Link stopped') }}
+                  {% elif s.views %}{{ t('Opened') }} {{ s.views }}× · {{ s.last_viewed_at | ago }}
+                  {% else %}{{ t('Not opened yet') }}{% endif %}</span>
+                </div>
+                {% if live %}
+                  <button class="btn btn-quiet btn-sm" type="button"
+                          onclick="navigator.clipboard.writeText('{{ share_url(s.token) }}');this.textContent='{{ t('Copied') }}'">{{ t('Copy link') }}</button>
+                  <form method="post" action="{{ url_for('media.stop', sid=s.id) }}"
+                        data-confirm="{{ t('Stop this link? The client will no longer be able to open it.') }}">
+                    <button class="btn btn-quiet btn-sm" type="submit">{{ t('Stop') }}</button></form>
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+
         {% if l.notes %}
           <div class="hairline"></div>
           <div class="eyebrow">{{ t('Requirements') }}</div>

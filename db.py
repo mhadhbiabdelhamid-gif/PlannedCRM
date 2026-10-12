@@ -92,6 +92,30 @@ CREATE TABLE IF NOT EXISTS property_images (
     created_at  TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS property_videos (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    property_id   INTEGER NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+    filename      TEXT NOT NULL,
+    original_name TEXT,
+    created_at    TEXT NOT NULL
+);
+
+-- A private link to one listing's photos and videos, made for one client and
+-- sent to them on WhatsApp. The token is the only key: anyone holding the link
+-- sees that listing's media until it expires or someone stops sharing it.
+CREATE TABLE IF NOT EXISTS media_shares (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    token          TEXT NOT NULL UNIQUE,
+    property_id    INTEGER NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+    lead_id        INTEGER REFERENCES leads(id) ON DELETE CASCADE,
+    created_by     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at     TEXT NOT NULL,
+    expires_at     TEXT NOT NULL,
+    revoked_at     TEXT,
+    views          INTEGER NOT NULL DEFAULT 0,
+    last_viewed_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS documents (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     property_id   INTEGER NOT NULL REFERENCES properties(id) ON DELETE CASCADE,

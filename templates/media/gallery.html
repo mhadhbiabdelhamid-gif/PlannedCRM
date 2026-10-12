@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+{% if expired %}
+<title>{{ company }}</title>
+{% else %}
+<title>{{ p.title }} · {{ company }}</title>
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="{{ company }}">
+<meta property="og:title" content="{{ p.title }}">
+<meta property="og:description" content="{{ images|length }} photos{% if videos %} · {{ videos|length }} videos{% endif %}{% if price %} · {{ price }}{% endif %}">
+<meta property="og:url" content="{{ page_url }}">
+{% if cover %}<meta property="og:image" content="{{ cover }}">{% endif %}
+{% endif %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #23201A; --ink-soft: #332F28; --ink-line: #433E35;
+    --gold: #A88848; --gold-lift: #C9A961; --gold-deep: #7E6430;
+    --canvas: #F6F2E9; --card: #FFFFFF; --line: #DBD7CE;
+    --text: #14141A; --muted: #4A4852; --faint: #63616B;
+    --ui: "IBM Plex Sans", "IBM Plex Sans Arabic", "Segoe UI", Arial, sans-serif;
+    --ar: "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--canvas); color: var(--text); font-family: var(--ui);
+         font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  .ar { font-family: var(--ar); direction: rtl; unicode-bidi: isolate; display: inline-block; }
+
+  header { background: var(--ink); color: #fff; }
+  .bar { max-width: 1080px; margin: 0 auto; padding: 14px 16px;
+         display: flex; align-items: center; gap: 12px; }
+  .bar img { width: 40px; height: 40px; object-fit: contain; border-radius: 4px; background: #fff; }
+  .bar .name { font-weight: 600; letter-spacing: .01em; }
+  .bar .name small { display: block; color: var(--gold-lift); font-weight: 400;
+                     font-size: 12px; font-family: var(--ar); }
+
+  .hero { background: var(--ink); color: #fff; border-top: 1px solid var(--ink-line); }
+  .hero .in { max-width: 1080px; margin: 0 auto; padding: 22px 16px 26px; }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .14em;
+             text-transform: uppercase; color: var(--gold-lift); }
+  h1 { margin: 6px 0 10px; font-size: clamp(22px, 5vw, 32px); font-weight: 600; line-height: 1.2; }
+  .specs { display: flex; flex-wrap: wrap; gap: 6px 8px; }
+  .chip { border: 1px solid var(--ink-line); background: var(--ink-soft); color: #EDE8DD;
+          padding: 4px 10px; border-radius: 999px; font-size: 13px; }
+  .price { margin-top: 14px; font-size: 22px; font-weight: 600; color: var(--gold-lift); }
+  .greet { margin: 0 0 12px; color: #D8D2C5; font-size: 14px; }
+
+  main { max-width: 1080px; margin: 0 auto; padding: 20px 16px 120px; }
+  .notice { background: #FBF4E4; border: 1px solid #E8D9B3; color: var(--gold-deep);
+            padding: 10px 14px; border-radius: 6px; margin-bottom: 18px; font-size: 14px; }
+  h2 { font-size: 13px; font-family: var(--mono); letter-spacing: .12em; text-transform: uppercase;
+       color: var(--muted); margin: 26px 0 12px; display: flex; justify-content: space-between; }
+  h2 .ar { letter-spacing: 0; text-transform: none; font-size: 14px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+  .grid button { padding: 0; border: 0; background: none; cursor: zoom-in; display: block; width: 100%; }
+  .grid img { width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block;
+              border-radius: 6px; border: 1px solid var(--line); background: #ECE7DC; }
+  .grid button:first-child { grid-column: 1 / -1; }
+  .grid button:first-child img { aspect-ratio: 16/9; }
+  @media (min-width: 700px) {
+    .grid button:first-child { grid-column: span 2; grid-row: span 2; }
+    .grid button:first-child img { aspect-ratio: auto; height: 100%; }
+  }
+
+  .videos { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+  .videos video { width: 100%; border-radius: 6px; background: #000; display: block;
+                  aspect-ratio: 16/9; }
+  .videos a { font-size: 12px; color: var(--faint); display: inline-block; margin-top: 4px; }
+
+  .cta { position: fixed; inset: auto 0 0 0; background: rgba(35,32,26,.96);
+         padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); backdrop-filter: blur(6px); }
+  .cta .in { max-width: 1080px; margin: 0 auto; display: flex; align-items: center; gap: 12px; }
+  .cta .who { flex: 1; color: #EDE8DD; font-size: 13px; line-height: 1.35; min-width: 0; }
+  .cta .who b { display: block; color: #fff; font-size: 14px; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; background: var(--gold);
+         color: #1A1712; text-decoration: none; font-weight: 600; padding: 11px 16px;
+         border-radius: 6px; white-space: nowrap; }
+  .btn:hover { background: var(--gold-lift); }
+
+  .lb { position: fixed; inset: 0; background: rgba(12,11,9,.96); display: none;
+        align-items: center; justify-content: center; z-index: 10; touch-action: pan-y; }
+  .lb.on { display: flex; }
+  .lb img { max-width: 100vw; max-height: 86vh; object-fit: contain; }
+  .lb .x, .lb .nav { position: absolute; background: rgba(255,255,255,.1); color: #fff;
+        border: 0; font-size: 22px; width: 44px; height: 44px; border-radius: 50%; cursor: pointer; }
+  .lb .x { top: 14px; right: 14px; }
+  .lb .prev { left: 10px; top: 50%; transform: translateY(-50%); }
+  .lb .next { right: 10px; top: 50%; transform: translateY(-50%); }
+  .lb .count { position: absolute; bottom: 18px; left: 0; right: 0; text-align: center;
+               color: #CFC8B9; font-family: var(--mono); font-size: 12px; }
+
+  .gone { max-width: 520px; margin: 12vh auto; padding: 0 16px; text-align: center; }
+  .gone h1 { color: var(--text); }
+  .gone p { color: var(--muted); }
+  footer { text-align: center; color: var(--faint); font-size: 12px; padding: 24px 16px 0; }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    {% if logo_url %}<img src="{{ logo_url }}" alt="">{% endif %}
+    <div class="name">{{ company }}<small>بلاند العقارية</small></div>
+  </div>
+</header>
+
+{% if expired %}
+  <div class="gone">
+    <h1>This link has expired</h1>
+    <p>Please ask your agent to send the photos again.</p>
+    <p class="ar">انتهت صلاحية هذا الرابط. يرجى طلب الصور مرة أخرى من الوكيل.</p>
+  </div>
+{% else %}
+  <section class="hero">
+    <div class="in">
+      {% if lead_name %}<p class="greet">Prepared for {{ lead_name }} · <span class="ar">مُعدّ لـ {{ lead_name }}</span></p>{% endif %}
+      <div class="eyebrow">{{ p.prop_type }} · {{ 'For rent' if p.listing_type == 'Rent' else 'For sale' }}{% if p.ref %} · {{ p.ref }}{% endif %}</div>
+      <h1>{{ p.title }}</h1>
+      <div class="specs">
+        {% if p.area %}<span class="chip">{{ p.area }}</span>{% endif %}
+        {% if p.bedrooms %}<span class="chip">{{ p.bedrooms }} bed · غرف</span>{% endif %}
+        {% if p.bathrooms %}<span class="chip">{{ p.bathrooms }} bath · حمام</span>{% endif %}
+        {% if p.size_sqm %}<span class="chip">{{ '{:,.0f}'.format(p.size_sqm) }} m²</span>{% endif %}
+        {% if p.furnishing %}<span class="chip">{{ p.furnishing }}</span>{% endif %}
+        {% if p.view %}<span class="chip">{{ p.view }}</span>{% endif %}
+      </div>
+      {% if price %}<div class="price">{{ price }}</div>{% endif %}
+    </div>
+  </section>
+
+  <main>
+    {% if unavailable %}
+      <div class="notice">This property is no longer available — ask us about similar ones.
+        <span class="ar">هذا العقار لم يعد متاحاً — اسألنا عن عقارات مشابهة.</span></div>
+    {% endif %}
+
+    {% if videos %}
+      <h2><span>Videos · {{ videos|length }}</span><span class="ar">فيديوهات</span></h2>
+      <div class="videos">
+        {% for v in videos %}
+          {% set src = url_for('media.file', token=token, kind='videos', filename=v.filename) %}
+          <div>
+            <video controls playsinline preload="metadata"
+                   {% if images %}poster="{{ url_for('media.file', token=token, kind='images', filename=images[0].filename) }}"{% endif %}>
+              <source src="{{ src }}">
+            </video>
+            <a href="{{ src }}" target="_blank" rel="noopener">Video not playing? Open it directly · افتح الفيديو</a>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% if images %}
+      <h2><span>Photos · {{ images|length }}</span><span class="ar">الصور</span></h2>
+      <div class="grid">
+        {% for im in images %}
+          <button type="button" data-i="{{ loop.index0 }}">
+            <img src="{{ url_for('media.file', token=token, kind='images', filename=im.filename) }}"
+                 alt="{{ p.title }} — photo {{ loop.index }}" loading="{{ 'eager' if loop.first else 'lazy' }}">
+          </button>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <footer>{{ company }} · Doha, Qatar</footer>
+  </main>
+
+  <div class="cta">
+    <div class="in">
+      <div class="who"><b>{{ p.agent_name or company }}</b>
+        Interested? Book a viewing · <span class="ar">مهتم؟ احجز معاينة</span></div>
+      {% if reply %}<a class="btn" href="{{ reply }}" target="_blank" rel="noopener">WhatsApp</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="lb" id="lb" role="dialog" aria-label="Photo viewer">
+    <button class="x" type="button" aria-label="Close">×</button>
+    <button class="nav prev" type="button" aria-label="Previous">‹</button>
+    <img alt="">
+    <button class="nav next" type="button" aria-label="Next">›</button>
+    <div class="count"></div>
+  </div>
+
+  <script>
+  (function () {
+    var thumbs = Array.prototype.slice.call(document.querySelectorAll('.grid button'));
+    var srcs = thumbs.map(function (b) { return b.querySelector('img').src; });
+    var lb = document.getElementById('lb'), img = lb.querySelector('img'),
+        count = lb.querySelector('.count'), i = 0, x0 = null;
+    function show(n) {
+      i = (n + srcs.length) % srcs.length;
+      img.src = srcs[i]; count.textContent = (i + 1) + ' / ' + srcs.length;
+      lb.classList.add('on');
+    }
+    function close() { lb.classList.remove('on'); }
+    thumbs.forEach(function (b) { b.addEventListener('click', function () { show(+b.dataset.i); }); });
+    lb.querySelector('.x').onclick = close;
+    lb.querySelector('.prev').onclick = function (e) { e.stopPropagation(); show(i - 1); };
+    lb.querySelector('.next').onclick = function (e) { e.stopPropagation(); show(i + 1); };
+    lb.addEventListener('click', function (e) { if (e.target === lb) close(); });
+    document.addEventListener('keydown', function (e) {
+      if (!lb.classList.contains('on')) return;
+      if (e.key === 'Escape') close();
+      if (e.key === 'ArrowRight') show(i + 1);
+      if (e.key === 'ArrowLeft') show(i - 1);
+    });
+    lb.addEventListener('touchstart', function (e) { x0 = e.touches[0].clientX; }, {passive: true});
+    lb.addEventListener('touchend', function (e) {
+      if (x0 === null) return;
+      var dx = e.changedTouches[0].clientX - x0; x0 = null;
+      if (Math.abs(dx) > 40) show(i + (dx < 0 ? 1 : -1));
+    });
+  })();
+  </script>
+{% endif %}
+</body>
+</html>

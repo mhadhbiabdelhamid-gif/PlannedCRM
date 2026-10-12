@@ -21,6 +21,12 @@ DEFAULTS = {
         "Hello {name}, confirming your viewing of {property} on {date}. "
         "I will meet you there. Call me on this number if anything changes. — {agent}"
     ),
+    "wa_media": (
+        "Hello {name}, this is {agent} from {company}. "
+        "Here are the photos and videos of {property}.\n"
+        "مرحباً {name}، إليك صور وفيديوهات العقار.\n"
+        "{link}"
+    ),
     "wa_owner": (
         "Hello {name}, this is {agent} from {company} regarding your property "
         "{property}. Do you have a moment to talk?"
@@ -31,11 +37,12 @@ LABELS = {
     "wa_intro": "Send listing details",
     "wa_followup": "Follow up",
     "wa_viewing": "Confirm viewing",
+    "wa_media": "Send photos & videos",
     "wa_owner": "Contact owner",
 }
 
 PLACEHOLDERS = ["{name}", "{agent}", "{company}", "{property}", "{price}",
-                "{currency}", "{date}"]
+                "{currency}", "{date}", "{link}"]
 
 
 def fill(template, **values):
@@ -51,8 +58,10 @@ def digits(phone):
     return re.sub(r"\D", "", str(phone or ""))
 
 
-def link(phone, message):
+def link(phone, message, pick_contact=False):
+    """A wa.me deep link. With pick_contact, a missing number still gives a
+    link — WhatsApp then opens its own contact picker instead of a chat."""
     number = digits(phone)
     if not number:
-        return ""
+        return f"https://wa.me/?text={quote(message)}" if pick_contact else ""
     return f"https://wa.me/{number}?text={quote(message)}"

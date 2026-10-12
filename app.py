@@ -12,6 +12,7 @@ from datetime import timedelta
 import auth
 import backups
 import mailer
+import media_share
 import views_admin
 import views_ads_leads
 import views_deals
@@ -135,7 +136,9 @@ def create_app():
         DATABASE=database,
         UPLOAD_FOLDER=os.environ.get("UPLOAD_FOLDER",
                                      os.path.join(BASE_DIR, "instance", "uploads")),
-        MAX_CONTENT_LENGTH=25 * 1024 * 1024,       # 25 MB per upload
+        # Phone videos of a walk-through run well past the old 25 MB, so the
+        # limit is per request and adjustable; 200 MB covers a few minutes.
+        MAX_CONTENT_LENGTH=int(os.environ.get("MAX_UPLOAD_MB", "200")) * 1024 * 1024,
         PERMANENT_SESSION_LIFETIME=timedelta(days=14),
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
@@ -143,7 +146,7 @@ def create_app():
     if os.environ.get("HTTPS_ONLY", "").lower() in ("1", "true", "yes"):
         app.config["SESSION_COOKIE_SECURE"] = True
 
-    for sub in ("images", "docs"):
+    for sub in ("images", "docs", "videos"):
         os.makedirs(os.path.join(app.config["UPLOAD_FOLDER"], sub), exist_ok=True)
 
     init_db(app)
@@ -161,6 +164,7 @@ def create_app():
     app.register_blueprint(views_admin.admin)
     app.register_blueprint(views_reports.bp)
     app.register_blueprint(views_finance.bp)
+    app.register_blueprint(media_share.bp)
     app.register_blueprint(intake_bp)
     app.register_blueprint(social_bp)
     app.register_blueprint(restore_bp)

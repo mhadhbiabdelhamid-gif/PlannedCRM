@@ -91,6 +91,27 @@
       </div>
     </div>
 
+    {% if videos %}
+    <div class="card">
+      <div class="card-head"><h3>{{ t('Videos') }}</h3><span class="mono faint">{{ videos|length }}</span></div>
+      <div class="card-body">
+        <div class="video-list">
+          {% for v in videos %}
+            <figure>
+              <video controls playsinline preload="metadata"
+                     src="{{ url_for('main.uploaded_file', kind='videos', filename=v.filename) }}"></video>
+              {% if editable %}
+              <form method="post" action="{{ url_for('properties.delete_video', pid=p.id, vid=v.id) }}"
+                    data-confirm="Remove this video?">
+                <button class="btn btn-quiet btn-sm" type="submit">{{ t('Remove') }}</button></form>
+              {% endif %}
+            </figure>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
     <div class="card">
       <div class="card-head"><h3>{{ t('Details') }}</h3>
         <span class="price mono" style="color:var(--gold-deep);font-size:16px">

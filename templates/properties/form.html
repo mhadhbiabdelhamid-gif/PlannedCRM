@@ -152,6 +152,11 @@
         <label for="images">{{ t('Add photos') }}</label>
         <input id="images" type="file" name="images" accept="image/*" multiple>
       </div>
+      <div class="field">
+        <label for="videos">{{ t('Add videos') }}</label>
+        <input id="videos" type="file" name="videos" accept="video/mp4,video/quicktime,video/webm,video/*" multiple>
+        <div class="small faint">{{ t('MP4 plays on every phone. Up to 200 MB per save.') }}</div>
+      </div>
 
       <div class="field span-2">
         <label for="map_url">{{ t('Location on the map') }}</label>

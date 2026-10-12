@@ -556,7 +556,11 @@ def detail(lid):
     props = query("SELECT id, title, ref FROM properties ORDER BY id DESC LIMIT 200")
     day_start, day_end = utc_day_bounds(local_today())
     nf = l["next_follow_up"]
+    import media_share
     return render_template("leads/detail.html", l=l, comments=comments, trail=trail,
+                           media_listings=media_share.shareable_listings(l),
+                           media_shares=media_share.shares_for_lead(lid),
+                           share_url=media_share.share_url, now_stamp=now(),
                            viewings=viewings, props=props, stages=LEAD_STAGES,
                            lost_reasons=LOST_REASONS,
                            lost_label=LOST_REASON_LABELS.get(

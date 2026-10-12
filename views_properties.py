@@ -19,6 +19,7 @@ from db import (LEASE_NOTICE_DAYS, LISTING_TYPES, PROP_STATUS, PROP_TYPES,
 bp = Blueprint("properties", __name__, url_prefix="/properties")
 
 IMG_EXT = {"png", "jpg", "jpeg", "jfif", "webp", "gif", "heic", "heif", "bmp"}
+VIDEO_EXT = {"mp4", "mov", "m4v", "webm", "3gp"}
 DOC_EXT = {"pdf", "doc", "docx", "xls", "xlsx", "png", "jpg", "jpeg", "dwg", "txt"}
 
 
@@ -310,6 +311,7 @@ def detail(pid):
         return redirect(url_for("properties.index"))
     images = query("SELECT * FROM property_images WHERE property_id = ?"
                    " ORDER BY is_cover DESC, id", (pid,))
+    videos = query("SELECT * FROM property_videos WHERE property_id = ? ORDER BY id", (pid,))
     docs = query("SELECT d.*, u.name AS uploader FROM documents d"
                  " LEFT JOIN users u ON u.id = d.uploaded_by"
                  " WHERE d.property_id = ? ORDER BY d.id DESC", (pid,))
@@ -335,7 +337,8 @@ def detail(pid):
             tenant = leases.current_tenant(pid)
         lease_missing = not leases.has_rental_on_record(pid)
 
-    return render_template("properties/detail.html", p=p, images=images, docs=docs,
+    return render_template("properties/detail.html", p=p, images=images, videos=videos,
+                           docs=docs,
                            comments=comments, leads=leads, trail=trail, tenant=tenant,
                            lease_missing=lease_missing,
                            editable=can_edit(p), cutoff=days_ago(STALE_DAYS))
@@ -462,6 +465,19 @@ def form(pid=None):
         if skipped_names:
             flash("Couldn't use " + ", ".join(skipped_names) +
                   " — that file type isn't a supported photo format.", "error")
+        skipped_videos = []
+        for fs in request.files.getlist("videos"):
+            if not fs or not fs.filename:
+                continue
+            if _ext_ok(fs.filename, VIDEO_EXT):
+                execute("INSERT INTO property_videos (property_id, filename, original_name,"
+                        " created_at) VALUES (?,?,?,?)",
+                        (pid, _save(fs, "videos"), secure_filename(fs.filename), now()))
+            else:
+                skipped_videos.append(fs.filename)
+        if skipped_videos:
+            flash("Couldn't use " + ", ".join(skipped_videos) +
+                  " — upload videos as MP4 or MOV.", "error")
         if ask_lease:
             flash("Marked as rented. Enter the rental period and tenant so you "
                   "get reminded before the lease ends.", "ok")
@@ -657,6 +673,17 @@ def delete_image(pid, img_id):
     return redirect(url_for("properties.detail", pid=pid))
 
 
+@bp.route("/<int:pid>/videos/<int:vid>/delete", methods=("POST",))
+@login_required
+def delete_video(pid, vid):
+    prop = query("SELECT * FROM properties WHERE id = ?", (pid,), one=True)
+    if prop is None or not can_edit(prop):
+        flash("That listing belongs to another agent.", "error")
+        return redirect(url_for("properties.index"))
+    execute("DELETE FROM property_videos WHERE id = ? AND property_id = ?", (vid, pid))
+    return redirect(url_for("properties.detail", pid=pid))
+
+
 @bp.route("/<int:pid>/duplicate", methods=("POST",))
 @login_required
 def duplicate(pid):
@@ -698,6 +725,11 @@ def duplicate(pid):
                     " created_at) VALUES (?,?,?,?)",
                     (new_id, im["filename"], im["is_cover"], now()))
             copied_images += 1
+        for v in query("SELECT filename, original_name FROM property_videos"
+                       " WHERE property_id = ? ORDER BY id", (pid,)):
+            execute("INSERT INTO property_videos (property_id, filename, original_name,"
+                    " created_at) VALUES (?,?,?,?)",
+                    (new_id, v["filename"], v["original_name"], now()))
 
     copied_docs = 0
     if request.form.get("copy_docs"):

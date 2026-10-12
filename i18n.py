@@ -1189,6 +1189,26 @@ AR.update({
 })
 
 
+AR.update({
+    "Send photos & videos": "إرسال الصور والفيديوهات",
+    "photos": "صور",
+    "videos": "فيديوهات",
+    "Videos": "الفيديوهات",
+    "Add videos": "إضافة فيديوهات",
+    "MP4 plays on every phone. Up to 200 MB per save.": "صيغة MP4 تعمل على كل الهواتف. حتى 200 ميغابايت في كل حفظ.",
+    "Opens WhatsApp with a private link to every photo and video of the listing. The link works for 30 days.":
+        "يفتح واتساب مع رابط خاص لكل صور وفيديوهات العقار. يعمل الرابط لمدة 30 يوماً.",
+    "No published listing has photos or videos yet.": "لا يوجد عقار منشور يحتوي على صور أو فيديوهات بعد.",
+    "Link stopped": "تم إيقاف الرابط",
+    "Opened": "تم الفتح",
+    "Not opened yet": "لم يُفتح بعد",
+    "Copy link": "نسخ الرابط",
+    "Copied": "تم النسخ",
+    "Stop": "إيقاف",
+    "Stop this link? The client will no longer be able to open it.": "إيقاف هذا الرابط؟ لن يتمكن العميل من فتحه بعد الآن.",
+})
+
+
 def t(text):
     if current_lang() == "ar":
         return AR.get(text, text)

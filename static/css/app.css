@@ -2045,3 +2045,16 @@ td.pick { text-align: center; }
 [data-theme="dark"] .rail-brand img { border-radius: var(--radius); }
 [data-theme="dark"] .swatch-light i, [data-theme="dark"] .swatch-light b { border-color: #3A352C; }
 @media print { [data-theme="dark"] { color-scheme: light; } }
+
+/* Listing videos — on the property page and in the lead's "send media" box. */
+.video-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.video-list figure { margin: 0; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.video-list video { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: var(--radius); }
+
+.share-log { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.share-log .row { display: flex; gap: 8px; align-items: center; justify-content: space-between;
+                  font-size: 13px; padding: 8px 10px; border: 1px solid var(--line-soft);
+                  border-radius: var(--radius); }
+.share-log .row.off { opacity: .6; }
+.share-log .what { min-width: 0; flex: 1; }
+.share-log .what b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
