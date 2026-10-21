@@ -13,7 +13,9 @@ import uuid
 from flask import (Blueprint, current_app, flash, g, redirect, render_template,
                    request, url_for)
 
+import areas
 import importer
+import partner_formats
 import normalize
 from auth import admin_required, login_required, requires
 from db import (IMPORT_MODES, LISTING_TYPES, PROP_STATUS, PROP_TYPES, execute,
@@ -108,6 +110,26 @@ def review(token):
         # buildings' lists side by side instead of stacking them — read
         # each as its own table so the second one isn't dropped or blended
         # into the first (see importer.find_column_blocks).
+        # A partner whose layout we know is read by its own reader, not guessed
+        fmt = partner_formats.detect(ws)
+        if fmt:
+            listings = partner_formats.read(ws, {"known_buildings": known})
+            flagged = [l for l in listings if l.get("issues")]
+            summary = {}
+            for l in flagged:
+                for issue in l["issues"]:
+                    summary[issue] = summary.get(issue, 0) + 1
+            sheets.append({
+                "name": name, "format": fmt, "count": len(listings),
+                "flagged": len(flagged),
+                "issue_summary": ", ".join(f"{n} {k}" for k, n in
+                                           sorted(summary.items(), key=lambda x: -x[1])),
+                "missing_area": sorted({l["building_no"] for l in listings if not l["area"]}),
+                "preview": listings[:MAX_PREVIEW], "header_row": 0, "headers": [],
+                "mapping": {}, "context": "", "building": "", "area": "",
+                "total_rows": len(listings), "extra_tables": 0, "banner_labels": [],
+            })
+            continue
         infos = importer.read_sheet_blocks(ws)
         listings = []
         banner_labels = []
@@ -222,7 +244,8 @@ def commit(token):
         # only — later tables keep their own auto-detected mapping, since
         # applying a first-table override to a second table's differently
         # positioned columns would scramble it rather than fix it.
-        infos = importer.read_sheet_blocks(ws, header_row=header_row)
+        fmt = partner_formats.detect(ws)
+        infos = [] if fmt else importer.read_sheet_blocks(ws, header_row=header_row)
 
         # whatever the reviewer chose on screen wins over the guess
         mapping = {}
@@ -241,6 +264,16 @@ def commit(token):
             "status": d.get("status", "Available"),
         }
         listings = []
+        if fmt:
+            listings = partner_formats.read(ws, defaults)
+            # the reviewer's area for buildings the file didn't place
+            fallback = defaults["area"] if areas.is_listed(defaults["area"]) else ""
+            for item in listings:
+                if not item["area"] and fallback:
+                    item["area"] = fallback
+                    item["title"] = normalize.standard_title(
+                        item["prop_type"], item["bedrooms"], item["building_no"],
+                        item["unit_no"], fallback)
         for i, info in enumerate(infos):
             use_mapping = mapping if i == 0 and mapping else info["mapping"]
             # As in review(): a block's own section heading ('Studio', 'One

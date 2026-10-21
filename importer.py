@@ -216,9 +216,11 @@ def parse_bathrooms(value):
     text = clean(value)
     if not text:
         return None
-    m = re.search(rf"(\d+)\s*[-+/]?\s*(?:{BATH_WORDS})", text, re.IGNORECASE)
+    # '1.5 Bathroom' is one full bathroom and a guest toilet: count the full
+    # ones. Reading digits alone used to take the '5' after the point.
+    m = re.search(rf"(?<![\d.])(\d+(?:\.\d+)?)\s*[-+/]?\s*(?:{BATH_WORDS})", text, re.IGNORECASE)
     if m:
-        return int(m.group(1))
+        return int(float(m.group(1)))
     m = re.search(rf"(?:{BATH_WORDS})\s*[:=-]?\s*(\d+)", text, re.IGNORECASE)
     if m:
         return int(m.group(1))

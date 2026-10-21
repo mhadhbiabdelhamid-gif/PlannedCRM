@@ -163,10 +163,16 @@ _U_OUT = re.compile(
     r"(utilit\w*|bills?|electricity|kahramaa)\s+(are\s+|is\s+)?(not|excluded|exclusive|"
     r"extra)|excluding\s+(the\s+)?(utilit\w*|bills?)|exclusive\s+of\s+(utilit\w*|bills?)|"
     r"(utilit\w*|bills?)\s+not\s+includ|without\s+(utilit\w*|bills?)|"
-    r"(utilit\w*|bills?)\s+(to\s+be\s+)?paid\s+by\s+tenant", re.IGNORECASE)
+    r"(utilit\w*|bills?)\s+(to\s+be\s+)?paid\s+by\s+tenant|"
+    # 'Excluding Water & Electricity'
+    r"(excluding|exclusive\s+of|without)\s+(the\s+)?(water|electricity|kahramaa)", re.IGNORECASE)
 _U_IN = re.compile(
     r"including\s+(the\s+)?(utilit\w*|bills?)|(utilit\w*|bills?)\s+(are\s+|is\s+)?"
-    r"includ|inclusive\s+of\s+(utilit\w*|bills?)|all\s+inclusive|شامل", re.IGNORECASE)
+    r"includ|inclusive\s+of\s+(utilit\w*|bills?)|all\s+inclusive|شامل|"
+    # 'Including Water & Electricity', 'Water and electricity included'
+    r"includ\w*\s+(the\s+)?(water|electricity|kahramaa)|"
+    r"(water|electricity|kahramaa)(\s*(&|and|/)\s*(water|electricity))?\s+(are\s+|is\s+)?includ",
+    re.IGNORECASE)
 _I_OUT = re.compile(r"\bno\s+(wi-?fi|internet)|(wi-?fi|internet)\s+(is\s+)?(not|excluded)",
                     re.IGNORECASE)
 _I_IN = re.compile(r"(wi-?fi|internet)\s+(is\s+)?(includ|yes|free)|"

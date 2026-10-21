@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_area_select.html" import area_select with context %}
 {% block title %}{{ t('Check the import') }}{% endblock %}
 
 {% block content %}
@@ -100,7 +101,7 @@
       </label>
     </h3>
     <span class="mono {{ 'muted' if sheet.count else 'faint' }}">
-      {{ sheet.count }} {{ t('listings found') }} · {{ t('header at row') }} {{ sheet.header_row }}
+      {{ sheet.count }} {{ t('listings found') }}{% if not sheet.format %} · {{ t('header at row') }} {{ sheet.header_row }}{% endif %}
       {%- if sheet.extra_tables %} · {{ sheet.extra_tables }}
         {{ t('more table(s) found further across this sheet — read separately and included automatically') }}
       {%- endif %}
@@ -117,6 +118,19 @@
       </p>
     {% endif %}
 
+    {% if sheet.format %}
+      <div class="small" style="margin:0 0 14px;padding:10px 12px;border-radius:var(--radius);
+           background:var(--gold-tint);border:1px solid var(--line)">
+        <b>{{ t('Recognised format') }}: {{ sheet.format }}.</b>
+        {{ t('This partner’s layout is known, so every building block is read by its own column names — nothing to map.') }}
+      </div>
+      {% if sheet.missing_area %}
+      <div class="field" style="max-width:420px;margin-bottom:14px">
+        <label>{{ t('Area for the buildings the file does not place') }} ({{ sheet.missing_area | join(', ') }})</label>
+        {{ area_select('', name='area__' ~ sheet.name, id='area__' ~ sheet.name, any_label=t('Leave for later'), required=False, note=False) }}
+      </div>
+      {% endif %}
+    {% else %}
     <div class="filters" style="margin-bottom:14px">
       <div class="field">
         <label>{{ t('Header is on row') }}</label>
@@ -163,6 +177,8 @@
         </div>
       {% endfor %}
     </div>
+
+    {% endif %}
 
     {% if sheet.flagged %}
       <div class="inline" style="gap:8px;margin-bottom:12px;padding:10px 12px;
