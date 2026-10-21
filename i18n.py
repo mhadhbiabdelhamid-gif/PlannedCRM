@@ -1254,6 +1254,7 @@ AR.update({
     "Area photo updated.": "تم تحديث صورة المنطقة.",
     "Area photo removed.": "تم حذف صورة المنطقة.",
     "Please choose a JPG, PNG or WEBP photo.": "يرجى اختيار صورة JPG أو PNG أو WEBP.",
+    "Please choose a JPG, JFIF, PNG or WEBP photo.": "يرجى اختيار صورة JPG أو JFIF أو PNG أو WEBP.",
     "Only an admin or manager can change area photos.": "تغيير صور المناطق متاح للمدير أو المشرف فقط.",
 })
 

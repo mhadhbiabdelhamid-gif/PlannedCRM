@@ -73,7 +73,7 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                  stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h3l2-2h6l2 2h3v12H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
             {{ t('Change photo') if a.own_cover else t('Add area photo') }}
-            <input type="file" name="photo" accept="image/jpeg,image/png,image/webp" onchange="this.form.submit()" hidden>
+            <input type="file" name="photo" accept="image/jpeg,image/png,image/webp,.jfif,.jpe" onchange="this.form.submit()" hidden>
           </label>
           {% if a.own_cover %}
             <button type="submit" name="remove" value="1" title="{{ t('Remove area photo') }}"

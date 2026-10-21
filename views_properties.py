@@ -373,7 +373,7 @@ def by_area():
 
 
 AREA_COVER_KEY = "area_cover:"
-COVER_EXT = {"png", "jpg", "jpeg", "webp"}
+COVER_EXT = {"png", "jpg", "jpeg", "jfif", "jpe", "webp"}
 
 
 @bp.route("/areas/cover", methods=("POST",))
@@ -395,8 +395,13 @@ def area_cover():
         flash(t("Area photo removed."), "ok")
     elif photo and photo.filename:
         if not _ext_ok(photo.filename, COVER_EXT):
-            flash(t("Please choose a JPG, PNG or WEBP photo."), "error")
+            flash(t("Please choose a JPG, JFIF, PNG or WEBP photo."), "error")
             return redirect(url_for("properties.by_area"))
+        # .jfif / .jpe are ordinary JPEGs under another name; store them as
+        # .jpg so every browser is sent the right image type
+        base, ext = os.path.splitext(photo.filename)
+        if ext.lower() in (".jfif", ".jpe"):
+            photo.filename = base + ".jpg"
         set_setting(key, _save(photo, "images"))
         log(g.user["id"], "area_cover", "area", None, name)
         flash(t("Area photo updated."), "ok")
