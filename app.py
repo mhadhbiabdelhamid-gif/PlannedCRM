@@ -337,6 +337,7 @@ def create_app():
             currency=get_setting("currency", "QAR"),
             stages=LEAD_STAGES,
             user=g.get("user"),
+            is_admin_user=bool(g.get("user") is not None and g.user["role"] == "admin"),
             unread=g.get("unread", 0),
             year=local_now().year,
             t=t,

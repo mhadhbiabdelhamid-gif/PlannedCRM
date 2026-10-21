@@ -11,7 +11,7 @@ from flask import (Blueprint, current_app, flash, g, redirect, render_template,
                    request, session, url_for)
 from werkzeug.utils import secure_filename
 
-from auth import (can, can_edit, can_publish, can_see_listing, is_admin,
+from auth import (admin_required, can, can_edit, can_publish, can_see_listing, is_admin,
                   login_required, published_only, sees_all)
 from db import (LEASE_NOTICE_DAYS, LISTING_TYPES, PROP_STATUS, PROP_TYPES,
                 STALE_DAYS, days_ago, execute, get_setting, set_setting, local_today, log,
@@ -965,7 +965,7 @@ def verify(pid):
 
 
 @bp.route("/waiting")
-@login_required
+@admin_required
 def waiting():
     """Listings an agent or manager has proposed but nobody has published.
 
@@ -1105,7 +1105,7 @@ def stale():
 
 
 @bp.route("/leases")
-@login_required
+@admin_required
 def leases_ending():
     """Tenancies that have run out, or are about to.
 

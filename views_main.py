@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from flask import (Blueprint, current_app, g, jsonify, redirect,
                    render_template, request, send_from_directory, url_for)
 
-from auth import admin_required, login_required, published_only, sees_all
+from auth import admin_required, is_admin, login_required, published_only, sees_all
 from db import execute, local_now, local_today, paginate, query, utc_day_bounds
 
 bp = Blueprint("main", __name__)
@@ -143,6 +143,11 @@ def _todo_lists():
     lease_items = [{"deal": r, "left": leases.days_left(r["lease_end"], today)}
                    for r in lease_rows[:TODO_LIMIT]]
 
+    # Approvals and ending leases are followed by the admin, who keeps the
+    # team updated; staff see only what they act on themselves.
+    if not is_admin():
+        waiting, waiting_total, lease_rows, lease_items = [], 0, [], []
+
     return {
         "publisher": publisher,
         "waiting": waiting, "waiting_total": waiting_total,
@@ -244,21 +249,30 @@ def search():
         props = query(
             "SELECT * FROM properties p WHERE 1=1" + clause + published_only("p") +
             " ORDER BY p.id DESC LIMIT 25", args)
+        # archived clients are the admin's; staff search the live pipeline
+        arch, arch_args = ("", [])
+        if not is_admin():
+            from views_leads import _not_archived
+            arch, arch_args = _not_archived()
         leads = query(
             "SELECT l.*, u.name AS agent_name FROM leads l"
             " LEFT JOIN users u ON u.id = l.agent_id"
-            " WHERE l.full_name LIKE ? OR l.phone LIKE ? OR l.email LIKE ?"
-            " OR l.ref LIKE ? ORDER BY l.id DESC LIMIT 25",
-            (like, like, like, like))
-        owners = query(
-            "SELECT * FROM owners WHERE name LIKE ? OR phone LIKE ? LIMIT 15",
-            (like, like))
+            " WHERE (l.full_name LIKE ? OR l.phone LIKE ? OR l.email LIKE ?"
+            " OR l.ref LIKE ?)" + arch + " ORDER BY l.id DESC LIMIT 25",
+            [like, like, like, like] + arch_args)
+        if is_admin():
+            owners = query(
+                "SELECT * FROM owners WHERE name LIKE ? OR phone LIKE ? LIMIT 15",
+                (like, like))
     return render_template("search.html", q=q, props=props, leads=leads, owners=owners)
 
 
 @bp.route("/notifications")
 @login_required
 def notifications():
+    # The team's activity feed is the admin's; staff work from their dashboard.
+    if not is_admin():
+        return redirect(url_for("main.dashboard"))
     items = query("SELECT * FROM notifications WHERE user_id = ?"
                   " ORDER BY id DESC LIMIT 100", (g.user["id"],))
     execute("UPDATE notifications SET is_read = 1 WHERE user_id = ?", (g.user["id"],))
@@ -268,6 +282,8 @@ def notifications():
 @bp.route("/notifications/count")
 @login_required
 def notifications_count():
+    if not is_admin():
+        return jsonify(count=0)
     row = query("SELECT COUNT(*) c FROM notifications WHERE user_id = ? AND is_read = 0",
                 (g.user["id"],), one=True)
     return jsonify(count=row["c"])

@@ -36,10 +36,10 @@
     <span class="txt"><b>{{ t('New leads') }}</b>
       <em>{{ new_leads }} {{ t('today') }} · {{ t('in the last 7 days') }}</em></span>
   </a>
-  <a class="today-tile" href="{{ url_for('properties.stale') if todo.stale_total or not todo.waiting_total else url_for('properties.waiting') }}">
+  <a class="today-tile" href="{{ url_for('properties.stale') if todo.stale_total or not todo.waiting_total or not is_admin_user else url_for('properties.waiting') }}">
     <span class="num {{ 'warn' if attention }}">{{ attention }}</span>
     <span class="txt"><b>{{ t('Listings need attention') }}</b>
-      <em>{{ t('approve or re-check') }}</em></span>
+      <em>{{ t('approve or re-check') if is_admin_user else t('re-check') }}</em></span>
   </a>
 </div>
 

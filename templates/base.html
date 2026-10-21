@@ -78,18 +78,22 @@
          href="{{ url_for('properties.fix_areas') }}">
         {{ t('Fix areas') }}</a>
       {% endif %}
+      {% if is_admin_user %}
       <a class="rail-link sub {{ 'active' if request.endpoint == 'properties.waiting' }}"
          href="{{ url_for('properties.waiting') }}">
         {{ t('Waiting for approval') }}
         {% if waiting_count %}<span class="pill">{{ waiting_count }}</span>{% endif %}</a>
+      {% endif %}
       <a class="rail-link sub {{ 'active' if request.endpoint == 'properties.stale' }}"
          href="{{ url_for('properties.stale') }}">
         {{ t('Stale listings') }}
         {% if stale_count %}<span class="pill">{{ stale_count }}</span>{% endif %}</a>
+      {% if is_admin_user %}
       <a class="rail-link sub {{ 'active' if request.endpoint == 'properties.leases_ending' }}"
          href="{{ url_for('properties.leases_ending') }}">
         {{ t('Leases ending') }}
         {% if lease_count %}<span class="pill">{{ lease_count }}</span>{% endif %}</a>
+      {% endif %}
       {% if can('import') %}
       <a class="rail-link sub {{ 'active' if request.endpoint in ('imports.upload', 'imports.history') }}"
          href="{{ url_for('imports.upload') }}">
@@ -109,9 +113,11 @@
       <a class="rail-link sub {{ 'active' if request.endpoint == 'leads.priority' }}"
          href="{{ url_for('leads.priority') }}">
         {{ t("Today's priorities") }}</a>
+      {% if is_admin_user %}
       <a class="rail-link sub {{ 'active' if request.endpoint == 'leads.archive' }}"
          href="{{ url_for('leads.archive') }}">
         {{ t('Archived clients') }}</a>
+      {% endif %}
     </details>
     {% endif %}
 
@@ -128,7 +134,7 @@
       {% endif %}
     </details>
 
-    {% if not is_accountant %}
+    {% if is_admin_user %}
     <details class="rail-sec" name="railsec"
              {{ 'open' if request.blueprint == 'contacts' }}>
       <summary>{{ t('Directory') }}</summary>
@@ -184,10 +190,10 @@
     {# Kept outside the sections: two single screens with nowhere sensible to
        live, opened often enough that burying them behind a menu would cost
        more than it saves. #}
+    {% if is_admin_user %}
     <a class="rail-link rail-solo {{ 'active' if request.endpoint == 'main.notifications' }}"
        href="{{ url_for('main.notifications') }}">{{ t('Notifications') }}
       {% if unread %}<span class="pill">{{ unread }}</span>{% endif %}</a>
-    {% if is_admin_user %}
     <a class="rail-link rail-solo {{ 'active' if request.endpoint == 'admin.settings' }}"
        href="{{ url_for('admin.settings') }}">{{ t('Settings') }}</a>
     {% endif %}
@@ -231,11 +237,13 @@
 
     <div class="topbar-spacer"></div>
 
+    {% if is_admin_user %}
     <a class="bell" href="{{ url_for('main.notifications') }}" aria-label="{{ t('Notifications') }}">
       <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
         <path d="M4 6a4 4 0 118 0c0 3 1 4 1 4H3s1-1 1-4z"/><path d="M6.5 13a1.5 1.5 0 003 0"/></svg>
       {% if unread %}<span class="dot">{{ unread }}</span>{% endif %}
     </a>
+    {% endif %}
 
     <a class="userchip" href="{{ url_for('auth.account') }}"
        aria-label="{{ t('My account') }} — {{ user.name }}">

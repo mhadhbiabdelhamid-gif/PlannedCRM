@@ -23,6 +23,16 @@ from db import (DEPARTMENTS, EMPLOYMENT, PARTNER_TYPES, execute, get_setting,
                 log, notify, now, query, set_setting)
 
 contacts = Blueprint("contacts", __name__, url_prefix="/directory")
+
+
+@contacts.before_request
+def _directory_admin_only():
+    """Owners and partners are company information: admins only."""
+    if g.get("user") is None:
+        return redirect(url_for("auth.login", next=request.path))
+    if g.user["role"] != "admin":
+        flash("That area is limited to admins.", "error")
+        return redirect(url_for("main.dashboard"))
 admin = Blueprint("admin", __name__, url_prefix="/admin")
 
 

@@ -1230,6 +1230,8 @@ AR.update({
     "Saved as": "محفوظة باسم",
     "please confirm the area from the list.": "يرجى تأكيد المنطقة من القائمة.",
     "Fix areas": "تصحيح المناطق",
+    "re-check": "إعادة تأكيد",
+    "That area is limited to admins.": "هذا القسم متاح للمدير فقط.",
     "Only an admin or manager can fix areas.": "تصحيح المناطق متاح للمدير أو المشرف فقط.",
     "Each line is an area written in a way that is not on the list of Qatar areas. Pick the right area and press Save: every listing using that text moves onto it.": "كل سطر هو منطقة مكتوبة بطريقة غير موجودة في قائمة مناطق قطر. اختر المنطقة الصحيحة واضغط حفظ لنقل كل العقارات التي تستخدم هذا النص إليها.",
     "With “Keep the text” ticked, the old text (keys, landmark, street) is added to the listing description so nothing is lost. Lines left on “Skip for now” are not touched. A backup is taken before saving.": "عند تحديد «احتفظ بالنص» يُضاف النص القديم (المفاتيح، المعلم، الشارع) إلى وصف العقار حتى لا يضيع شيء. الأسطر المتروكة على «تخطَّ الآن» لا تتغير. تُؤخذ نسخة احتياطية قبل الحفظ.",

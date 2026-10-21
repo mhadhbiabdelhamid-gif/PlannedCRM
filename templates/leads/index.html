@@ -9,8 +9,10 @@
   </div>
   <div class="actions">
     <a class="btn" href="{{ url_for('leads.board') }}">{{ t('Board view') }}</a>
+    {% if is_admin_user %}
     <a class="btn" href="{{ url_for('leads.archive') }}">{{ t('Archived clients') }}
       {% if archived_count %}<span class="pill">{{ archived_count }}</span>{% endif %}</a>
+    {% endif %}
     {% if can('ads_leads') %}
       <a class="btn" href="{{ url_for('ads_leads.index') }}">{{ t('Import from ads') }}</a>
     {% endif %}

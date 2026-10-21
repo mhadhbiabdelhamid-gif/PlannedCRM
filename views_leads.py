@@ -6,7 +6,7 @@ from datetime import datetime
 from flask import (Blueprint, current_app, flash, g, jsonify, redirect,
                    render_template, request, send_file, url_for)
 
-from auth import can, can_edit, is_admin, login_required, sees_all
+from auth import admin_required, can, can_edit, is_admin, login_required, sees_all
 from datetime import timedelta
 
 from db import (ARCHIVE_DAYS, CLOSED_STAGES, LEAD_SOURCES, LEAD_STAGES,
@@ -178,7 +178,7 @@ def index():
 
 
 @bp.route("/archive")
-@login_required
+@admin_required
 def archive():
     """Clients settled — won or lost — more than a few days ago.
 
