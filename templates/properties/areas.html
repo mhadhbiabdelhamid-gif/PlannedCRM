@@ -56,7 +56,25 @@
        aria-label="{{ t('Open listings in') }} {{ a.ar if lang == 'ar' else a.name }}"></a>
     <div class="area-top">
       <span class="area-no">{{ '%02d' % loop.index }}</span>
-      {% if a.ours %}<span class="area-ours">{{ a.ours }} {{ t('ours') }}</span>{% endif %}
+      <span class="area-top-end">
+        {% if a.ours %}<span class="area-ours">{{ a.ours }} {{ t('ours') }}</span>{% endif %}
+        {% if can_set_cover %}
+        <form class="area-photo" method="post" action="{{ url_for('properties.area_cover') }}"
+              enctype="multipart/form-data">
+          <input type="hidden" name="area" value="{{ a.name }}">
+          <label title="{{ t('Change area photo') }}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h3l2-2h6l2 2h3v12H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+            {{ t('Change photo') if a.own_cover else t('Add area photo') }}
+            <input type="file" name="photo" accept="image/jpeg,image/png,image/webp" onchange="this.form.submit()" hidden>
+          </label>
+          {% if a.own_cover %}
+            <button type="submit" name="remove" value="1" title="{{ t('Remove area photo') }}"
+                    onclick="return confirm('{{ t('Remove this area photo?') }}')">×</button>
+          {% endif %}
+        </form>
+        {% endif %}
+      </span>
     </div>
     <h3>{{ a.ar if lang == 'ar' else a.name }}
       {% if lang != 'ar' and a.ar != a.name %}<small>{{ a.ar }}</small>{% endif %}</h3>

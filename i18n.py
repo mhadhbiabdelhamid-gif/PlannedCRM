@@ -1224,6 +1224,15 @@ AR.update({
     "No listings yet.": "لا توجد عقارات بعد.",
     "listings have no area set and are not shown on a card.": "عقار بدون منطقة محددة ولا يظهر في أي بطاقة.",
     "See all listings": "عرض كل العقارات",
+    "Add area photo": "إضافة صورة للمنطقة",
+    "Change photo": "تغيير الصورة",
+    "Change area photo": "تغيير صورة المنطقة",
+    "Remove area photo": "حذف صورة المنطقة",
+    "Remove this area photo?": "حذف صورة هذه المنطقة؟",
+    "Area photo updated.": "تم تحديث صورة المنطقة.",
+    "Area photo removed.": "تم حذف صورة المنطقة.",
+    "Please choose a JPG, PNG or WEBP photo.": "يرجى اختيار صورة JPG أو PNG أو WEBP.",
+    "Only an admin or manager can change area photos.": "تغيير صور المناطق متاح للمدير أو المشرف فقط.",
 })
 
 

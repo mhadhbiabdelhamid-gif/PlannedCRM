@@ -6,6 +6,7 @@ import areas
 import maps
 import normalize
 
+from i18n import t
 from flask import (Blueprint, current_app, flash, g, redirect, render_template,
                    request, session, url_for)
 from werkzeug.utils import secure_filename
@@ -13,7 +14,7 @@ from werkzeug.utils import secure_filename
 from auth import (can, can_edit, can_publish, can_see_listing, is_admin,
                   login_required, published_only, sees_all)
 from db import (LEASE_NOTICE_DAYS, LISTING_TYPES, PROP_STATUS, PROP_TYPES,
-                STALE_DAYS, days_ago, execute, get_setting, local_today, log,
+                STALE_DAYS, days_ago, execute, get_setting, set_setting, local_today, log,
                 next_ref, notify, now, paginate, query)
 
 bp = Blueprint("properties", __name__, url_prefix="/properties")
@@ -342,6 +343,10 @@ def by_area():
     cards = sorted(groups.values(), key=lambda a: (-a["total"], a["name"].lower()))
     for a in cards:
         a["buildings"] = len(a["buildings"])
+        # a cover chosen for the area itself beats a photo borrowed from a listing
+        own = get_setting(AREA_COVER_KEY + a["name"], "")
+        if own:
+            a["cover"], a["own_cover"] = own, True
         a["share"] = round(100 * a["available"] / a["total"]) if a["total"] else 0
 
     totals = {
@@ -352,7 +357,45 @@ def by_area():
         "areas": len(cards),
     }
     return render_template("properties/areas.html", cards=cards, totals=totals,
-                           unplaced=unplaced)
+                           unplaced=unplaced, can_set_cover=sees_all())
+
+
+AREA_COVER_KEY = "area_cover:"
+COVER_EXT = {"png", "jpg", "jpeg", "webp"}
+
+
+@bp.route("/areas/cover", methods=("POST",))
+@login_required
+def area_cover():
+    """Set or remove the cover photo shown on one area's card.
+    Admins and managers only — it changes what everyone sees."""
+    if not sees_all():
+        flash(t("Only an admin or manager can change area photos."), "error")
+        return redirect(url_for("properties.by_area"))
+    name = request.form.get("area", "").strip()
+    if not name:
+        return redirect(url_for("properties.by_area"))
+    key = AREA_COVER_KEY + name
+    old = get_setting(key, "")
+    photo = request.files.get("photo")
+    if request.form.get("remove"):
+        set_setting(key, "")
+        flash(t("Area photo removed."), "ok")
+    elif photo and photo.filename:
+        if not _ext_ok(photo.filename, COVER_EXT):
+            flash(t("Please choose a JPG, PNG or WEBP photo."), "error")
+            return redirect(url_for("properties.by_area"))
+        set_setting(key, _save(photo, "images"))
+        log(g.user["id"], "area_cover", "area", None, name)
+        flash(t("Area photo updated."), "ok")
+    else:
+        return redirect(url_for("properties.by_area"))
+    if old:
+        try:
+            os.remove(os.path.join(current_app.config["UPLOAD_FOLDER"], "images", old))
+        except OSError:
+            pass
+    return redirect(url_for("properties.by_area"))
 
 
 @bp.route("/<int:pid>")

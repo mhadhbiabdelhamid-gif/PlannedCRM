@@ -2160,3 +2160,11 @@ a.area-stat:hover { border-color: var(--gold); }
   .area-card h3 { font-size: 24px; }
   .area-search .btn { display: none; }
 }
+
+.area-top-end { display: flex; align-items: center; gap: 6px; }
+.area-photo { position: relative; z-index: 2; display: flex; gap: 4px; margin: 0; }
+.area-photo label, .area-photo button { display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
+  font: inherit; font-size: 12px; font-weight: 600; color: #fff; padding: 3px 10px; border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.35); background: rgba(0,0,0,.45); }
+.area-photo button { padding: 3px 8px; }
+.area-photo label:hover, .area-photo button:hover { background: var(--gold-lift); border-color: var(--gold-lift); color: #15130F; }
