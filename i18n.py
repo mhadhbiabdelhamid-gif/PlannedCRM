@@ -1206,6 +1206,24 @@ AR.update({
     "Copied": "تم النسخ",
     "Stop": "إيقاف",
     "Stop this link? The client will no longer be able to open it.": "إيقاف هذا الرابط؟ لن يتمكن العميل من فتحه بعد الآن.",
+    # browse by area
+    "Browse by area": "تصفح حسب المنطقة",
+    "Find the right unit, faster": "اعثر على الوحدة المناسبة بسرعة",
+    "All listings": "كل العقارات",
+    "Total units": "إجمالي الوحدات",
+    "Available now": "متاح الآن",
+    "Buildings": "المباني",
+    "Areas": "المناطق",
+    "Units": "الوحدات",
+    "Open listings in": "عرض العقارات في",
+    "ours": "لنا",
+    "available": "متاح",
+    "From": "من",
+    "mo": "شهر",
+    "Nothing available right now": "لا يوجد متاح حالياً",
+    "No listings yet.": "لا توجد عقارات بعد.",
+    "listings have no area set and are not shown on a card.": "عقار بدون منطقة محددة ولا يظهر في أي بطاقة.",
+    "See all listings": "عرض كل العقارات",
 })
 
 

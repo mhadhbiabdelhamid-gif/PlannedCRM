@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Browse by area') }}{% endblock %}
+
+{% block content %}
+{#
+  The stock, one card per district. Clicking a card opens the ordinary
+  Properties list already filtered to that area, so staff pick a place
+  instead of typing one. Counts only include published listings.
+#}
+<div class="page-head area-head">
+  <div>
+    <div class="eyebrow">02 · {{ t('Listings') }}</div>
+    <h1 class="page-title">{{ t('Find the right unit, faster') }}</h1>
+  </div>
+  <div class="actions">
+    <a class="btn" href="{{ url_for('properties.index', reset=1) }}">{{ t('All listings') }}</a>
+    <a class="btn btn-gold" href="{{ url_for('properties.form') }}">{{ t('Add listing') }}</a>
+  </div>
+</div>
+
+<form class="area-search" action="{{ url_for('properties.index') }}" method="get" role="search">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+       stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+  <input type="search" name="q" aria-label="{{ t('Search') }}"
+         placeholder="{{ t('e.g. 2 bed furnished Pearl sea view, or a building / flat') }}">
+  <button class="btn btn-dark" type="submit">{{ t('Search') }}</button>
+</form>
+
+<div class="area-stats">
+  <a class="area-stat" href="{{ url_for('properties.index', reset=1) }}">
+    <span class="num">{{ totals.units }}</span><span class="lbl">{{ t('Total units') }}</span></a>
+  <a class="area-stat" href="{{ url_for('properties.index', status='Available') }}">
+    <span class="num ok">{{ totals.available }}</span><span class="lbl">{{ t('Available now') }}</span></a>
+  <div class="area-stat">
+    <span class="num">{{ totals.buildings }}</span><span class="lbl">{{ t('Buildings') }}</span></div>
+  <div class="area-stat">
+    <span class="num">{{ totals.areas }}</span><span class="lbl">{{ t('Areas') }}</span></div>
+</div>
+
+{% if cards %}
+<nav class="area-chips" aria-label="{{ t('Areas') }}">
+  {% for a in cards %}
+    <a class="area-chip" href="{{ url_for('properties.index', area=a.name) }}">
+      {{ a.ar if lang == 'ar' else a.name }} <b>{{ a.available }}</b></a>
+  {% endfor %}
+  <a class="area-chip all" href="{{ url_for('properties.index', reset=1) }}">{{ t('All') }} →</a>
+</nav>
+
+<h2 class="area-title">{{ t('Browse by area') }}</h2>
+
+<div class="area-grid">
+  {% for a in cards %}
+  <article class="area-card {{ 'wide' if loop.index <= 2 }} {{ 'no-photo' if not a.cover }}"
+       {% if a.cover %}style="background-image:url('{{ url_for('main.uploaded_file', kind='images', filename=a.cover) }}')"{% endif %}>
+    <a class="area-cover-link" href="{{ url_for('properties.index', area=a.name) }}"
+       aria-label="{{ t('Open listings in') }} {{ a.ar if lang == 'ar' else a.name }}"></a>
+    <div class="area-top">
+      <span class="area-no">{{ '%02d' % loop.index }}</span>
+      {% if a.ours %}<span class="area-ours">{{ a.ours }} {{ t('ours') }}</span>{% endif %}
+    </div>
+    <h3>{{ a.ar if lang == 'ar' else a.name }}
+      {% if lang != 'ar' and a.ar != a.name %}<small>{{ a.ar }}</small>{% endif %}</h3>
+    <div class="area-bar" title="{{ a.share }}% {{ t('available') }}">
+      <span style="width:{{ a.share }}%"></span><em>{{ a.share }}%</em></div>
+    <div class="area-nums">
+      <div><b>{{ a.available }}</b><span>{{ t('Available') }}</span></div>
+      <div><b>{{ a.buildings }}</b><span>{{ t('Buildings') }}</span></div>
+      <div><b>{{ a.total }}</b><span>{{ t('Units') }}</span></div>
+    </div>
+    <div class="area-foot">
+      <span class="area-from">
+        {% if a.rent_from %}{{ t('From') }} <b>{{ currency }} {{ a.rent_from | money }}</b> /{{ t('mo') }}
+        {% elif a.sale_from %}{{ t('From') }} <b>{{ currency }} {{ a.sale_from | money }}</b>
+        {% else %}{{ t('Nothing available right now') }}{% endif %}
+      </span>
+      <span class="area-quick">
+        {% if a.available %}<a href="{{ url_for('properties.index', area=a.name, status='Available') }}">{{ t('Available') }}</a>{% endif %}
+        <a href="{{ url_for('properties.index', area=a.name, listing_type='Rent') }}">{{ t('Rent') }}</a>
+        <a href="{{ url_for('properties.index', area=a.name, listing_type='Sale') }}">{{ t('Sale') }}</a>
+      </span>
+    </div>
+  </article>
+  {% endfor %}
+</div>
+{% else %}
+  <div class="card"><div class="empty">{{ t('No listings yet.') }}</div></div>
+{% endif %}
+
+{% if unplaced %}
+  <p class="small muted" style="margin-top:16px">
+    {{ unplaced }} {{ t('listings have no area set and are not shown on a card.') }}
+    <a href="{{ url_for('properties.index', reset=1) }}">{{ t('See all listings') }}</a></p>
+{% endif %}
+{% endblock %}

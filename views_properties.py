@@ -288,6 +288,73 @@ def index():
                            partners_list=query("SELECT id, name FROM partners ORDER BY name"))
 
 
+def _area_group(raw):
+    """The card a listing's area belongs on: its canonical English name,
+    rolled up to the parent district (Porto Arabia sits under The Pearl).
+    Unrecognised text keeps its own spelling; blanks get None."""
+    text = (raw or "").strip()
+    if not text:
+        return None
+    hit = areas.lookup(text)
+    if not hit:
+        return text
+    return areas.PARENT.get(hit["en"], hit["en"])
+
+
+@bp.route("/areas")
+@login_required
+def by_area():
+    """Browse the stock by district: one card per area with its counts and a
+    photo from one of its own listings. A card opens the normal list already
+    filtered to that area, so nobody has to type a location to get there."""
+    rows = query(
+        "SELECT p.id, p.area, p.status, p.price, p.listing_type, p.building_no,"
+        " COALESCE(p.is_own, 0) AS is_own,"
+        " (SELECT filename FROM property_images i WHERE i.property_id = p.id"
+        "   ORDER BY is_cover DESC, id LIMIT 1) AS cover"
+        " FROM properties p WHERE 1=1" + published_only("p") + " ORDER BY p.id DESC")
+
+    groups, unplaced = {}, 0
+    for r in rows:
+        name = _area_group(r["area"])
+        if name is None:
+            unplaced += 1
+            continue
+        a = groups.setdefault(name, {
+            "name": name, "ar": areas.in_arabic(name), "total": 0, "available": 0,
+            "ours": 0, "buildings": set(), "rent_from": None, "sale_from": None,
+            "cover": None, "cover_available": False})
+        a["total"] += 1
+        a["ours"] += r["is_own"]
+        if (r["building_no"] or "").strip():
+            a["buildings"].add(r["building_no"].strip().lower())
+        free = r["status"] == "Available"
+        if free:
+            a["available"] += 1
+            if r["price"]:
+                key = "rent_from" if r["listing_type"] == "Rent" else "sale_from"
+                if a[key] is None or r["price"] < a[key]:
+                    a[key] = r["price"]
+        # newest photo, preferring one of a unit that can still be offered
+        if r["cover"] and (a["cover"] is None or (free and not a["cover_available"])):
+            a["cover"], a["cover_available"] = r["cover"], free
+
+    cards = sorted(groups.values(), key=lambda a: (-a["total"], a["name"].lower()))
+    for a in cards:
+        a["buildings"] = len(a["buildings"])
+        a["share"] = round(100 * a["available"] / a["total"]) if a["total"] else 0
+
+    totals = {
+        "units": len(rows),
+        "available": sum(1 for r in rows if r["status"] == "Available"),
+        "buildings": len({((r["building_no"] or "").strip().lower(), _area_group(r["area"]))
+                          for r in rows if (r["building_no"] or "").strip()}),
+        "areas": len(cards),
+    }
+    return render_template("properties/areas.html", cards=cards, totals=totals,
+                           unplaced=unplaced)
+
+
 @bp.route("/<int:pid>")
 @login_required
 def detail(pid):

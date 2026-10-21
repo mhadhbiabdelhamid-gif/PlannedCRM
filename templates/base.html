@@ -67,9 +67,12 @@
     <details class="rail-sec" name="railsec"
              {{ 'open' if request.blueprint in ('properties', 'imports') }}>
       <summary>{{ t('Properties') }}</summary>
+      <a class="rail-link sub {{ 'active' if request.endpoint == 'properties.by_area' }}"
+         href="{{ url_for('properties.by_area') }}">
+        {{ t('Browse by area') }}</a>
       <a class="rail-link sub {{ 'active' if request.endpoint == 'properties.index' }}"
          href="{{ url_for('properties.index', reset=1) }}">
-        {{ t('Properties') }}</a>
+        {{ t('All listings') }}</a>
       <a class="rail-link sub {{ 'active' if request.endpoint == 'properties.waiting' }}"
          href="{{ url_for('properties.waiting') }}">
         {{ t('Waiting for approval') }}

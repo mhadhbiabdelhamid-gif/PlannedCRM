@@ -8,6 +8,7 @@
     <h1 class="page-title">{{ t('Properties') }}</h1>
   </div>
   <div class="actions">
+    <a class="btn" href="{{ url_for('properties.by_area') }}">← {{ t('Browse by area') }}</a>
     <a class="btn {{ 'btn-dark' if view == 'grid' }}" href="{{ url_for('properties.index', view='grid', **f) }}">{{ t('Grid') }}</a>
     <a class="btn {{ 'btn-dark' if view == 'list' }}" href="{{ url_for('properties.index', view='list', **f) }}">{{ t('List') }}</a>
     <a class="btn {{ 'btn-dark' if view == 'table' }}" href="{{ url_for('properties.index', view='table', **f) }}">{{ t('Table') }}</a>
