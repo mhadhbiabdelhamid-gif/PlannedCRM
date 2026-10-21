@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_area_select.html" import area_select with context %}
 {% block title %}{{ t('Edit listing') if p else t('Add listing') }}{% endblock %}
 
 {% block content %}
@@ -62,12 +63,7 @@
 
       <div class="field">
         <label for="area">{{ t('Location / district') }}</label>
-        <input id="area" type="text" name="area" value="{{ p.area if p else '' }}"
-               list="area-list" autocomplete="off"
-               placeholder="e.g. The Pearl, Lusail, West Bay">
-        <datalist id="area-list">
-          {% for a in areas %}<option value="{{ a.area }}"></option>{% endfor %}
-        </datalist>
+        {{ area_select(p.area if p else '') }}
       </div>
 
       <div class="field">

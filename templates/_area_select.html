@@ -1,0 +1,35 @@
+{#
+  The one way to pick an area: a dropdown of every district in Qatar, grouped
+  by municipality (areas.py is the list). Typing a location by hand is what
+  filled the CRM with five spellings of one place, so there is no free text.
+
+    {% from "_area_select.html" import area_select %}
+    {{ area_select(current_value) }}                     -- in a listing form
+    {{ area_select(f.area, any_label=t('Any'), required=False) }}   -- in a filter
+
+  A saved value that isn't on the list is shown above the dropdown, and the
+  closest match is pre-selected, so editing an old listing fixes its area.
+#}
+{% macro area_select(value, name="area", id="area", any_label=None, required=True, note=True) %}
+  {% set value = (value or '')|trim %}
+  {% set listed = area_listed(value) %}
+  {% set guess = value if listed else (area_guess(value) if value else None) %}
+  {% if note and value and not listed %}
+    <span class="area-was small">
+      {{ t('Saved as') }} “{{ value }}” — {{ t('please confirm the area from the list.') }}
+    </span>
+  {% endif %}
+  <select id="{{ id }}" name="{{ name }}" {{ 'required' if required }} class="area-select">
+    <option value="">{{ any_label or t('Choose the area…') }}</option>
+    {% for m in area_options() %}
+      <optgroup label="{{ m.ar if lang == 'ar' else m.en }}">
+        {% for a in m.places %}
+          <option value="{{ a.en }}" {{ 'selected' if guess == a.en }}>
+            {%- if a.parent %}&nbsp;&nbsp;↳ {% endif -%}
+            {{ a.ar if lang == 'ar' else a.en }}{% if lang != 'ar' %} · {{ a.ar }}{% endif %}
+          </option>
+        {% endfor %}
+      </optgroup>
+    {% endfor %}
+  </select>
+{% endmacro %}

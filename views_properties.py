@@ -289,6 +289,17 @@ def index():
                            partners_list=query("SELECT id, name FROM partners ORDER BY name"))
 
 
+def _picked_area(value):
+    """The area a form sent, as its name on the master list, or None.
+    Forms offer only the list (templates/_area_select.html); this is the
+    server's half of that promise, so nothing else can be saved."""
+    value = (value or "").strip()
+    if areas.is_listed(value):
+        return value
+    hit = areas.lookup(value)
+    return hit["en"] if hit else None
+
+
 def _area_group(raw):
     """The card a listing's area belongs on: its canonical English name,
     rolled up to the parent district (Porto Arabia sits under The Pearl).
@@ -357,7 +368,8 @@ def by_area():
         "areas": len(cards),
     }
     return render_template("properties/areas.html", cards=cards, totals=totals,
-                           unplaced=unplaced, can_set_cover=sees_all())
+                           unplaced=unplaced, can_set_cover=sees_all(),
+                           to_fix=sum(r["n"] for r in _unlisted_areas()) if sees_all() else 0)
 
 
 AREA_COVER_KEY = "area_cover:"
@@ -396,6 +408,66 @@ def area_cover():
         except OSError:
             pass
     return redirect(url_for("properties.by_area"))
+
+
+def _unlisted_areas():
+    """Every area value in use that isn't a name on the master list, with how
+    many listings carry it and the area it most likely means."""
+    rows = query("SELECT TRIM(area) AS area, COUNT(*) AS n,"
+                 " GROUP_CONCAT(title, ' | ') AS titles FROM properties"
+                 " WHERE COALESCE(TRIM(area), '') != '' GROUP BY TRIM(area)"
+                 " ORDER BY n DESC, area")
+    out = []
+    for r in rows:
+        if areas.is_listed(r["area"]):
+            continue
+        simple = areas.lookup(r["area"])          # only a different spelling
+        guess = (simple["en"] if simple else
+                 normalize.find_area(r["area"]) or areas.from_zone(r["area"]))
+        out.append({"value": r["area"], "n": r["n"], "guess": guess,
+                    "titles": (r["titles"] or "").split(" | ")[:3],
+                    # keys, landmarks and street names are worth keeping
+                    "keep": simple is None and areas.from_zone(r["area"]) is None})
+    return out
+
+
+@bp.route("/fix-areas", methods=("GET", "POST"))
+@login_required
+def fix_areas():
+    """Move every listing onto an area from the master list, once.
+
+    Each odd value ("Ain Khaled (Keys with Mr. Naji 5548 4736)", "140",
+    "fereej Kluaib") is shown once with the listings that use it and a
+    suggested area. Whatever the old text said beyond the area is copied into
+    the listing's description first, so key-holder numbers aren't lost."""
+    if not sees_all():
+        flash(t("Only an admin or manager can fix areas."), "error")
+        return redirect(url_for("properties.by_area"))
+
+    if request.method == "POST":
+        import backups
+        backups.make_backup(current_app, "fix-areas")
+        changed = 0
+        for i in range(int(request.form.get("count", 0))):
+            old = request.form.get(f"old_{i}", "")
+            new = request.form.get(f"area_{i}", "")
+            if not old or not areas.is_listed(new):
+                continue                      # left on "choose" -> skip it
+            keep = request.form.get(f"keep_{i}") == "1"
+            for p in query("SELECT id, description FROM properties WHERE TRIM(area) = ?", (old,)):
+                desc = p["description"] or ""
+                if keep and old not in desc:
+                    desc = (desc + "\n\n" if desc.strip() else "") + f"Location as received: {old}"
+                execute("UPDATE properties SET area = ?, description = ?, updated_at = ?"
+                        " WHERE id = ?", (new, desc, now(), p["id"]))
+                changed += 1
+            log(g.user["id"], "fix_area", "area", None, f"{old} -> {new}")
+        flash(f"{changed} " + t("listings moved onto the area list. A backup was taken first."), "ok")
+        return redirect(url_for("properties.fix_areas"))
+
+    blank = query("SELECT COUNT(*) AS n FROM properties WHERE COALESCE(TRIM(area), '') = ''",
+                  one=True)["n"]
+    return render_template("properties/fix_areas.html", rows=_unlisted_areas(), blank=blank)
 
 
 @bp.route("/<int:pid>")
@@ -491,6 +563,11 @@ def form(pid=None):
         if not vals[0]:
             flash("A listing needs a title.", "error")
             return redirect(request.url)
+        area = _picked_area(d.get("area"))
+        if not area:
+            flash(t("Choose the area from the list."), "error")
+            return redirect(request.url)
+        vals = vals[:2] + (area,) + vals[3:]
 
         if p is None:
             ref = next_ref("PRE-P", "properties")
@@ -645,10 +722,13 @@ def bulk_new():
         if not building_no:
             flash("Enter the building number or name — every unit will share it.", "error")
             return redirect(request.url)
+        if not _picked_area(d.get("area")):
+            flash(t("Choose the area from the list."), "error")
+            return redirect(request.url)
 
         shared = dict(
             address=d.get("address", "").strip(),
-            area=d.get("area", "").strip(),
+            area=_picked_area(d.get("area")),
             prop_type=d.get("prop_type"),
             listing_type=d.get("listing_type"),
             status=d.get("status"),

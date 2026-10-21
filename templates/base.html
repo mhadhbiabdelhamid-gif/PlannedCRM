@@ -73,6 +73,11 @@
       <a class="rail-link sub {{ 'active' if request.endpoint == 'properties.index' }}"
          href="{{ url_for('properties.index', reset=1) }}">
         {{ t('All listings') }}</a>
+      {% if user and user.role in ('admin', 'manager') %}
+      <a class="rail-link sub {{ 'active' if request.endpoint == 'properties.fix_areas' }}"
+         href="{{ url_for('properties.fix_areas') }}">
+        {{ t('Fix areas') }}</a>
+      {% endif %}
       <a class="rail-link sub {{ 'active' if request.endpoint == 'properties.waiting' }}"
          href="{{ url_for('properties.waiting') }}">
         {{ t('Waiting for approval') }}

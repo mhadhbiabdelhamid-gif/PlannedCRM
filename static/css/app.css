@@ -2168,3 +2168,13 @@ a.area-stat:hover { border-color: var(--gold); }
   border: 1px solid rgba(255,255,255,.35); background: rgba(0,0,0,.45); }
 .area-photo button { padding: 3px 8px; }
 .area-photo label:hover, .area-photo button:hover { background: var(--gold-lift); border-color: var(--gold-lift); color: #15130F; }
+
+.area-fix { display: flex; align-items: center; justify-content: space-between; gap: var(--s4);
+  padding: var(--s3) var(--s4); margin-bottom: var(--s5); border-radius: var(--radius-lg);
+  background: var(--gold-tint); border: 1px solid var(--gold); color: var(--text); }
+[data-theme="dark"] .area-fix { background: rgba(201,169,97,.12); }
+.area-was { display: block; margin-bottom: 4px; color: var(--warn); }
+.area-select { width: 100%; }
+.fix-areas td { vertical-align: top; }
+.fix-areas td:first-child { max-width: 380px; }
+.fix-areas .area-select { min-width: 240px; }

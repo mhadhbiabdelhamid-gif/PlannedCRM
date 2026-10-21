@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_area_select.html" import area_select with context %}
 {% block title %}{{ t('Properties') }}{% endblock %}
 
 {% block content %}
@@ -44,7 +45,7 @@
     <div class="filters">
       <div class="field">
         <label>{{ t('Location') }}</label>
-        <input type="text" name="area" value="{{ f.area }}" placeholder="{{ t('e.g. The Pearl, مشيرب, or zone 51') }}">
+        {{ area_select(f.area, id='f-area', any_label=t('Any'), required=False, note=False) }}
       </div>
       <div class="field">
         <label>{{ t('Type') }}</label>

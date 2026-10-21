@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% from "_area_select.html" import area_select with context %}
+{% block title %}{{ t('Fix areas') }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">02 · {{ t('Listings') }}</div>
+    <h1 class="page-title">{{ t('Fix areas') }}</h1>
+  </div>
+  <div class="actions">
+    <a class="btn" href="{{ url_for('properties.by_area') }}">← {{ t('Browse by area') }}</a>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:16px">
+  <div class="card-body">
+    <p style="margin:0 0 8px">
+      {{ t('Each line is an area written in a way that is not on the list of Qatar areas. Pick the right area and press Save: every listing using that text moves onto it.') }}
+    </p>
+    <p class="small faint" style="margin:0">
+      {{ t('With “Keep the text” ticked, the old text (keys, landmark, street) is added to the listing description so nothing is lost. Lines left on “Skip for now” are not touched. A backup is taken before saving.') }}
+    </p>
+  </div>
+</div>
+
+{% if not rows %}
+  <div class="card"><div class="empty"><span class="mark">✓</span>
+    {{ t('Every listing uses an area from the list.') }}</div></div>
+{% else %}
+<form method="post" class="card">
+  <input type="hidden" name="count" value="{{ rows|length }}">
+  <table class="table fix-areas">
+    <thead><tr>
+      <th>{{ t('Written as') }}</th><th>{{ t('Listings') }}</th>
+      <th>{{ t('Correct area') }}</th><th>{{ t('Keep the text') }}</th>
+    </tr></thead>
+    <tbody>
+    {% for r in rows %}
+      {% set i = loop.index0 %}
+      <tr>
+        <td>
+          <input type="hidden" name="old_{{ i }}" value="{{ r.value }}">
+          <b>{{ r.value }}</b>
+          <div class="small faint">{{ r.titles | join(' · ') }}</div>
+        </td>
+        <td class="mono">
+          <a href="{{ url_for('properties.index', area=r.value) }}">{{ r.n }}</a></td>
+        <td>
+          {{ area_select(r.guess, name='area_' ~ i, id='area_' ~ i, any_label=t('Skip for now'),
+                         required=False, note=False) }}
+          {% if not r.guess %}<div class="small" style="color:var(--warn)">{{ t('No match found — choose it yourself') }}</div>{% endif %}
+        </td>
+        <td style="text-align:center">
+          <input type="checkbox" name="keep_{{ i }}" value="1" {{ 'checked' if r.keep }}
+                 aria-label="{{ t('Keep the text') }}"></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div class="card-body between">
+    <span class="small muted">{{ rows | sum(attribute='n') }} {{ t('listings') }} · {{ rows|length }} {{ t('different spellings') }}</span>
+    <button class="btn btn-gold" type="submit">{{ t('Save') }}</button>
+  </div>
+</form>
+{% endif %}
+
+{% if blank %}
+  <p class="small muted" style="margin-top:16px">
+    {{ blank }} {{ t('listings have no area at all. Open them from All listings and choose one when editing.') }}</p>
+{% endif %}
+{% endblock %}

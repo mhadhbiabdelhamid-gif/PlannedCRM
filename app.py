@@ -196,6 +196,13 @@ def create_app():
                         else url_for("main.dashboard"))
 
     # ------------------------------------------------------- template helpers
+    # the master area list, for every area dropdown (see templates/_area_select.html)
+    import areas as _areas
+    app.jinja_env.globals["area_options"] = _areas.options
+    app.jinja_env.globals["area_listed"] = _areas.is_listed
+    app.jinja_env.globals["area_guess"] = lambda v: (
+        __import__("normalize").find_area(v) or _areas.from_zone(v))
+
     @app.template_filter("money")
     def money(value):
         """Thousand separators, with decimals shown only when they carry meaning."""
