@@ -59,12 +59,51 @@
      .card and picks up any element opted in with .rise-in-item, so a page
      with several report cards or a freshly-loaded table feels like it
      settled into place rather than appearing all at once. */
+  /* Only the first rows of a table take part — on a 50-row list the bottom
+     rows would otherwise still be fading in long after you started reading. */
+  var reduceMotion = window.matchMedia &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
   var riseTargets = document.querySelectorAll(
-    "main .card, .rise-in-item, .table tbody tr"
+    "main .card, main .today-tile, .rise-in-item, .table tbody tr:nth-child(-n+8), .todo-row"
   );
   riseTargets.forEach(function (el, i) {
     el.classList.add("rise-in");
-    el.style.animationDelay = (Math.min(i, 14) * 35) + "ms";
+    el.style.animationDelay = (Math.min(i, 10) * 40) + "ms";
+  });
+
+  /* ------------------------------------------------ numbers count up
+     Headline counts (today's tiles, metric values) roll up from zero once
+     on arrival, so the eye lands on them first. Only plain integers are
+     touched; anything formatted (prices, "QAR 1.2M") is left as written. */
+  if (!reduceMotion) {
+    document.querySelectorAll(".today-tile .num, .metric .value").forEach(function (el) {
+      var raw = el.textContent.trim();
+      if (!/^\d{1,6}$/.test(raw)) return;
+      var target = parseInt(raw, 10);
+      if (target < 2) return;
+      var start = null, dur = 700;
+      el.style.minWidth = el.offsetWidth + "px";   // no width jitter while counting
+      el.textContent = "0";
+      function step(ts) {
+        if (start === null) start = ts;
+        var p = Math.min((ts - start) / dur, 1);
+        var eased = 1 - Math.pow(1 - p, 3);
+        el.textContent = String(Math.round(target * eased));
+        if (p < 1) requestAnimationFrame(step);
+      }
+      setTimeout(function () { requestAnimationFrame(step); }, 120);
+    });
+  }
+
+  /* --------------------------------------- success messages step aside
+     Green "saved" confirmations fade out after a while; errors stay until
+     the page changes, because those need reading. */
+  document.querySelectorAll(".flash.ok").forEach(function (f) {
+    setTimeout(function () {
+      f.classList.add("is-leaving");
+      setTimeout(function () { f.remove(); }, 300);
+    }, 6000);
   });
 
   /* ------------------------------------------------------------ modals */
@@ -167,6 +206,14 @@
 
         col.querySelector(".col-body").appendChild(dragged);
         recount();
+        var landed = dragged;
+        landed.classList.remove("landed");
+        void landed.offsetWidth;                 // restart the animation
+        landed.classList.add("landed");
+        var badge = col.querySelector("[data-count]");
+        if (badge) {
+          badge.classList.remove("bump"); void badge.offsetWidth; badge.classList.add("bump");
+        }
 
         fetch("/leads/" + dragged.dataset.id + "/stage", {
           method: "POST",
@@ -203,14 +250,14 @@
   /* ------------------------------------------------------------- toast */
   function toast(message) {
     var el = document.createElement("div");
+    el.className = "toast";
+    el.setAttribute("role", "status");
     el.textContent = message;
-    el.style.cssText =
-      "position:fixed;left:50%;bottom:28px;transform:translateX(-50%);" +
-      "background:#23201A;color:#fff;padding:11px 18px;border-radius:3px;" +
-      "font-size:13px;z-index:99;box-shadow:0 10px 30px rgba(0,0,0,.3);" +
-      "border-left:3px solid #A88848";
     document.body.appendChild(el);
-    setTimeout(function () { el.remove(); }, 4000);
+    setTimeout(function () {
+      el.classList.add("is-leaving");
+      setTimeout(function () { el.remove(); }, 300);
+    }, 4000);
   }
   window.toast = toast;
 

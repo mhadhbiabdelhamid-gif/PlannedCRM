@@ -1,0 +1,383 @@
+/* ==========================================================================
+   Planned Real Estate — CRM · "Flow" layer
+   Calmer surfaces, softer depth, and purposeful motion.
+
+   Loaded after app.css and purely additive: it redefines a few tokens and
+   hooks onto classes every template already uses (.card, .btn, .rail-link,
+   .today-tile, .lead-card, .modal, .flash…). Remove the <link> in base.html
+   and the app returns exactly to how it looked before.
+
+   Principles (from the UI/UX Pro Max + design-system + motion guidance):
+   - Brand stays gold on warm neutrals. No new hues; status colours unchanged.
+   - Eye comfort: no pure-white slabs on the light theme, no pure-white text
+     on the dark one, softer borders, rounder corners, layered soft shadows.
+   - Motion has a job — arrival, feedback, or continuity — and only one or two
+     things move per screen. Big surfaces never bounce.
+   - Shared motion tokens; no duration is invented per component.
+   - prefers-reduced-motion: everything resolves to its final state.
+   ========================================================================== */
+
+/* ------------------------------------------------------------- 1. tokens */
+:root {
+  /* motion primitives */
+  --dur-instant: 90ms;    /* press, toggle */
+  --dur-fast:    160ms;   /* hover, colour */
+  --dur-base:    260ms;   /* small things arriving */
+  --dur-slow:    420ms;   /* page content settling */
+  --dur-calm:    700ms;   /* numbers counting, ambient */
+
+  --ease-out:    cubic-bezier(.2, .7, .3, 1);     /* default: quick then settle */
+  --ease-in-out: cubic-bezier(.45, 0, .25, 1);
+  --ease-spring: cubic-bezier(.34, 1.45, .64, 1); /* small things only */
+  --ease-exit:   cubic-bezier(.4, 0, 1, 1);       /* leaving is faster */
+
+  /* shape — a little rounder reads as calmer */
+  --radius:      8px;
+  --radius-lg:   12px;
+  --radius-pill: 999px;
+
+  /* surfaces — light: warm paper, cards just off-white to cut glare */
+  --card:        #FFFDF9;
+  --card-raised: #FFFFFF;
+  --line:        #E3DED3;
+  --line-soft:   #EFEBE3;
+
+  /* elevation scale (semantic) */
+  --elev-1: 0 1px 2px rgba(35,32,26,.04), 0 2px 8px -4px rgba(35,32,26,.08);
+  --elev-2: 0 1px 2px rgba(35,32,26,.05), 0 10px 28px -14px rgba(35,32,26,.20);
+  --elev-3: 0 2px 6px rgba(35,32,26,.06), 0 24px 56px -24px rgba(35,32,26,.32);
+  --shadow: var(--elev-1);
+
+  --glow-gold: 0 0 0 3px rgba(168,136,72,.16);
+  --topbar-bg: rgba(246,242,233,.78);
+  --col-bg:    #F2EEE6;
+  --ambient-a: rgba(201,169,97,.10);
+  --ambient-b: rgba(126,100,48,.05);
+}
+
+[data-theme="dark"] {
+  --card:        #1F1C17;
+  --card-raised: #252219;
+  --line:        #36312A;
+  --line-soft:   #2A2620;
+
+  /* white text on near-black is the glare; this is still 13:1 */
+  --text:        #E9E4D9;
+  --rail-strong: #F3EEE4;
+
+  --elev-1: 0 1px 2px rgba(0,0,0,.30), 0 2px 10px -4px rgba(0,0,0,.45);
+  --elev-2: 0 1px 2px rgba(0,0,0,.35), 0 12px 30px -14px rgba(0,0,0,.70);
+  --elev-3: 0 2px 6px rgba(0,0,0,.40), 0 26px 60px -22px rgba(0,0,0,.85);
+  --shadow: var(--elev-1);
+
+  --glow-gold: 0 0 0 3px rgba(201,169,97,.22);
+  --topbar-bg: rgba(21,19,15,.74);
+  --col-bg:    #1A1814;
+  --ambient-a: rgba(201,169,97,.07);
+  --ambient-b: rgba(201,169,97,.03);
+}
+
+/* -------------------------------------------------- 2. ambient canvas
+   A very soft warm light in the top corner, fixed behind everything. It
+   gives the page depth without a pattern for the eye to track. */
+body { position: relative; }
+body::before {
+  content: "";
+  position: fixed; inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(1100px 620px at 88% -8%, var(--ambient-a), transparent 62%),
+    radial-gradient(900px 600px at -10% 108%, var(--ambient-b), transparent 60%);
+}
+[dir="rtl"] body::before {
+  background:
+    radial-gradient(1100px 620px at 12% -8%, var(--ambient-a), transparent 62%),
+    radial-gradient(900px 600px at 110% 108%, var(--ambient-b), transparent 60%);
+}
+
+/* --------------------------------------------------- 3. frosted top bar */
+.topbar,
+[data-theme="dark"] .topbar {
+  background: var(--topbar-bg);
+  -webkit-backdrop-filter: saturate(1.4) blur(14px);
+  backdrop-filter: saturate(1.4) blur(14px);
+  border-bottom-color: color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+/* --------------------------------------------- 4. calmer surfaces/depth */
+.card, .metrics, .today-tile, .prop-card, .team-card, .area-card {
+  border-color: var(--line);
+  border-radius: var(--radius-lg);
+}
+.card { box-shadow: var(--elev-1); }
+
+/* The old rule lifted every .card on hover — including full-page tables,
+   which made the whole screen jump under the cursor. Big surfaces now stay
+   put; only things you can actually click rise. */
+.card:hover { transform: none; box-shadow: var(--elev-1); }
+a.card:hover, button.card:hover,
+.today-tile:hover, .prop-card:hover, .team-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--elev-2);
+}
+
+.col, [data-theme="dark"] .col { background: var(--col-bg); border-radius: var(--radius-lg); }
+.lead-card { border-radius: var(--radius); }
+.modal { border-radius: var(--radius-lg); box-shadow: var(--elev-3); }
+.flash { border-radius: var(--radius); box-shadow: var(--elev-1); }
+.tag { border-radius: 6px; }                 /* tags can wrap; a pill would blob */
+.rail-link .pill, .bell .dot { border-radius: var(--radius-pill); }
+
+/* Top-bar search: the generic input[type=search] padding came later in
+   app.css and won, so the magnifier sat on top of the placeholder text. */
+.searchbox input[type=search] { padding-inline: 34px 12px; height: 36px; }
+.searchbox svg { inset-inline-start: 11px; left: auto; }
+[dir="ltr"] .searchbox svg { left: 11px; }
+.searchbox input[type=search]:focus { box-shadow: var(--glow-gold); }
+
+/* inputs: a soft gold glow on focus instead of a hard switch */
+input:not([type=checkbox]):not([type=radio]):not([type=file]),
+select, textarea {
+  border-radius: var(--radius);
+  transition: border-color var(--dur-fast) var(--ease-out),
+              box-shadow var(--dur-fast) var(--ease-out),
+              background-color var(--dur-fast) var(--ease-out);
+}
+input:not([type=checkbox]):not([type=radio]):not([type=file]):focus,
+select:focus, textarea:focus {
+  border-color: var(--gold);
+  box-shadow: var(--glow-gold);
+}
+
+/* ------------------------------------------------------------ 5. buttons */
+.btn {
+  border-radius: var(--radius);
+  transition: transform var(--dur-instant) var(--ease-out),
+              box-shadow var(--dur-fast) var(--ease-out),
+              background-color var(--dur-fast) var(--ease-out),
+              border-color var(--dur-fast) var(--ease-out),
+              color var(--dur-fast) var(--ease-out);
+}
+.btn:hover { box-shadow: var(--elev-1); }
+.btn:active { transform: scale(.97); box-shadow: none; transition-duration: var(--dur-instant); }
+
+/* gold buttons get a slow light sweep on hover — the one bit of shine */
+.btn-gold, .rail-new > summary { position: relative; overflow: hidden; isolation: isolate; }
+.btn-gold::after, .rail-new > summary::after {
+  content: "";
+  position: absolute; inset: 0;
+  z-index: -1;
+  background: linear-gradient(105deg, transparent 30%, rgba(255,255,255,.38) 50%, transparent 70%);
+  transform: translateX(-120%);
+  transition: transform var(--dur-calm) var(--ease-in-out);
+}
+.btn-gold:hover::after, .rail-new > summary:hover::after { transform: translateX(120%); }
+.rail-new > summary { border-radius: var(--radius); }
+.rail-new-menu {
+  border-radius: var(--radius-lg);
+  transform-origin: top center;
+  animation: pop-in var(--dur-base) var(--ease-spring) both;
+}
+
+/* --------------------------------------------------------- 6. side rail */
+/* Links sit as soft rounded rows inset from the rail edge; the hard 3px
+   border marker becomes a rounded bar drawn by ::before. */
+.rail-link,
+[dir="rtl"] .rail-link {
+  position: relative;
+  margin-inline: 8px;
+  border-radius: var(--radius);
+  border-left-color: transparent;
+  border-right-color: transparent;
+  padding-inline: 13px 12px;               /* text stays aligned with the section headers */
+  transition: color var(--dur-fast) var(--ease-out),
+              background-color var(--dur-fast) var(--ease-out);
+}
+.rail-nav .rail-link.sub { padding-inline-start: 34px; }
+.rail-link.active,
+[dir="rtl"] .rail-link.active { border-left-color: transparent; border-right-color: transparent; }
+/* active indicator grows from the middle instead of snapping in */
+.rail-link.active::before {
+  content: "";
+  position: absolute;
+  inset-block: 8px;
+  inset-inline-start: -3px;
+  width: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--gold);
+  animation: grow-y var(--dur-slow) var(--ease-out) both;
+}
+/* opening a section: its links settle in one after another */
+.rail-sec[open] > .rail-link { animation: slide-in var(--dur-base) var(--ease-out) both; }
+.rail-sec[open] > .rail-link:nth-of-type(2) { animation-delay: 30ms; }
+.rail-sec[open] > .rail-link:nth-of-type(3) { animation-delay: 60ms; }
+.rail-sec[open] > .rail-link:nth-of-type(4) { animation-delay: 90ms; }
+.rail-sec[open] > .rail-link:nth-of-type(n+5) { animation-delay: 120ms; }
+.rail-link .pill { animation: pop-in var(--dur-base) var(--ease-spring) both; animation-delay: 200ms; }
+
+/* ------------------------------------------------- 7. today (dashboard) */
+.today-tile {
+  transition: transform var(--dur-base) var(--ease-out),
+              box-shadow var(--dur-base) var(--ease-out),
+              border-color var(--dur-fast) var(--ease-out);
+  position: relative;
+  overflow: hidden;
+}
+/* a gold line draws across the bottom of the tile you're about to open */
+.today-tile::after {
+  content: "";
+  position: absolute; inset-inline: 0; bottom: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--gold-lift), var(--gold));
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--dur-slow) var(--ease-out);
+}
+[dir="rtl"] .today-tile::after { transform-origin: right; }
+.today-tile:hover::after, .today-tile:focus-visible::after { transform: scaleX(1); }
+/* the count sits in a soft gold badge — a clear target for the eye */
+.today-tile .num {
+  display: inline-grid; place-items: center;
+  min-width: 60px; height: 60px; padding: 0 10px;
+  border-radius: var(--radius-lg);
+  background: var(--gold-tint);
+  color: var(--gold-deep);
+  transition: transform var(--dur-base) var(--ease-spring), background-color var(--dur-fast);
+}
+.today-tile .num.bad  { background: color-mix(in srgb, var(--bad) 12%, transparent); color: var(--bad); }
+.today-tile .num.warn { background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--gold-deep); }
+.today-tile:hover .num { transform: scale(1.06); }
+
+/* the dark commission panel gets the same warm light as the canvas */
+.today-commission {
+  border-radius: var(--radius-lg);
+  background-image: radial-gradient(420px 220px at 100% 0%, rgba(201,169,97,.20), transparent 70%);
+}
+
+/* to-do rows: hover tint so the eye keeps its place in a long list */
+.todo-row {
+  transition: background-color var(--dur-fast) var(--ease-out);
+  border-radius: var(--radius);
+}
+.todo-row:hover { background: color-mix(in srgb, var(--gold) 6%, transparent); }
+/* an overdue dot breathes slowly — the only looping thing on the page */
+.todo-title.bad .dot { animation: breathe 2.8s var(--ease-in-out) infinite; }
+
+/* "all caught up" — a small reward, drawn once */
+.empty .mark {
+  display: inline-grid; place-items: center;
+  animation: pop-in var(--dur-slow) var(--ease-spring) both;
+  animation-delay: 180ms;
+}
+
+/* ------------------------------------------------------ 8. lead board */
+.lead-card {
+  transition: transform var(--dur-fast) var(--ease-out),
+              box-shadow var(--dur-fast) var(--ease-out),
+              opacity var(--dur-fast);
+}
+.lead-card:hover { transform: translateY(-1px); box-shadow: var(--elev-2); }
+.lead-card.dragging { opacity: .6; transform: rotate(-1.5deg) scale(1.02); box-shadow: var(--elev-3); }
+.lead-card.landed { animation: land var(--dur-slow) var(--ease-spring); }
+.col { transition: background-color var(--dur-fast), box-shadow var(--dur-fast), border-color var(--dur-fast); }
+.col.drop-target {
+  border-color: var(--gold);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--gold) 35%, transparent);
+}
+.col-head [data-count].bump { animation: pop-in var(--dur-base) var(--ease-spring); }
+
+/* ------------------------------------------------ 9. tables & lists */
+.table tbody tr { transition: background-color var(--dur-fast) var(--ease-out); }
+.prop-card, .prop-row {
+  transition: transform var(--dur-base) var(--ease-out),
+              box-shadow var(--dur-base) var(--ease-out),
+              border-color var(--dur-fast);
+}
+.prop-card .prop-thumb img { transition: transform var(--dur-calm) var(--ease-out); }
+.prop-card:hover .prop-thumb img { transform: scale(1.04); }
+
+/* ------------------------------------------- 10. modals, flashes, toast */
+.modal-back.open { animation: fade-in var(--dur-base) var(--ease-out) both; }
+.modal-back.open .modal { animation: rise-scale var(--dur-slow) var(--ease-out) both; }
+.modal-back {
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+.flash { animation: slide-down var(--dur-slow) var(--ease-out) both; }
+.flash.is-leaving { animation: fade-out var(--dur-base) var(--ease-exit) forwards; }
+
+.toast {
+  position: fixed;
+  left: 50%; bottom: 28px;
+  z-index: 99;
+  min-width: 240px; max-width: min(92vw, 460px);
+  padding: 12px 18px 14px;
+  border-radius: var(--radius-lg);
+  background: var(--ink);
+  color: #F6F2E9;
+  font-size: 14px;
+  box-shadow: var(--elev-3);
+  border-inline-start: 3px solid var(--gold);
+  overflow: hidden;
+  animation: toast-in var(--dur-slow) var(--ease-spring) both;
+}
+.toast::after {   /* time-left bar: shows it will go away by itself */
+  content: "";
+  position: absolute; inset-inline: 0; bottom: 0;
+  height: 2px;
+  background: var(--gold);
+  transform-origin: left;
+  animation: drain 4s linear forwards;
+}
+[dir="rtl"] .toast::after { transform-origin: right; }
+.toast.is-leaving { animation: toast-out var(--dur-base) var(--ease-exit) forwards; }
+
+/* ------------------------------------------------ 11. page arrival
+   Content settles in once per page. Kept short and to small distances —
+   a calm arrival, not a show. */
+main > .page-head { animation: rise-in var(--dur-slow) var(--ease-out) both; }
+.rise-in { animation: rise-in var(--dur-slow) var(--ease-out) both; }
+
+/* Smooth cross-fade between pages in browsers that support cross-document
+   view transitions (Chrome/Edge). The rail and top bar are named so they
+   stay still while only the content changes. Others simply navigate. */
+@view-transition { navigation: auto; }
+.rail   { view-transition-name: rail; }
+.topbar { view-transition-name: topbar; }
+::view-transition-old(root) { animation: fade-out 140ms var(--ease-exit) both; }
+::view-transition-new(root) { animation: fade-in 220ms var(--ease-out) both; }
+
+/* ---------------------------------------------------------- keyframes */
+@keyframes rise-in    { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes rise-scale { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes fade-in    { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fade-out   { from { opacity: 1; } to { opacity: 0; } }
+@keyframes slide-down { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+@keyframes slide-in   { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
+[dir="rtl"] .rail-sec[open] > .rail-link { animation-name: slide-in-rtl; }
+@keyframes slide-in-rtl { from { opacity: 0; transform: translateX(6px); } to { opacity: 1; transform: none; } }
+@keyframes pop-in     { 0% { opacity: 0; transform: scale(.85); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes grow-y     { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes breathe    { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .45; transform: scale(.8); } }
+@keyframes land       { 0% { transform: scale(.96); box-shadow: var(--elev-3); } 100% { transform: none; } }
+@keyframes drain      { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@keyframes toast-in   { from { opacity: 0; transform: translate(-50%, 14px) scale(.96); } to { opacity: 1; transform: translate(-50%, 0); } }
+@keyframes toast-out  { to { opacity: 0; transform: translate(-50%, 8px); } }
+
+/* ------------------------------------------------------ reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+  @view-transition { navigation: none; }
+}
+
+@media print {
+  body::before { display: none; }
+  * { animation: none !important; transition: none !important; }
+}
