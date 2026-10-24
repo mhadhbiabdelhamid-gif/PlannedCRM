@@ -335,7 +335,8 @@ TYPE_WORDS = [
     (("office", "commercial office"), "Office"),
     (("retail", "shop", "showroom", "commercial", "warehouse"), "Commercial"),
     (("land", "plot"), "Land"),
-    (("apartment", "flat", "studio", "bhk", "br", "penthouse", "residential"),
+    (("studio", "ستوديو"), "Studio"),
+    (("apartment", "flat", "bhk", "br", "penthouse", "residential"),
      "Apartment"),
 ]
 

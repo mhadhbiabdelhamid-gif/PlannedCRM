@@ -76,7 +76,12 @@ def _filter_clause(f, prefix="p"):
         # matched as one whole phrase against seven columns, so anything but
         # an exact title fragment found nothing.
         got, words = normalize.parse_search(f["q"])
-        if "beds" in got and not f["beds"]:
+        if got.get("beds") == 0 and not f["beds"] and not f.get("prop_type"):
+            # "studio" finds listings typed Studio, plus older ones saved
+            # as a 0-bedroom Apartment before Studio was its own type.
+            sql += (f" AND ({prefix}.prop_type = 'Studio' OR"
+                    f" ({prefix}.prop_type = 'Apartment' AND COALESCE({prefix}.bedrooms, 0) = 0))")
+        elif "beds" in got and not f["beds"]:
             sql += f" AND COALESCE({prefix}.bedrooms, 0) = ?"
             args.append(got["beds"])
         for key in ("prop_type", "listing_type", "furnishing"):

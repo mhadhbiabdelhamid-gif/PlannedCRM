@@ -224,7 +224,7 @@ Return ONLY a JSON object, no preamble and no markdown fences:
 
 {"listings": [{
   "listing_type": "rent" | "sale" | null,
-  "property_type": "apartment" | "villa" | "townhouse" | "office" | "shop" | "land" | "warehouse" | "compound_villa" | "full_building" | null,
+  "property_type": "apartment" | "studio" | "villa" | "townhouse" | "office" | "shop" | "land" | "warehouse" | "compound_villa" | "full_building" | null,
   "area": string | null,
   "building": string | null,
   "floor": string | null,

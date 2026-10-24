@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS properties (
     is_own       INTEGER NOT NULL DEFAULT 0,
     import_source TEXT,
     imported_at   TEXT,
-    prop_type    TEXT NOT NULL DEFAULT 'Apartment', -- Villa|Apartment|Commercial|Office|Land
+    prop_type    TEXT NOT NULL DEFAULT 'Apartment', -- Villa|Apartment|Studio|Commercial|Office|Land
     listing_type TEXT NOT NULL DEFAULT 'Sale',      -- Sale | Rent
     status       TEXT NOT NULL DEFAULT 'Available', -- Available|Reserved|Sold|Rented
     price        REAL DEFAULT 0,
@@ -261,7 +261,7 @@ LEAD_STAGES = ["New", "Contacted", "Qualified", "Viewing", "Offer",
                "Negotiation", "Won", "Lost"]
 # Stages that mean the lead is finished, so it stops appearing in follow-up counts.
 CLOSED_STAGES = ("Won", "Lost")
-PROP_TYPES = ["Villa", "Apartment", "Commercial", "Office", "Land"]
+PROP_TYPES = ["Villa", "Apartment", "Studio", "Commercial", "Office", "Land"]
 PROP_STATUS = ["Available", "Reserved", "Sold", "Rented"]
 LISTING_TYPES = ["Sale", "Rent"]
 # Whether a listing is published. Separate from status, which is about the

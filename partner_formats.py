@@ -172,7 +172,9 @@ def _read_cap(ws, defaults):
         low = desc.lower()
 
         prop_type = "Office" if (kind.lower() == "office" or "office" in get("type").lower()) else "Apartment"
-        beds = None
+        if prop_type == "Apartment" and (kind.lower() == "studio" or "studio" in low):
+            prop_type = "Studio"
+        beds = 0 if prop_type == "Studio" else None
         if prop_type == "Apartment":
             beds = 0 if "studio" in low else importer.parse_bedrooms(desc)
         baths = importer.parse_bathrooms(desc)
