@@ -523,16 +523,25 @@ def detail(pid):
     # third-party owner's tenancy is their business, not ours to track.
     tenant = None
     lease_missing = False
+    rent_start = rent_end = rent_left = None
     if p["status"] == "Rented":
         import leases
         if p["is_own"]:
             tenant = leases.current_tenant(pid)
         lease_missing = not leases.has_rental_on_record(pid)
+        # The listing's own period; an older rental deal's dates if that's
+        # all there is.
+        rent_start, rent_end = p["rent_start"], p["rent_end"]
+        if not rent_end and tenant is not None and tenant["lease_end"]:
+            rent_start, rent_end = tenant["lease_start"], tenant["lease_end"]
+        rent_left = leases.days_left(rent_end) if rent_end else None
 
     return render_template("properties/detail.html", p=p, images=images, videos=videos,
                            docs=docs,
                            comments=comments, leads=leads, trail=trail, tenant=tenant,
                            lease_missing=lease_missing,
+                           rent_start=rent_start, rent_end=rent_end, rent_left=rent_left,
+                           notice_days=LEASE_NOTICE_DAYS,
                            editable=can_edit(p), cutoff=days_ago(STALE_DAYS))
 
 
@@ -578,6 +587,24 @@ def form(pid=None):
             flash(t("Choose the area from the list."), "error")
             return redirect(request.url)
         vals = vals[:2] + (area,) + vals[3:]
+
+        # Rented means the office needs to know until when, so it can be
+        # told a month before the unit comes free. Asked right here rather
+        # than on a separate deal form, so it never gets skipped.
+        rent_start = rent_end = None
+        if vals[5] == "Rented":
+            import leases
+            rent_start = leases._d(d.get("rent_start"))
+            rent_end = leases._d(d.get("rent_end"))
+            if rent_end is None:
+                flash(t("Enter until when it is rented, so you get a reminder "
+                        "one month before it ends."), "error")
+                return redirect(request.url)
+            if rent_start and rent_end <= rent_start:
+                flash(t("The rent end date has to be after the start date."), "error")
+                return redirect(request.url)
+            rent_start = rent_start.isoformat() if rent_start else None
+            rent_end = rent_end.isoformat()
 
         if p is None:
             ref = next_ref("PRE-P", "properties")
@@ -641,14 +668,20 @@ def form(pid=None):
         execute("UPDATE properties SET furnishing=?, view=?, balcony=?, bills=? WHERE id=?",
                 (furnishing, view, balcony, bills, pid))
 
-        # Just marked Rented with nothing saying for how long? Go straight to
-        # the rental form, pre-filled, so the lease dates get recorded while
-        # the agent still has them — that is what drives the lease reminders.
-        was_rented = p is not None and p["status"] == "Rented"
-        ask_lease = False
-        if vals[5] == "Rented" and not was_rented:
+        # The rental period. New or changed dates start the reminder afresh;
+        # any other status means the unit isn't let, so the period is cleared.
+        old_end = p["rent_end"] if p is not None else None
+        old_start = p["rent_start"] if p is not None else None
+        if vals[5] == "Rented":
+            if rent_end != old_end or rent_start != old_start:
+                execute("UPDATE properties SET rent_start = ?, rent_end = ?,"
+                        " rent_alert = NULL WHERE id = ?", (rent_start, rent_end, pid))
+                if p is not None and old_end:
+                    log(g.user["id"], "Updated listing", "property", pid,
+                        f"rented until {old_end} → {rent_end}")
+        elif old_end or (p is not None and p["status"] == "Rented"):
             import leases
-            ask_lease = not leases.has_rental_on_record(pid)
+            leases.resolve_listing(pid)
 
         skipped_names = []
         for fs in request.files.getlist("images"):
@@ -675,10 +708,6 @@ def form(pid=None):
         if skipped_videos:
             flash("Couldn't use " + ", ".join(skipped_videos) +
                   " — upload videos as MP4 or MOV.", "error")
-        if ask_lease:
-            flash("Marked as rented. Enter the rental period and tenant so you "
-                  "get reminded before the lease ends.", "ok")
-            return redirect(url_for("deals.form", property=pid, rent=1))
         return redirect(url_for("properties.detail", pid=pid))
 
     owners = query("SELECT id, name FROM owners ORDER BY name")
@@ -695,6 +724,7 @@ def form(pid=None):
         " WHERE area IS NOT NULL AND TRIM(area) != '' ORDER BY area")
     from db import EXTRA_ROOMS
     return render_template("properties/form.html", p=p, owners=owners, agents=agents,
+                           today_iso=local_today(),
                            extra_rooms=EXTRA_ROOMS,
                            prop_types=PROP_TYPES, statuses=PROP_STATUS,
                            listing_types=LISTING_TYPES, buildings=buildings,
@@ -1157,6 +1187,7 @@ def mark_available(pid):
     deal_id = request.form.get("deal_id", type=int)
     if deal_id:
         leases.resolve(deal_id)
+    leases.resolve_listing(pid)
 
     if p["status"] != "Available":
         execute("UPDATE properties SET status = 'Available', last_verified = ?,"
@@ -1279,6 +1310,9 @@ def bulk():
     for r in allowed:
         execute(f"UPDATE properties SET {field} = ?, updated_at = ? WHERE id = ?",
                 (new_value, now(), r["id"]))
+        if field == "status" and new_value != "Rented" and r["status"] == "Rented":
+            import leases
+            leases.resolve_listing(r["id"])
         if field == "agent_id" and new_value and new_value != g.user["id"]:
             notify(new_value, f"You were assigned {r['title']}",
                    url_for("properties.detail", pid=r["id"]))
@@ -1291,9 +1325,9 @@ def bulk():
         import leases
         no_lease = [r for r in allowed if not leases.has_rental_on_record(r["id"])]
         if no_lease:
-            flash("Some of them have no rental period on record. Open each one "
-                  "and use \"Add rental period\" so you get reminded before the "
-                  "lease ends.", "error")
+            flash(t("Some of them have no rental period yet. Open each one and "
+                    "fill in \"Rented until\" so you get a reminder one month "
+                    "before it ends."), "error")
     if blocked:
         message += (f" {blocked} skipped — {'it belongs' if blocked == 1 else 'they belong'}"
                     " to another agent.")

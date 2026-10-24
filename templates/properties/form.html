@@ -84,15 +84,47 @@
         <select id="status" name="status" onchange="rentedHint()">
           {% for s in statuses %}<option value="{{ s }}" {{ 'selected' if p and p.status == s }}>{{ t(s) }}</option>{% endfor %}
         </select>
-        <span id="rented-hint" class="small faint" style="display:none">
-          {{ t('After saving you will be asked for the rental period and tenant, so the lease is tracked.') }}</span>
+      </div>
+
+      {# Asked whenever the listing is Rented: until when, so the office gets
+         a reminder one month before the unit comes free. #}
+      {% set is_rented = p and p.status == 'Rented' %}
+      <div class="field rent-field" id="rent-start-field" {% if not is_rented %}style="display:none"{% endif %}>
+        <label for="rent_start">{{ t('Rented from') }}</label>
+        <input id="rent_start" type="date" name="rent_start"
+               value="{{ (p.rent_start if p and p.rent_start else today_iso) }}">
+        <span class="small faint">{{ t('Quick period:') }}
+          <a href="#" onclick="return rentFor(6)">{{ t('6 months') }}</a> ·
+          <a href="#" onclick="return rentFor(12)">{{ t('1 year') }}</a> ·
+          <a href="#" onclick="return rentFor(24)">{{ t('2 years') }}</a></span>
+      </div>
+      <div class="field rent-field" id="rent-end-field" {% if not is_rented %}style="display:none"{% endif %}>
+        <label for="rent_end">{{ t('Rented until') }} *</label>
+        <input id="rent_end" type="date" name="rent_end"
+               value="{{ p.rent_end if p and p.rent_end else '' }}" {% if is_rented %}required{% endif %}>
+        <span class="small faint">{{ t('You will get a reminder one month before this date.') }}</span>
       </div>
       <script>
         function rentedHint() {
-          var was = {{ ((p.status if p else '') == 'Rented') | tojson }};
-          var el = document.getElementById('status');
-          document.getElementById('rented-hint').style.display =
-            (el.value === 'Rented' && !was) ? '' : 'none';
+          var on = document.getElementById('status').value === 'Rented';
+          document.querySelectorAll('.rent-field').forEach(function (f) {
+            f.style.display = on ? '' : 'none';
+          });
+          document.getElementById('rent_end').required = on;
+        }
+        function rentFor(months) {
+          var s = document.getElementById('rent_start');
+          if (!s.value) s.value = new Date().toISOString().slice(0, 10);
+          var p = s.value.split('-').map(Number);
+          var y = p[0], m = p[1] - 1 + months, day = p[2];
+          y += Math.floor(m / 12); m = m % 12;
+          var last = new Date(y, m + 1, 0).getDate();
+          var d = new Date(y, m, Math.min(day, last));
+          d.setDate(d.getDate() - 1);           // a year from 1 Jan ends 31 Dec
+          var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+          document.getElementById('rent_end').value =
+            d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+          return false;
         }
       </script>
       <div class="field">

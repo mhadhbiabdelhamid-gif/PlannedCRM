@@ -69,6 +69,9 @@ SELECT d.*, p.title AS prop_title, p.ref AS prop_ref, p.status AS prop_status,
    AND COALESCE(p.is_own, 0) = 1
    AND d.lease_end IS NOT NULL
    AND COALESCE(d.lease_alert, '') != 'done'
+   -- a listing that carries its own rental period is tracked from that
+   -- (LISTING_SQL below), so its deal doesn't appear a second time
+   AND p.rent_end IS NULL
    -- a renewal supersedes the lease it replaces, so the old one drops out
    -- instead of nagging about a unit that is let again
    AND NOT EXISTS (
@@ -81,23 +84,53 @@ SELECT d.*, p.title AS prop_title, p.ref AS prop_ref, p.status AS prop_status,
 """
 
 
+# The rental period typed on the listing when it was marked Rented. Covers
+# every rented listing, our own or a partner's: either way the office wants to
+# know when the unit comes back. Shaped like a BASE_SQL row (id is NULL, there
+# being no deal) so the screens can show both without caring which is which.
+_LIVE_RENT_DEAL = """(SELECT {col} FROM deals rd LEFT JOIN leads rl ON rl.id = rd.lead_id
+     WHERE rd.property_id = p.id
+       AND lower(COALESCE(rd.deal_type,'')) LIKE 'rent%'
+       AND rd.status != 'Cancelled'
+       AND COALESCE(rd.lease_alert,'') != 'done'
+     ORDER BY rd.id DESC LIMIT 1)"""
+
+LISTING_SQL = f"""
+SELECT NULL AS id, NULL AS ref, p.id AS property_id,
+       p.title AS prop_title, p.ref AS prop_ref, p.status AS prop_status,
+       p.area AS prop_area, p.agent_id AS prop_agent_id, p.agent_id AS agent_id,
+       p.price AS value, p.rent_start AS lease_start, p.rent_end AS lease_end,
+       NULL AS term_months, p.rent_alert AS lease_alert,
+       {_LIVE_RENT_DEAL.format(col="rd.lead_id")} AS lead_id,
+       {_LIVE_RENT_DEAL.format(col="rl.full_name")} AS tenant_name,
+       {_LIVE_RENT_DEAL.format(col="rl.phone")} AS tenant_phone,
+       u.name AS agent_name, 'listing' AS source
+  FROM properties p
+  LEFT JOIN users u ON u.id = p.agent_id
+ WHERE p.status = 'Rented'
+   AND p.rent_end IS NOT NULL
+   AND COALESCE(p.rent_alert, '') != 'done'
+"""
+
+
 def ending(within_days=LEASE_NOTICE_DAYS, today=None):
     """Leases already finished, or finishing inside the notice window.
 
-    Soonest first, so whatever is already overdue sits at the top.
+    Both kinds: rental periods written on a listing, and older ones that only
+    live on a rental deal. Soonest first, so whatever is overdue sits on top.
     """
     today = today or local_today()
     horizon = (_d(today) + timedelta(days=within_days)).isoformat()
-    return query(BASE_SQL + " AND d.lease_end <= ? ORDER BY d.lease_end, d.id",
-                 (horizon,))
+    rows = [dict(r) for r in query(BASE_SQL + " AND d.lease_end <= ?", (horizon,))]
+    for r in rows:
+        r["source"] = "deal"
+    rows += [dict(r) for r in query(LISTING_SQL + " AND p.rent_end <= ?", (horizon,))]
+    rows.sort(key=lambda r: (r["lease_end"] or "", r["property_id"] or 0))
+    return rows
 
 
 def count_ending(within_days=LEASE_NOTICE_DAYS, today=None):
-    today = today or local_today()
-    horizon = (_d(today) + timedelta(days=within_days)).isoformat()
-    row = query(f"SELECT COUNT(*) c FROM ({BASE_SQL} AND d.lease_end <= ?)",
-                (horizon,), one=True)
-    return row["c"]
+    return len(ending(within_days, today))
 
 
 def days_left(lease_end, today=None):
@@ -109,6 +142,20 @@ def days_left(lease_end, today=None):
 def resolve(deal_id):
     """Stop reminding anyone about this lease."""
     execute("UPDATE deals SET lease_alert = ? WHERE id = ?", (ALERT_DONE, deal_id))
+
+
+def resolve_listing(property_id):
+    """The unit is back on the market: its rental period is finished with.
+
+    Also closes the live rental deal, if there is one, so it doesn't start
+    reminding about the same tenancy once the listing's dates are cleared.
+    """
+    execute("UPDATE properties SET rent_start = NULL, rent_end = NULL,"
+            " rent_alert = NULL WHERE id = ?", (property_id,))
+    execute("UPDATE deals SET lease_alert = ? WHERE property_id = ?"
+            " AND lower(COALESCE(deal_type,'')) LIKE 'rent%'"
+            " AND status != 'Cancelled' AND COALESCE(lease_alert,'') != 'done'",
+            (ALERT_DONE, property_id))
 
 
 # --------------------------------------------------------------- the tenant
@@ -172,6 +219,9 @@ def has_rental_on_record(property_id):
     "has anyone written down how long this unit is let for", which is worth
     asking of every rented listing so the office knows when it comes back.
     """
+    if query("SELECT 1 FROM properties WHERE id = ? AND rent_end IS NOT NULL",
+             (property_id,), one=True):
+        return True
     return query(
         "SELECT 1 FROM deals WHERE property_id = ?"
         " AND lower(COALESCE(deal_type,'')) LIKE 'rent%'"
@@ -213,8 +263,8 @@ def run_alerts(today=None):
             message = f"{where} is now free — the lease ended {row['lease_end']}"
             new_state = ALERT_ENDED
         elif left is not None and 0 < left <= LEASE_NOTICE_DAYS and not state:
-            message = (f"{where} is free in {left} days — "
-                       f"the lease ends {row['lease_end']}")
+            message = (f"{where}: about one month left on the rent — "
+                       f"it ends {row['lease_end']} ({left} days). Renewing or moving out?")
             new_state = ALERT_SOON
         else:
             continue
@@ -222,8 +272,12 @@ def run_alerts(today=None):
         link = f"/properties/{row['property_id']}" if row["property_id"] else None
         for uid in _recipients(row):
             notify(uid, message, link)
-        execute("UPDATE deals SET lease_alert = ? WHERE id = ?",
-                (new_state, row["id"]))
+        if row["source"] == "listing":
+            execute("UPDATE properties SET rent_alert = ? WHERE id = ?",
+                    (new_state, row["property_id"]))
+        else:
+            execute("UPDATE deals SET lease_alert = ? WHERE id = ?",
+                    (new_state, row["id"]))
         sent += 1
 
     return sent

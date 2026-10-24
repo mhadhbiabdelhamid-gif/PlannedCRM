@@ -84,7 +84,7 @@
           {% if d.property_id %}
           <form method="post"
                 action="{{ url_for('properties.mark_available', pid=d.property_id) }}">
-            <input type="hidden" name="deal_id" value="{{ d.id }}">
+            {% if d.id %}<input type="hidden" name="deal_id" value="{{ d.id }}">{% endif %}
             <button class="btn btn-gold btn-sm" type="submit">{{ t('Mark available') }}</button>
           </form>
           {% else %}

@@ -2,6 +2,20 @@
 {% block title %}{{ p.title }}{% endblock %}
 
 {% block content %}
+{% if p.status == 'Rented' and rent_left is not none and rent_left <= notice_days %}
+  <div class="flash {{ 'error' if rent_left <= 0 }}" style="margin-bottom:16px">
+    {% if rent_left < 0 %}
+      <b>{{ t('The rent ended') }} {{ -rent_left }} {{ t('days ago') }}</b> ({{ rent_end | nice_date }}).
+    {% elif rent_left == 0 %}
+      <b>{{ t('The rent ends today') }}</b> ({{ rent_end | nice_date }}).
+    {% else %}
+      <b>{{ t('One month or less left on the rent') }}:</b> {{ rent_left }} {{ t('days') }},
+      {{ t('until') }} {{ rent_end | nice_date }}.
+    {% endif %}
+    {{ t('Is the tenant renewing or moving out?') }}
+    <a href="#rent">{{ t('See rental period') }}</a>
+  </div>
+{% endif %}
 {% if (p.approval or 'approved') != 'approved' %}
   <div class="flash {{ 'error' if p.approval == 'rejected' else '' }}" style="margin-bottom:16px">
     {% if p.approval == 'rejected' %}
@@ -245,11 +259,50 @@
   </div>
 
   <div class="grid">
-    {% if p.is_own and p.status == 'Rented' %}
+    {% if p.status == 'Rented' %}
+    <div class="card" id="rent">
+      <div class="card-head"><h3>{{ t('Rental period') }}</h3>
+        {% if rent_left is not none %}
+          {% if rent_left < 0 %}<span class="tag tag-sold">{{ t('Ended') }} {{ -rent_left }} {{ t('days ago') }}</span>
+          {% elif rent_left == 0 %}<span class="tag tag-sold">{{ t('Ends today') }}</span>
+          {% elif rent_left <= notice_days %}<span class="tag tag-reserved">{{ rent_left }} {{ t('days left') }}</span>
+          {% else %}<span class="mono faint">{{ rent_left }} {{ t('days left') }}</span>{% endif %}
+        {% endif %}</div>
+      <div class="card-body">
+        {% if rent_end %}
+          <dl class="spec-list">
+            <div><dt>{{ t('Rented from') }}</dt>
+              <dd>{{ rent_start | nice_date if rent_start else '—' }}</dd></div>
+            <div><dt>{{ t('Rented until') }}</dt>
+              <dd><b>{{ rent_end | nice_date }}</b></dd></div>
+          </dl>
+          {% if editable %}
+          <div class="inline" style="margin-top:12px">
+            <a class="btn btn-sm" href="{{ url_for('properties.form', pid=p.id) }}#status">
+              {{ t('Change dates') }}</a>
+            {% if rent_left is not none and rent_left <= notice_days %}
+            <form method="post" action="{{ url_for('properties.mark_available', pid=p.id) }}">
+              <button class="btn btn-gold btn-sm" type="submit">{{ t('Mark available') }}</button>
+            </form>
+            {% endif %}
+          </div>
+          {% endif %}
+        {% else %}
+          <p class="muted small" style="margin:0 0 10px">
+            {{ t('Marked as rented, but no rental period is on record yet. Add it so you get reminded before the lease ends.') }}</p>
+          {% if editable %}
+          <a class="btn btn-sm btn-gold" href="{{ url_for('properties.form', pid=p.id) }}#status">
+            {{ t('Add rental period') }}</a>
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if p.is_own and p.status == 'Rented' and tenant %}
     <div class="card" id="tenant">
       <div class="card-head"><h3>{{ t('Tenant') }}</h3></div>
       <div class="card-body">
-        {% if tenant %}
           <div class="inline" style="gap:11px;margin-bottom:8px">
             <span class="contact-photo" style="width:46px;height:46px;flex:0 0 46px;font-size:15px">
               {{ (tenant.tenant_name or '?') | initials }}
@@ -270,13 +323,6 @@
           <dl class="spec-list">
             <div><dt>{{ t('Monthly rent') }}</dt>
               <dd class="mono">{{ currency }} {{ tenant.value | money }}</dd></div>
-            <div><dt>{{ t('Tenancy starts') }}</dt>
-              <dd>{{ tenant.lease_start | nice_date if tenant.lease_start else '—' }}</dd></div>
-            <div><dt>{{ t('Tenancy ends') }}</dt>
-              <dd>{{ tenant.lease_end | nice_date if tenant.lease_end else '—' }}</dd></div>
-            {% if tenant.term_months %}
-              <div><dt>{{ t('Lease') }}</dt><dd>{{ tenant.term_months }} {{ t('months') }}</dd></div>
-            {% endif %}
           </dl>
           <div class="inline" style="margin-top:12px">
             {% if tenant.tenant_phone %}
@@ -285,26 +331,8 @@
             <a class="btn btn-sm" href="{{ url_for('properties.leases_ending') }}">
               {{ t('Leases ending') }}</a>
             <a class="btn btn-sm" href="{{ url_for('deals.form', did=tenant.id) }}">
-              {{ t('Edit rental period') }}</a>
+              {{ t('Open rental deal') }}</a>
           </div>
-        {% else %}
-          <p class="muted small" style="margin:0 0 10px">
-            {{ t('Marked as rented, but no rental period is on record yet. Add it so you get reminded before the lease ends.') }}</p>
-          <a class="btn btn-sm btn-gold" href="{{ url_for('deals.form', property=p.id, rent=1) }}">
-            {{ t('Add rental period') }}</a>
-        {% endif %}
-      </div>
-    </div>
-    {% elif lease_missing and editable %}
-    {# A partner's unit we marked rented: no tenant card, but still worth
-       noting how long it's let for, so we know when to chase it again. #}
-    <div class="card" id="tenant">
-      <div class="card-head"><h3>{{ t('Rental period') }}</h3></div>
-      <div class="card-body">
-        <p class="muted small" style="margin:0 0 10px">
-          {{ t('Marked as rented, but no rental period is on record yet. Add it so you get reminded before the lease ends.') }}</p>
-        <a class="btn btn-sm btn-gold" href="{{ url_for('deals.form', property=p.id, rent=1) }}">
-          {{ t('Add rental period') }}</a>
       </div>
     </div>
     {% endif %}

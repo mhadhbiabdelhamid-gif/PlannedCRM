@@ -489,6 +489,13 @@ MIGRATIONS = [
     # 'ended', or 'done' once someone has dealt with it. Stops the scheduler
     # sending the same notification every time it wakes up.
     ("deals", "lease_alert", "TEXT"),
+    # The rental period written on the listing itself, asked for whenever a
+    # listing is marked Rented. This is what the "lease ending" reminder
+    # watches for every rented listing, our own or a partner's. rent_alert
+    # works like deals.lease_alert: NULL, 'soon', 'ended' or 'done'.
+    ("properties", "rent_start", "TEXT"),
+    ("properties", "rent_end", "TEXT"),
+    ("properties", "rent_alert", "TEXT"),
     # The moment a lead actually became Won or Lost — separate from lost_at,
     # which only ever covers Lost. This is what the archive clock runs on, so
     # editing a settled client's notes later never resets it the way
@@ -560,6 +567,40 @@ def backfill_deals(con):
         "   AND NOT EXISTS (SELECT 1 FROM deal_agents da WHERE da.deal_id = d.id)")
 
 
+def backfill_listing_rent(con):
+    """Copy the lease dates of a rented listing's live rental deal onto it.
+
+    Before the rental period lived on the listing, it was only on the deal.
+    Copying it across once means every rented unit is tracked from the same
+    place. Only fills listings that have no period yet, so it never overwrites
+    dates someone typed on the listing.
+    """
+    con.execute("""
+        UPDATE properties SET
+          rent_start = (SELECT d.lease_start FROM deals d
+                         WHERE d.property_id = properties.id
+                           AND lower(COALESCE(d.deal_type,'')) LIKE 'rent%'
+                           AND d.status != 'Cancelled'
+                           AND COALESCE(d.lease_alert,'') != 'done'
+                           AND d.lease_end IS NOT NULL
+                         ORDER BY d.lease_end DESC, d.id DESC LIMIT 1),
+          rent_alert = (SELECT d.lease_alert FROM deals d
+                         WHERE d.property_id = properties.id
+                           AND lower(COALESCE(d.deal_type,'')) LIKE 'rent%'
+                           AND d.status != 'Cancelled'
+                           AND COALESCE(d.lease_alert,'') != 'done'
+                           AND d.lease_end IS NOT NULL
+                         ORDER BY d.lease_end DESC, d.id DESC LIMIT 1),
+          rent_end = (SELECT d.lease_end FROM deals d
+                       WHERE d.property_id = properties.id
+                         AND lower(COALESCE(d.deal_type,'')) LIKE 'rent%'
+                         AND d.status != 'Cancelled'
+                         AND COALESCE(d.lease_alert,'') != 'done'
+                         AND d.lease_end IS NOT NULL
+                       ORDER BY d.lease_end DESC, d.id DESC LIMIT 1)
+         WHERE status = 'Rented' AND rent_end IS NULL""")
+
+
 def backfill_leases(con):
     """Give rentals recorded before this feature a lease window.
 
@@ -612,6 +653,7 @@ def init_db(app):
 
     backfill_deals(con)
     backfill_leases(con)
+    backfill_listing_rent(con)
     backfill_lead_closed_at(con)
     con.commit()
     con.close()
