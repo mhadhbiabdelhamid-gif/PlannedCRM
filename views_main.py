@@ -256,6 +256,15 @@ def _own_available(kind):
     return _own_lists(kind, limit=10)
 
 
+def _price_totals(rows):
+    """Monthly rent and sale value added up separately: a month's rent and a
+    sale price summed together would be a meaningless number."""
+    rent = [r for r in rows if r["listing_type"] == "Rent"]
+    sale = [r for r in rows if r["listing_type"] != "Rent"]
+    return {"rent_total": sum(r["price"] or 0 for r in rent), "rent_n": len(rent),
+            "sale_total": sum(r["price"] or 0 for r in sale), "sale_n": len(sale)}
+
+
 @bp.route("/agent-sheet")
 @login_required
 def agent_sheet():
@@ -295,13 +304,15 @@ def agent_sheet():
         part = [r for r in rows if r["prop_type"] in types
                 or (key == "res" and r["prop_type"] not in known)]
         if part:
-            sections.append({"label": label, "key": key, "rows": part})
+            sections.append({"label": label, "key": key, "rows": part,
+                             **_price_totals(part)})
+    grand = _price_totals(rows)
 
     log(g.user["id"], "Printed the vacant list",
         detail=f"{len(own['rows'])} vacant now, {len(own['soon'])} coming free")
     import areas
     return render_template("agent_sheet.html", rows=rows, own=own, kind=own["kind"],
-                           sections=sections,
+                           sections=sections, grand=grand,
                            area_ar=areas.in_arabic,
                            printed_at=local_now().strftime("%d %b %Y, %H:%M"),
                            printed_day=local_now().strftime("%d %b %Y"))

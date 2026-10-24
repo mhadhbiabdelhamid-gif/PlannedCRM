@@ -25,6 +25,17 @@
   .counts b { font-variant-numeric:tabular-nums; }
   .group { margin-bottom:22px; }
   table.fixed { table-layout:fixed; }
+  tr.total td { border-top:1.5px solid var(--ink); border-bottom:none; background:#FBF8F1; font-weight:600;
+                -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  tfoot tr.total + tr.total td { border-top:1px solid var(--line); }
+  .grand { display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;
+           border:2px solid var(--gold); border-radius:8px; padding:12px 16px; margin:4px 0 8px;
+           break-inside:avoid; }
+  .grand-title { font-weight:700; font-size:15px; }
+  .grand-figs { display:flex; gap:28px; flex-wrap:wrap; }
+  .grand-figs div { text-align:end; }
+  .grand-figs b { font-size:17px; font-variant-numeric:tabular-nums; display:block; }
+  .grand-figs .small { display:block; }
   table.fixed td { overflow-wrap:anywhere; }
   .group-head { font-size:15px; margin:0 0 8px; padding:6px 10px; border-radius:6px;
                 display:flex; align-items:center; gap:8px;
@@ -141,10 +152,42 @@
       </tr>
     {% endfor %}
     </tbody>
+    <tfoot>
+      {% if sec.rent_n %}
+      <tr class="total">
+        <td></td>
+        <td colspan="6">{{ t('Total') }} {{ t(sec.label) }}{% if sec.sale_n %} · {{ t('Rent') }}{% endif %}
+          <span class="small">({{ sec.rent_n }} {{ t('unit') if (sec.rent_n) == 1 else t('units') }})</span></td>
+        <td class="num"><b>{{ currency }} {{ sec.rent_total | money }}</b><div class="small">/ {{ t('month') }}</div></td>
+        <td colspan="3"></td>
+      </tr>
+      {% endif %}
+      {% if sec.sale_n %}
+      <tr class="total">
+        <td></td>
+        <td colspan="6">{{ t('Total') }} {{ t(sec.label) }}{% if sec.rent_n %} · {{ t('Sale') }}{% endif %}
+          <span class="small">({{ sec.sale_n }} {{ t('unit') if (sec.sale_n) == 1 else t('units') }})</span></td>
+        <td class="num"><b>{{ currency }} {{ sec.sale_total | money }}</b></td>
+        <td colspan="3"></td>
+      </tr>
+      {% endif %}
+    </tfoot>
   </table>
   </div>
   </section>
   {% endfor %}
+  {% if sections|length > 1 %}
+  <div class="grand">
+    <div class="grand-title">{{ t('Grand total') }} · {% for sec in sections %}{{ t(sec.label) }}{% if not loop.last %} + {% endif %}{% endfor %}
+      <span class="small">({{ rows|length }} {{ t('unit') if (rows|length) == 1 else t('units') }})</span></div>
+    <div class="grand-figs">
+      {% if grand.rent_n %}<div><span class="small">{% if grand.sale_n %}{{ t('Rent') }} · {% endif %}{{ grand.rent_n }} {{ t('unit') if (grand.rent_n) == 1 else t('units') }}</span>
+        <b>{{ currency }} {{ grand.rent_total | money }}</b><span class="small">/ {{ t('month') }}</span></div>{% endif %}
+      {% if grand.sale_n %}<div><span class="small">{% if grand.rent_n %}{{ t('Sale') }} · {% endif %}{{ grand.sale_n }} {{ t('unit') if (grand.sale_n) == 1 else t('units') }}</span>
+        <b>{{ currency }} {{ grand.sale_total | money }}</b></div>{% endif %}
+    </div>
+  </div>
+  {% endif %}
   <p class="note">{{ t('Map and photo links open when you tap them in the PDF. Photo links stay valid for 30 days and can be forwarded to clients.') }}</p>
   {% else %}
     <div class="empty">{{ t('None of our own units is vacant or coming free within a month.') }}</div>

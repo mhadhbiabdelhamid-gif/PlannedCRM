@@ -1105,6 +1105,8 @@ AR = {
     "Listings update for agents": "تحديث العقارات للوكلاء",
     "Vacant list": "قائمة الوحدات الشاغرة",
     "Residential": "سكني",
+    "Total": "إجمالي",
+    "Grand total": "الإجمالي العام",
     "Office & Commercial": "مكاتب وتجاري",
     "Our own units vacant now, or coming free within a month.": "وحداتنا الشاغرة الآن، أو التي تصبح شاغرة خلال شهر.",
     "Vacant now": "شاغرة الآن",
