@@ -1101,6 +1101,8 @@ AR = {
     "until": "حتى",
     "Is the tenant renewing or moving out?": "هل سيجدد المستأجر أم سيغادر؟",
     "See rental period": "عرض مدة الإيجار",
+    "Available from": "متاح من",
+    "Rented now — available from this date": "مؤجر حالياً — متاح من هذا التاريخ",
     "renewing or moving out?": "تجديد أم إخلاء؟",
     "Ended": "انتهى منذ",
     "In": "خلال",

@@ -122,7 +122,15 @@ def _filter_clause(f, prefix="p"):
         sql += f" AND {prefix}.partner_id = ?"
         args.append(f["partner"])
     for col in ("prop_type", "status", "listing_type"):
-        if f[col]:
+        if col == "status" and f[col] == "Available":
+            # Our own rented units whose rent ends within a month count as
+            # available too: they can already be offered, from that date.
+            import leases
+            sql += (f" AND ({prefix}.status = 'Available' OR ({prefix}.status = 'Rented'"
+                    f" AND COALESCE({prefix}.is_own, 0) = 1 AND {prefix}.rent_end IS NOT NULL"
+                    f" AND {prefix}.rent_end <= ?))")
+            args.append(leases.soon_horizon())
+        elif f[col]:
             sql += f" AND {prefix}.{col} = ?"
             args.append(f[col])
     if f["area"]:

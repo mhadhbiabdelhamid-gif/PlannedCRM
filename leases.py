@@ -158,6 +158,29 @@ def resolve_listing(property_id):
             (ALERT_DONE, property_id))
 
 
+# ------------------------------------------------------- coming free soon
+
+def soon_horizon(today=None):
+    """The last rent-end date that still counts as "free within a month"."""
+    return (_d(today or local_today()) + timedelta(days=LEASE_NOTICE_DAYS)).isoformat()
+
+
+def free_from(p, today=None):
+    """The day one of our rented units becomes available, if that's within a
+    month; otherwise None. The rent runs through rent_end, so it's free the
+    day after. Works on any listing row (a dict or a database row)."""
+    try:
+        status, own, end = p["status"], p["is_own"], p["rent_end"]
+    except (KeyError, IndexError):
+        return None
+    end = _d(end)
+    if status != "Rented" or not own or end is None:
+        return None
+    if end.isoformat() > soon_horizon(today):
+        return None
+    return max(end + timedelta(days=1), _d(today or local_today())).isoformat()
+
+
 # --------------------------------------------------------------- the tenant
 
 # Same "our own stock, live rental, not superseded" idea as BASE_SQL above,

@@ -311,6 +311,17 @@ def _date(value):
 
 
 # ===================================================================== sheets
+def _status_text(r, rtl=False):
+    """'Available from 14/11/2026' for our units coming free within a month,
+    so a shared availability list shows them with the date; else the status."""
+    import leases
+    ff = leases.free_from(r)
+    if ff:
+        day = datetime.strptime(ff, "%Y-%m-%d").strftime("%d/%m/%Y")
+        return f"{t('Available from')} {day}"
+    return t(r["status"])
+
+
 def property_sheet(wb, co, name, title, subtitle, records, exported_by,
                    index=None, rtl=False):
     headers = [t("Ref"), t("Title"), t("Building"), t("Floor"), t("Flat"),
@@ -324,13 +335,13 @@ def property_sheet(wb, co, name, title, subtitle, records, exported_by,
         ("#,##0.#", "right"), ("0", "center"), ("0", "center"), (None, "left"),
         (None, "left"), (None, "left"), (_date_fmt(rtl), "center"),
     ]
-    widths = [11, 32, 16, 7, 8, 13, 10, 11, 10, 10, 14, 9, 6, 6, 22, 20, 16, 12]
+    widths = [11, 32, 16, 7, 8, 13, 10, 11, 10, 14, 14, 9, 6, 6, 22, 20, 16, 12]
     MAP_COL = 7
 
     ws = wb.create_sheet(t(name)) if index is None else wb.create_sheet(t(name), index)
     rows = [(r["ref"], r["title"], r["building_no"], r["floor_no"], r["unit_no"],
              r["area"], r["map_url"], t(r["prop_type"]), t(r["listing_type"]),
-             t(r["status"]), r["price"], r["size_sqm"], r["bedrooms"],
+             _status_text(r, rtl), r["price"], r["size_sqm"], r["bedrooms"],
              r["bathrooms"], r["extras"], r["owner_name"], r["agent_name"],
              _date(r["created_at"])) for r in records]
 

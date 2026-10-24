@@ -198,6 +198,8 @@ def create_app():
     # ------------------------------------------------------- template helpers
     # the master area list, for every area dropdown (see templates/_area_select.html)
     import areas as _areas
+    import leases as _leases_mod
+    app.jinja_env.globals["free_from"] = _leases_mod.free_from
     app.jinja_env.globals["area_options"] = _areas.options
     app.jinja_env.globals["area_listed"] = _areas.is_listed
     app.jinja_env.globals["area_guess"] = lambda v: (

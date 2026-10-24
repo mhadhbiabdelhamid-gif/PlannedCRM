@@ -15,6 +15,7 @@
     <div class="tags">
       <span class="tag tag-{{ 'sale' if p.listing_type == 'Sale' else 'rent' }}">{{ t(p.listing_type) }}</span>
       <span class="tag tag-{{ p.status|lower }}">{{ t(p.status) }}</span>
+            {% set ff = free_from(p) %}{% if ff %}<span class="tag tag-available" title="{{ t('Rented now — available from this date') }}">{{ t('Available from') }} {{ ff | nice_date }}</span>{% endif %}
       {% if p.is_own %}<span class="tag tag-sale">{{ t('Ours') }}</span>{% endif %}
       {% if p.status in ('Available', 'Reserved') and (not p.last_verified or p.last_verified < stale_cutoff) %}
         <span class="tag tag-reserved">{{ t('Stale') }}</span>
