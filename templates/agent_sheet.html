@@ -87,6 +87,7 @@
   <table>
     <thead><tr>
       <th>#</th>
+      <th>{{ t('Area') }}</th>
       <th>{{ t('Building') }}</th>
       <th>{{ t('Floor') }}</th>
       <th>{{ t('Flat') }}</th>
@@ -101,8 +102,11 @@
     {% for p in rows %}
       <tr>
         <td class="num small">{{ loop.index }}</td>
+        <td>{% if p.area %}<b>{{ p.area }}</b>
+            {% set ar = area_ar(p.area) %}{% if ar and ar != p.area %}<div class="small" dir="rtl">{{ ar }}</div>{% endif %}
+          {% else %}<span class="faint">—</span>{% endif %}</td>
         <td><b>{{ p.building_no or p.title }}</b>
-          <div class="small">{{ p.area or '' }}{% if p.ref %}{% if p.area %} · {% endif %}{{ p.ref }}{% endif %}</div></td>
+          {% if p.ref %}<div class="small">{{ p.ref }}</div>{% endif %}</td>
         <td class="num">{{ p.floor_no or '—' }}</td>
         <td class="num"><b>{{ p.unit_no or '—' }}</b></td>
         <td>{{ t(p.prop_type) }}{% if p.prop_type in ('Apartment', 'Villa') %}{% if p.bedrooms %} · {{ p.bedrooms }} {{ t('bed') }}{% endif %}{% endif %}
@@ -114,7 +118,7 @@
         <td>{% if p.vacant_now %}<span class="pill now">{{ t('Vacant now') }}</span>
             {% else %}<span class="pill soon">{{ t('From') }} {{ p.free_from | nice_date }}</span>{% endif %}</td>
         <td>{% if p.map_url %}<a class="link" href="{{ p.map_url }}" target="_blank" rel="noopener">{{ t('Open map') }}</a>{% else %}<span class="faint">—</span>{% endif %}</td>
-        <td>{% if p.photo_url %}<a class="link" href="{{ p.photo_url }}" target="_blank" rel="noopener">{{ t('Photos') }} ({{ p.photo_count }})</a>{% else %}<span class="faint">{{ t('No photos') }}</span>{% endif %}</td>
+        <td>{% if p.photo_url %}<a class="link" href="{{ p.photo_url }}" target="_blank" rel="noopener">{% if p.photo_count %}{{ t('Photos') }} ({{ p.photo_count }}){% else %}{{ t('Videos') }}{% endif %}</a>{% else %}<span class="faint">{{ t('No photos') }}</span>{% endif %}</td>
       </tr>
     {% endfor %}
     </tbody>

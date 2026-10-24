@@ -285,7 +285,9 @@ def agent_sheet():
 
     log(g.user["id"], "Printed the vacant list",
         detail=f"{len(own['rows'])} vacant now, {len(own['soon'])} coming free")
+    import areas
     return render_template("agent_sheet.html", rows=rows, own=own, kind=own["kind"],
+                           area_ar=areas.in_arabic,
                            printed_at=local_now().strftime("%d %b %Y, %H:%M"),
                            printed_day=local_now().strftime("%d %b %Y"))
 
