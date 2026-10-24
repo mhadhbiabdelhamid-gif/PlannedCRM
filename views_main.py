@@ -259,23 +259,35 @@ def _own_available(kind):
 @bp.route("/agent-sheet")
 @login_required
 def agent_sheet():
-    """One printable page to hand the agents: our available listings, our
-    units coming free within a month, and (for the admin) every lease
-    ending soon. Printed, or saved as PDF from the browser's print dialog."""
-    import leases
-    from db import LEASE_NOTICE_DAYS, local_today
-    own = _own_lists("all")
-    ending = []
-    if is_admin():
-        today = local_today()
-        ending = [dict(r, left=leases.days_left(r["lease_end"], today))
-                  for r in leases.ending()]
-    log(g.user["id"], "Printed the agents' sheet",
-        detail=f"{len(own['rows'])} available, {len(own['soon'])} coming free,"
-               f" {len(ending)} leases ending")
-    return render_template("agent_sheet.html", own=own, ending=ending,
-                           show_leases=is_admin(), notice_days=LEASE_NOTICE_DAYS,
-                           printed_at=local_now().strftime("%d %b %Y, %H:%M"))
+    """The vacant list: one printable page to hand the agents with every one
+    of our own units that is vacant now or comes free within a month, and
+    for each the building, floor, flat, furnishing, price, a map link and a
+    photo link. Printed, or saved as PDF from the browser's print dialog.
+
+    Leases ending soon are left off on purpose: for our own units they are
+    the same listings as "coming free", seen from the tenant's side, and
+    that follow-up stays on the dashboard and the Leases ending page.
+    """
+    import media_share
+    kind = request.args.get("kind", "all")
+    own = _own_lists(kind)
+    rows = [dict(r, vacant_now=True) for r in own["rows"]] + \
+           [dict(r, vacant_now=False) for r in own["soon"]]
+
+    def unit_key(r):
+        unit = (r["unit_no"] or "").strip()
+        return ((r["area"] or "~").lower(), (r["building_no"] or "~").lower(),
+                (r["floor_no"] or ""), len(unit), unit)
+    rows.sort(key=unit_key)
+
+    for r in rows:
+        r["photo_url"], r["photo_count"] = media_share.listing_link(r, g.user["id"])
+
+    log(g.user["id"], "Printed the vacant list",
+        detail=f"{len(own['rows'])} vacant now, {len(own['soon'])} coming free")
+    return render_template("agent_sheet.html", rows=rows, own=own, kind=own["kind"],
+                           printed_at=local_now().strftime("%d %b %Y, %H:%M"),
+                           printed_day=local_now().strftime("%d %b %Y"))
 
 
 @bp.route("/search")

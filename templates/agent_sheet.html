@@ -3,70 +3,65 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ t('Listings update for agents') }} · {{ company }}</title>
+{# The browser uses the title as the PDF's file name. #}
+<title>{{ t('Vacant list') }} · {{ company }} · {{ printed_day }}</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root { --gold:#B8963E; --gold-pale:#F6EFDD; --ink:#1A1A1A; --muted:#6B675E; --line:#E4DFD3;
-          --green:#2F7A4D; --green-pale:#E5F2EA; --red:#A33A2B; --red-pale:#F7E4E0; }
+          --green:#2F7A4D; --green-pale:#E5F2EA; }
   * { box-sizing:border-box; }
   body { margin:0; background:#fff; color:var(--ink);
          font:13px/1.45 "IBM Plex Sans","IBM Plex Sans Arabic",system-ui,sans-serif; }
-  .page { max-width:1100px; margin:0 auto; padding:28px 32px; }
+  .page { max-width:1180px; margin:0 auto; padding:28px 32px; }
   header { display:flex; align-items:center; gap:14px; padding-bottom:14px;
-           border-bottom:3px solid var(--gold); margin-bottom:18px; }
-  header img { width:54px; height:54px; object-fit:contain; }
+           border-bottom:3px solid var(--gold); margin-bottom:16px; }
+  header img { width:58px; height:58px; object-fit:contain; }
   header .co { font-weight:700; font-size:16px; }
   header .meta { margin-inline-start:auto; text-align:end; color:var(--muted); font-size:12px; }
-  h1 { font-size:20px; margin:0 0 4px; }
-  .sub { color:var(--muted); margin:0 0 6px; }
-  .summary { display:flex; gap:10px; flex-wrap:wrap; margin:12px 0 22px; }
-  .summary div { border:1px solid var(--line); border-radius:8px; padding:8px 14px; }
-  .summary b { font-size:18px; display:block; font-variant-numeric:tabular-nums; }
-  .summary span { color:var(--muted); font-size:11.5px; }
-  section { margin-bottom:26px; }
-  h2 { font-size:15px; margin:0 0 2px; display:flex; align-items:center; gap:8px; }
-  h2 .count { background:var(--gold-pale); color:#7A6222; border-radius:999px;
-              padding:1px 9px; font-size:12px; }
-  .hint { color:var(--muted); font-size:11.5px; margin:0 0 8px; }
+  h1 { font-size:22px; margin:0 0 2px; }
+  .sub { color:var(--muted); margin:0 0 14px; }
+  .counts { display:flex; gap:8px; flex-wrap:wrap; margin:0 0 14px; }
+  .counts span { border:1px solid var(--line); border-radius:999px; padding:3px 11px; font-size:12px; }
+  .counts b { font-variant-numeric:tabular-nums; }
   table { width:100%; border-collapse:collapse; }
-  th { text-align:start; font-size:10.5px; text-transform:uppercase; letter-spacing:.06em;
-       color:var(--muted); border-bottom:1.5px solid var(--ink); padding:7px 8px; }
-  td { padding:7px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { text-align:start; font-size:10.5px; text-transform:uppercase; letter-spacing:.05em;
+       color:var(--muted); border-bottom:1.5px solid var(--ink); padding:7px 7px; white-space:nowrap; }
+  td { padding:8px 7px; border-bottom:1px solid var(--line); vertical-align:top; }
   tr { break-inside:avoid; }
-  .mono { font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .num { font-variant-numeric:tabular-nums; white-space:nowrap; }
   .small { font-size:11.5px; color:var(--muted); }
+  .faint { color:#B5B0A4; }
   .pill { display:inline-block; border-radius:4px; padding:1px 7px; font-size:11px; font-weight:600;
-          -webkit-print-color-adjust:exact; print-color-adjust:exact; white-space:nowrap; }
-  .pill.green { background:var(--green-pale); color:var(--green); }
-  .pill.red { background:var(--red-pale); color:var(--red); }
-  .pill.gold { background:var(--gold-pale); color:#7A6222; }
-  .empty { color:var(--muted); padding:10px 8px; border:1px dashed var(--line); border-radius:6px; }
-  .notes { border:1px solid var(--line); border-radius:6px; min-height:70px; padding:8px 10px;
-           color:var(--muted); font-size:11.5px; }
+          white-space:nowrap; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .pill.now { background:var(--green-pale); color:var(--green); }
+  .pill.soon { background:var(--gold-pale); color:#7A6222; }
+  a.link { color:#7A6222; font-weight:600; text-decoration:none; white-space:nowrap;
+           border-bottom:1px solid var(--gold); }
+  .empty { color:var(--muted); padding:14px; border:1px dashed var(--line); border-radius:6px; }
+  .note { margin-top:12px; color:var(--muted); font-size:11px; }
   footer { margin-top:18px; color:var(--muted); font-size:11px; display:flex; justify-content:space-between; }
   .toolbar { position:sticky; top:0; background:#FBF8F1; border-bottom:1px solid var(--line);
-             padding:10px 32px; display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
-  .toolbar label { display:flex; gap:6px; align-items:center; cursor:pointer; }
+             padding:10px 32px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .toolbar .tabs { display:flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; }
+  .toolbar .tabs a { padding:6px 12px; color:var(--ink); text-decoration:none; background:#fff; }
+  .toolbar .tabs a.on { background:var(--ink); color:#fff; }
   .toolbar .spacer { flex:1; }
   .toolbar button { font:inherit; padding:7px 14px; border-radius:6px; border:1px solid var(--line);
                     background:#fff; cursor:pointer; }
   .toolbar button.gold { background:var(--gold); border-color:var(--gold); color:#fff; font-weight:600; }
-  .off { display:none; }
-  @media (max-width:700px) { .page, .toolbar { padding-left:16px; padding-right:16px; }
-                             .hide-sm { display:none; } }
-  @media print { .toolbar { display:none; } .page { padding:0; } @page { margin:12mm; }
-                 section { break-inside:auto; } h2 { break-after:avoid; } }
+  @media (max-width:760px) { .page, .toolbar { padding-left:16px; padding-right:16px; }
+                             .table-scroll { overflow-x:auto; } }
+  @media print { .toolbar { display:none; } .page { padding:0; max-width:none; }
+                 @page { size:A4 landscape; margin:10mm; } }
 </style>
 </head>
 <body>
 <div class="toolbar">
-  <span class="small">{{ t('Include:') }}</span>
-  <label><input type="checkbox" checked data-part="available"> {{ t('Available now') }}</label>
-  <label><input type="checkbox" checked data-part="soon"> {{ t('Coming free within a month') }}</label>
-  {% if show_leases %}
-  <label><input type="checkbox" checked data-part="leases"> {{ t('Leases ending soon') }}</label>
-  <label><input type="checkbox" data-part="tenant-info"> {{ t('Tenant names and phones') }}</label>
-  {% endif %}
+  <div class="tabs">
+    <a class="{{ 'on' if kind == 'all' }}" href="{{ url_for('main.agent_sheet') }}">{{ t('All') }}</a>
+    <a class="{{ 'on' if kind == 'rent' }}" href="{{ url_for('main.agent_sheet', kind='rent') }}">{{ t('For rent') }}</a>
+    <a class="{{ 'on' if kind == 'sale' }}" href="{{ url_for('main.agent_sheet', kind='sale') }}">{{ t('For sale') }}</a>
+  </div>
   <span class="spacer"></span>
   <button type="button" onclick="window.close()">{{ t('Close') }}</button>
   <button type="button" class="gold" onclick="window.print()">{{ t('Print / save as PDF') }}</button>
@@ -79,121 +74,58 @@
     <div class="meta">{{ t('Printed') }} {{ printed_at }}<br>{{ t('By') }} {{ user.name }}</div>
   </header>
 
-  <h1>{{ t('Listings update for agents') }}</h1>
-  <p class="sub">{{ t('Our own listings to work on, and the tenancies ending soon.') }}</p>
-
-  <div class="summary">
-    <div data-part="available"><b>{{ own.rows|length }}</b><span>{{ t('Available now') }}</span></div>
-    <div data-part="soon"><b>{{ own.soon|length }}</b><span>{{ t('Coming free within a month') }}</span></div>
-    {% if show_leases %}<div data-part="leases"><b>{{ ending|length }}</b><span>{{ t('Leases ending soon') }}</span></div>{% endif %}
+  <h1>{{ t('Vacant list') }}{% if kind == 'rent' %} — {{ t('For rent') }}{% elif kind == 'sale' %} — {{ t('For sale') }}{% endif %}</h1>
+  <p class="sub">{{ t('Our own units vacant now, or coming free within a month.') }} {{ printed_day }}</p>
+  <div class="counts">
+    <span><b>{{ rows|length }}</b> {{ t('units') }}</span>
+    <span><b>{{ own.rows|length }}</b> {{ t('Vacant now') }}</span>
+    <span><b>{{ own.soon|length }}</b> {{ t('Coming free within a month') }}</span>
   </div>
 
-  {# ---- 1. our own stock on the market now #}
-  <section data-part="available">
-    <h2>{{ t('Our own listings — available now') }} <span class="count">{{ own.rows|length }}</span></h2>
-    <p class="hint">{{ t('Longest on the market first: push these.') }}</p>
-    {% if own.rows %}
-    <table>
-      <thead><tr>
-        <th>{{ t('Ref') }}</th><th>{{ t('Property') }}</th><th>{{ t('Sale / Rent') }}</th>
-        <th>{{ t('Price') }}</th><th>{{ t('On market') }}</th><th class="hide-sm">{{ t('Viewings') }}</th>
-        <th>{{ t('Agent') }}</th>
-      </tr></thead>
-      <tbody>
-      {% for p in own.rows %}
-        <tr>
-          <td class="mono small">{{ p.ref }}</td>
-          <td><b>{{ p.title }}</b><div class="small">{{ p.all_specs }}</div></td>
-          <td>{{ t(p.listing_type) }}</td>
-          <td class="mono">{% if p.price %}{{ currency }} {{ p.price | money }}{% if p.listing_type == 'Rent' %}<span class="small"> / {{ t('month') }}</span>{% endif %}{% else %}—{% endif %}</td>
-          <td class="mono">{{ p.on_market or 0 }} {{ t('days') }}</td>
-          <td class="mono hide-sm">{{ p.viewings or 0 }}</td>
-          <td>{{ p.agent_name or t('Unassigned') }}</td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-    {% else %}<div class="empty">{{ t('None of our own listings is available right now.') }}</div>{% endif %}
-  </section>
-
-  {# ---- 2. our rented units coming free #}
-  <section data-part="soon">
-    <h2>{{ t('Coming free within a month') }} <span class="count">{{ own.soon|length }}</span></h2>
-    <p class="hint">{{ t('Our own units still rented, whose rent ends within a month. They can be offered now, from the date shown.') }}</p>
-    {% if own.soon %}
-    <table>
-      <thead><tr>
-        <th>{{ t('Ref') }}</th><th>{{ t('Property') }}</th><th>{{ t('Sale / Rent') }}</th>
-        <th>{{ t('Price') }}</th><th>{{ t('Available from') }}</th><th>{{ t('Agent') }}</th>
-      </tr></thead>
-      <tbody>
-      {% for p in own.soon %}
-        <tr>
-          <td class="mono small">{{ p.ref }}</td>
-          <td><b>{{ p.title }}</b><div class="small">{{ p.all_specs }}</div></td>
-          <td>{{ t(p.listing_type) }}</td>
-          <td class="mono">{% if p.price %}{{ currency }} {{ p.price | money }}{% if p.listing_type == 'Rent' %}<span class="small"> / {{ t('month') }}</span>{% endif %}{% else %}—{% endif %}</td>
-          <td><span class="pill green">{{ p.free_from | nice_date }}</span>
-            <div class="small">{{ t('Rented until') }} {{ p.rent_end | nice_date }}</div></td>
-          <td>{{ p.agent_name or t('Unassigned') }}</td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-    {% else %}<div class="empty">{{ t('No rent of ours ends within the next month.') }}</div>{% endif %}
-  </section>
-
-  {# ---- 3. every tenancy ending soon (admin only) #}
-  {% if show_leases %}
-  <section data-part="leases">
-    <h2>{{ t('Leases ending soon') }} <span class="count">{{ ending|length }}</span></h2>
-    <p class="hint">{{ t('Tenancies that have already run out, or end within the next') }} {{ notice_days }} {{ t('days') }}. {{ t('Check with the tenant: renewing or moving out?') }}</p>
-    {% if ending %}
-    <table>
-      <thead><tr>
-        <th>{{ t('Ref') }}</th><th>{{ t('Property') }}</th>
-        <th class="tenant-info off">{{ t('Tenant') }}</th>
-        <th>{{ t('Rent ends') }}</th><th>{{ t('Status') }}</th><th>{{ t('Agent') }}</th>
-      </tr></thead>
-      <tbody>
-      {% for d in ending %}
-        <tr>
-          <td class="mono small">{{ d.prop_ref or '—' }}</td>
-          <td><b>{{ d.prop_title or '—' }}</b>{% if d.prop_area %}<div class="small">{{ d.prop_area }}</div>{% endif %}</td>
-          <td class="tenant-info off">{{ d.tenant_name or '—' }}{% if d.tenant_phone %}<div class="small mono">{{ d.tenant_phone }}</div>{% endif %}</td>
-          <td class="mono">{{ d.lease_end | nice_date }}</td>
-          <td>{% if d.left is none %}—
-            {% elif d.left < 0 %}<span class="pill red">{{ t('Ended') }} {{ -d.left }} {{ t('days ago') }}</span>
-            {% elif d.left == 0 %}<span class="pill red">{{ t('Ends today') }}</span>
-            {% else %}<span class="pill gold">{{ t('in') }} {{ d.left }} {{ t('days') }}</span>{% endif %}</td>
-          <td>{{ d.agent_name or t('Unassigned') }}</td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-    {% else %}<div class="empty">{{ t('No tenancy is ending in the next') }} {{ notice_days }} {{ t('days') }}.</div>{% endif %}
-  </section>
+  {% if rows %}
+  <div class="table-scroll">
+  <table>
+    <thead><tr>
+      <th>#</th>
+      <th>{{ t('Building') }}</th>
+      <th>{{ t('Floor') }}</th>
+      <th>{{ t('Flat') }}</th>
+      <th>{{ t('Unit') }}</th>
+      <th>{{ t('Furnishing') }}</th>
+      <th>{{ t('Price') }}</th>
+      <th>{{ t('Available') }}</th>
+      <th>{{ t('Location') }}</th>
+      <th>{{ t('Photos') }}</th>
+    </tr></thead>
+    <tbody>
+    {% for p in rows %}
+      <tr>
+        <td class="num small">{{ loop.index }}</td>
+        <td><b>{{ p.building_no or p.title }}</b>
+          <div class="small">{{ p.area or '' }}{% if p.ref %}{% if p.area %} · {% endif %}{{ p.ref }}{% endif %}</div></td>
+        <td class="num">{{ p.floor_no or '—' }}</td>
+        <td class="num"><b>{{ p.unit_no or '—' }}</b></td>
+        <td>{{ t(p.prop_type) }}{% if p.prop_type in ('Apartment', 'Villa') %}{% if p.bedrooms %} · {{ p.bedrooms }} {{ t('bed') }}{% endif %}{% endif %}
+          {% if p.size_sqm %}<div class="small">{{ p.size_sqm | round | int }} m²</div>{% endif %}
+          {% if kind == 'all' %}<div class="small">{{ t(p.listing_type) }}</div>{% endif %}</td>
+        <td>{{ t(p.furnishing) if p.furnishing else '—' }}</td>
+        <td class="num"><b>{% if p.price %}{{ currency }} {{ p.price | money }}{% else %}—{% endif %}</b>
+          {% if p.price and p.listing_type == 'Rent' %}<div class="small">/ {{ t('month') }}</div>{% endif %}</td>
+        <td>{% if p.vacant_now %}<span class="pill now">{{ t('Vacant now') }}</span>
+            {% else %}<span class="pill soon">{{ t('From') }} {{ p.free_from | nice_date }}</span>{% endif %}</td>
+        <td>{% if p.map_url %}<a class="link" href="{{ p.map_url }}" target="_blank" rel="noopener">{{ t('Open map') }}</a>{% else %}<span class="faint">—</span>{% endif %}</td>
+        <td>{% if p.photo_url %}<a class="link" href="{{ p.photo_url }}" target="_blank" rel="noopener">{{ t('Photos') }} ({{ p.photo_count }})</a>{% else %}<span class="faint">{{ t('No photos') }}</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="note">{{ t('Map and photo links open when you tap them in the PDF. Photo links stay valid for 30 days and can be forwarded to clients.') }}</p>
+  {% else %}
+    <div class="empty">{{ t('None of our own units is vacant or coming free within a month.') }}</div>
   {% endif %}
-
-  <section>
-    <h2>{{ t('Notes') }}</h2>
-    <div class="notes">&nbsp;</div>
-  </section>
 
   <footer><span>{{ company }}</span><span>{{ t('Confidential: for internal use') }}</span></footer>
 </div>
-<script>
-  document.querySelectorAll('.toolbar input[data-part]').forEach(function (box) {
-    function apply() {
-      var part = box.dataset.part;
-      var sel = part === 'tenant-info' ? '.tenant-info' : '[data-part="' + part + '"]:not(input)';
-      document.querySelectorAll(sel).forEach(function (el) {
-        el.classList.toggle('off', !box.checked);
-      });
-    }
-    box.addEventListener('change', apply);
-    apply();
-  });
-</script>
 </body>
 </html>

@@ -138,6 +138,10 @@
   </section>
 
   <main>
+    {% if available_from %}
+      <div class="notice">Available from {{ available_from }}.
+        <span class="ar">متاح ابتداءً من {{ available_from }}.</span></div>
+    {% endif %}
     {% if unavailable %}
       <div class="notice">This property is no longer available — ask us about similar ones.
         <span class="ar">هذا العقار لم يعد متاحاً — اسألنا عن عقارات مشابهة.</span></div>

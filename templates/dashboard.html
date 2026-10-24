@@ -226,7 +226,7 @@
     <div class="inline" style="gap:10px;flex-wrap:wrap">
     <a class="btn btn-sm" href="{{ url_for('main.agent_sheet') }}" target="_blank" rel="noopener">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6V1.5h8V6M4 12H2.5A1 1 0 011.5 11V7a1 1 0 011-1h11a1 1 0 011 1v4a1 1 0 01-1 1H12"/><path d="M4 9.5h8v5H4z"/></svg>
-      {{ t('Print / save as PDF') }}</a>
+      {{ t('Print vacant list') }}</a>
     <div class="own-tabs" role="group" aria-label="{{ t('Filter') }}">
       <a class="{{ 'on' if own.kind == 'all' }}" href="{{ url_for('main.dashboard', own='all') }}#own">{{ t('All') }} · {{ own.total }}</a>
       <a class="{{ 'on' if own.kind == 'sale' }}" href="{{ url_for('main.dashboard', own='sale') }}#own">{{ t('For sale') }} · {{ own.sale }}</a>

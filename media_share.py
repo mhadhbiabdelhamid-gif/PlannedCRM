@@ -160,6 +160,33 @@ def stop(sid):
                     else url_for("leads.board"))
 
 
+def listing_link(p, user_id):
+    """A photo link for one listing that isn't tied to any client: used on the
+    printed vacant list, so agents can open or forward the photos.
+
+    One live link per listing is reused (and kept alive another SHARE_DAYS)
+    rather than making a new one on every print. The gallery shows the
+    contact details of whoever the link belongs to, so it is the listing's
+    agent where there is one. Returns None when there are no photos/videos.
+    """
+    photos, videos = media_counts(p["id"])
+    if not photos and not videos:
+        return None, 0
+    existing = query("SELECT * FROM media_shares WHERE property_id = ?"
+                     " AND lead_id IS NULL AND revoked_at IS NULL AND expires_at > ?"
+                     " ORDER BY id DESC", (p["id"], now()), one=True)
+    if existing:
+        token = existing["token"]
+        execute("UPDATE media_shares SET expires_at = ? WHERE id = ?",
+                (_expiry(), existing["id"]))
+    else:
+        token = secrets.token_urlsafe(16)
+        execute("INSERT INTO media_shares (token, property_id, lead_id, created_by,"
+                " created_at, expires_at) VALUES (?,?,NULL,?,?,?)",
+                (token, p["id"], p["agent_id"] or user_id, now(), _expiry()))
+    return share_url(token), photos
+
+
 def _expiry():
     return (datetime.utcnow() + timedelta(days=SHARE_DAYS)).strftime(STAMP)
 
@@ -207,6 +234,12 @@ def gallery(token):
             f"Hello {p['agent_name']}, about {p['title']}"
             + (f" (Ref {p['ref']})" if p["ref"] else "") + " — ")
 
+    # A rented unit coming free within a month is still being offered.
+    import leases
+    free = leases.free_from(p)
+    available_from = (datetime.strptime(free, "%Y-%m-%d").strftime("%d %b %Y")
+                      if free else None)
+
     from auth import _site_url
     base = _site_url()
     cover = (base + url_for("media.file", token=token, kind="images",
@@ -215,7 +248,8 @@ def gallery(token):
         "media/gallery.html", expired=False, p=p, images=images, videos=videos,
         token=token, price=price, reply=reply, lead_name=lead_name,
         page_url=base + url_for("media.gallery", token=token), cover=cover,
-        unavailable=p["status"] in ("Sold", "Rented"),
+        unavailable=p["status"] in ("Sold", "Rented") and not available_from,
+        available_from=available_from,
         company=get_setting("company_name", "Planned Real Estate"), **_brand())
 
 
