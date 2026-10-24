@@ -6,7 +6,7 @@ from flask import (Blueprint, current_app, g, jsonify, redirect,
                    render_template, request, send_from_directory, url_for)
 
 from auth import admin_required, is_admin, login_required, published_only, sees_all
-from db import execute, local_now, local_today, paginate, query, utc_day_bounds
+from db import execute, local_now, local_today, log, paginate, query, utc_day_bounds
 
 bp = Blueprint("main", __name__)
 
@@ -168,69 +168,114 @@ def _days_since(stamp):
     return max(0, (datetime.utcnow() - then).days)
 
 
-def _own_available(kind):
-    """Planned Real Estate's own stock that is still on the market.
+OWN_SELECT = (
+    "SELECT p.*, u.name AS agent_name,"
+    " (SELECT filename FROM property_images i WHERE i.property_id = p.id"
+    "   ORDER BY is_cover DESC, id LIMIT 1) AS cover,"
+    " (SELECT COUNT(*) FROM viewings v WHERE v.property_id = p.id) AS viewings"
+    " FROM properties p LEFT JOIN users u ON u.id = p.agent_id")
 
-    Three conditions, all required: the "Owned by <company>" box is ticked
-    (partner and third-party listings are left out), the listing has been
-    approved (a listing waiting for approval is also 'Available', so without
-    this it would slip in), and its status is Available. Shown to everyone,
-    whoever the agent is: these are the whole office's priority.
 
-    Oldest first, because the unit that has sat longest is the one to push.
-    """
+def _own_item(r, company, currency):
+    """One of our listings, ready for the dashboard or the printed sheet."""
     from urllib.parse import quote
+    import leases
+    free = leases.free_from(r)
+    specs = [r["prop_type"]]
+    if r["bedrooms"]:
+        specs.append(f"{r['bedrooms']} bed")
+    if r["size_sqm"]:
+        specs.append(f"{r['size_sqm']:,.0f} m²")
+    if r["area"]:
+        specs.append(r["area"])
+    price = f"{currency} {r['price']:,.0f}" if r["price"] else ""
+    if price and r["listing_type"] == "Rent":
+        price += " / month"
+    # A WhatsApp link with no number opens WhatsApp's own contact picker,
+    # so the agent chooses who to send it to.
+    message = "\n".join(x for x in [
+        r["title"], " · ".join(specs), price,
+        f"Available from {free}" if free else "",
+        f"Ref {r['ref']}" if r["ref"] else "", company] if x)
+    return dict(
+        r, specs=" · ".join(specs[:3]), all_specs=" · ".join(specs),
+        on_market=_days_since(r["created_at"]),
+        checked=_days_since(r["last_verified"]),
+        free_from=free,
+        share_url="https://wa.me/?text=" + quote(message))
+
+
+def _own_lists(kind="all", limit=None):
+    """Planned Real Estate's own stock: what is on the market now, and the
+    rented units coming free within a month.
+
+    "Our own" means the "Owned by <company>" box is ticked (partner and
+    third-party listings are left out) and the listing has been approved (a
+    listing waiting for approval is also 'Available', so without this it
+    would slip in). Shown to everyone, whoever the agent is: these are the
+    whole office's priority.
+
+    Available units oldest first, because the unit that has sat longest is
+    the one to push; coming-free units soonest first.
+    """
     from db import get_setting
+    import leases
 
-    base = (" FROM properties p WHERE COALESCE(p.is_own, 0) = 1"
-            " AND p.status = 'Available'" + published_only("p"))
+    own = " WHERE COALESCE(p.is_own, 0) = 1" + published_only("p")
+    avail = own + " AND p.status = 'Available'"
+    soon = (own + " AND p.status = 'Rented' AND p.rent_end IS NOT NULL"
+            " AND p.rent_end <= ?")
+    horizon = leases.soon_horizon()
+
     counts = {r["listing_type"]: r["c"] for r in query(
-        "SELECT p.listing_type, COUNT(*) c" + base + " GROUP BY p.listing_type")}
+        "SELECT p.listing_type, COUNT(*) c FROM properties p" + avail
+        + " GROUP BY p.listing_type")}
     kind = kind if kind in ("sale", "rent") else "all"
-    where, args = base, []
+    extra, args = "", []
     if kind != "all":
-        where += " AND p.listing_type = ?"
+        extra = " AND p.listing_type = ?"
         args.append(kind.capitalize())
+    cap = f" LIMIT {int(limit)}" if limit else ""
 
-    rows = query(
-        "SELECT p.*, u.name AS agent_name,"
-        " (SELECT filename FROM property_images i WHERE i.property_id = p.id"
-        "   ORDER BY is_cover DESC, id LIMIT 1) AS cover,"
-        " (SELECT COUNT(*) FROM viewings v WHERE v.property_id = p.id) AS viewings"
-        + where.replace(" FROM properties p",
-                        " FROM properties p LEFT JOIN users u ON u.id = p.agent_id")
-        + " ORDER BY p.created_at, p.id LIMIT 10", args)
+    rows = query(OWN_SELECT + avail + extra + " ORDER BY p.created_at, p.id" + cap, args)
+    soon_rows = query(OWN_SELECT + soon + extra + " ORDER BY p.rent_end, p.id",
+                      [horizon] + args)
 
     company = get_setting("company_name", "Planned Real Estate")
     currency = get_setting("currency", "QAR")
-    items = []
-    for r in rows:
-        specs = [r["prop_type"]]
-        if r["bedrooms"]:
-            specs.append(f"{r['bedrooms']} bed")
-        if r["size_sqm"]:
-            specs.append(f"{r['size_sqm']:,.0f} m²")
-        if r["area"]:
-            specs.append(r["area"])
-        price = f"{currency} {r['price']:,.0f}" if r["price"] else ""
-        if price and r["listing_type"] == "Rent":
-            price += " / month"
-        # A WhatsApp link with no number opens WhatsApp's own contact picker,
-        # so the agent chooses who to send it to.
-        message = "\n".join(x for x in [
-            r["title"], " · ".join(specs), price,
-            f"Ref {r['ref']}" if r["ref"] else "", company] if x)
-        items.append(dict(
-            r, specs=" · ".join(specs[:3]),
-            on_market=_days_since(r["created_at"]),
-            checked=_days_since(r["last_verified"]),
-            share_url="https://wa.me/?text=" + quote(message)))
-
     return {
-        "rows": items, "kind": kind,
+        "rows": [_own_item(r, company, currency) for r in rows],
+        "soon": [_own_item(r, company, currency) for r in soon_rows],
+        "kind": kind,
         "total": sum(counts.values()),
         "sale": counts.get("Sale", 0), "rent": counts.get("Rent", 0),
     }
+
+
+def _own_available(kind):
+    return _own_lists(kind, limit=10)
+
+
+@bp.route("/agent-sheet")
+@login_required
+def agent_sheet():
+    """One printable page to hand the agents: our available listings, our
+    units coming free within a month, and (for the admin) every lease
+    ending soon. Printed, or saved as PDF from the browser's print dialog."""
+    import leases
+    from db import LEASE_NOTICE_DAYS, local_today
+    own = _own_lists("all")
+    ending = []
+    if is_admin():
+        today = local_today()
+        ending = [dict(r, left=leases.days_left(r["lease_end"], today))
+                  for r in leases.ending()]
+    log(g.user["id"], "Printed the agents' sheet",
+        detail=f"{len(own['rows'])} available, {len(own['soon'])} coming free,"
+               f" {len(ending)} leases ending")
+    return render_template("agent_sheet.html", own=own, ending=ending,
+                           show_leases=is_admin(), notice_days=LEASE_NOTICE_DAYS,
+                           printed_at=local_now().strftime("%d %b %Y, %H:%M"))
 
 
 @bp.route("/search")

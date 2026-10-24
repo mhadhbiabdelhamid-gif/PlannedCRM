@@ -223,10 +223,15 @@
       <h3>{{ t('Our own listings — available now') }} <span class="tag tag-sale">{{ t('Priority') }}</span></h3>
       <div class="small muted">{{ t('Only listings marked “Owned by” our company, approved and available. Partner and third-party listings are left out. Longest on the market first.') }}</div>
     </div>
+    <div class="inline" style="gap:10px;flex-wrap:wrap">
+    <a class="btn btn-sm" href="{{ url_for('main.agent_sheet') }}" target="_blank" rel="noopener">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6V1.5h8V6M4 12H2.5A1 1 0 011.5 11V7a1 1 0 011-1h11a1 1 0 011 1v4a1 1 0 01-1 1H12"/><path d="M4 9.5h8v5H4z"/></svg>
+      {{ t('Print / save as PDF') }}</a>
     <div class="own-tabs" role="group" aria-label="{{ t('Filter') }}">
       <a class="{{ 'on' if own.kind == 'all' }}" href="{{ url_for('main.dashboard', own='all') }}#own">{{ t('All') }} · {{ own.total }}</a>
       <a class="{{ 'on' if own.kind == 'sale' }}" href="{{ url_for('main.dashboard', own='sale') }}#own">{{ t('For sale') }} · {{ own.sale }}</a>
       <a class="{{ 'on' if own.kind == 'rent' }}" href="{{ url_for('main.dashboard', own='rent') }}#own">{{ t('For rent') }} · {{ own.rent }}</a>
+    </div>
     </div>
   </div>
 
@@ -275,6 +280,50 @@
       {% if own.total %}{{ t('None of this type right now.') }}
       {% else %}{{ t('No own listings are available. Tick “Owned by” our company on a listing to show it here.') }}{% endif %}
     </div>
+  {% endif %}
+
+  {% if own.soon %}
+  <div class="card-head" style="border-top:1px solid var(--line-soft)">
+    <div>
+      <h3>{{ t('Coming free within a month') }} <span class="mono faint">{{ own.soon|length }}</span></h3>
+      <div class="small muted">{{ t('Our own units still rented, whose rent ends within a month. They can be offered now, from the date shown.') }}</div>
+    </div>
+  </div>
+  <div class="table-scroll">
+    <table class="table own-table">
+      <thead><tr>
+        <th></th><th>{{ t('Property') }}</th><th>{{ t('Price') }}</th>
+        <th>{{ t('Available from') }}</th><th>{{ t('Viewings') }}</th><th>{{ t('Agent') }}</th><th></th>
+      </tr></thead>
+      <tbody>
+      {% for p in own.soon %}
+        <tr>
+          <td class="own-thumb">
+            {% if p.cover %}
+              <span style="background-image:url('{{ url_for('main.uploaded_file', kind='images', filename=p.cover) }}')"></span>
+            {% else %}<span class="ph">{{ p.prop_type[0] }}</span>{% endif %}
+          </td>
+          <td>
+            <a href="{{ url_for('properties.detail', pid=p.id) }}"><b>{{ p.title }}</b></a>
+            <span class="tag {{ 'tag-rent' if p.listing_type == 'Rent' else 'tag-sale' }}">{{ t(p.listing_type) }}</span>
+            <div class="small muted">{% if p.ref %}<span class="mono">{{ p.ref }}</span> · {% endif %}{{ p.specs }}</div>
+          </td>
+          <td class="nowrap">{% if p.price %}<span class="mono">{{ currency }} {{ p.price | money }}</span>{% if p.listing_type == 'Rent' %}<span class="muted small"> / {{ t('month') }}</span>{% endif %}{% else %}—{% endif %}</td>
+          <td class="nowrap">
+            <span class="tag tag-available">{{ p.free_from | nice_date }}</span>
+            <div class="small muted">{{ t('Rented until') }} {{ p.rent_end | nice_date }}</div>
+          </td>
+          <td class="nowrap">{% if p.viewings %}{{ p.viewings }}{% else %}<span class="muted">{{ t('None yet') }}</span>{% endif %}</td>
+          <td class="nowrap">{{ p.agent_name or t('Unassigned') }}</td>
+          <td class="right nowrap own-acts">
+            <a class="btn btn-sm btn-wa" href="{{ p.share_url }}" target="_blank" rel="noopener">{{ t('Send on WhatsApp') }}</a>
+            <a class="btn btn-quiet btn-sm" href="{{ url_for('properties.detail', pid=p.id) }}">{{ t('Open') }}</a>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
   {% endif %}
 </section>
 {% endblock %}
