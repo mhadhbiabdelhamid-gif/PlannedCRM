@@ -27,7 +27,7 @@
   table.fixed { table-layout:fixed; }
   tr.total td { border-top:1.5px solid var(--ink); border-bottom:none; background:#FBF8F1; font-weight:600;
                 -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  tfoot tr.total + tr.total td { border-top:1px solid var(--line); }
+  tbody.totals tr.total + tr.total td { border-top:1px solid var(--line); }
   .grand { display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;
            border:2px solid var(--gold); border-radius:8px; padding:12px 16px; margin:4px 0 8px;
            break-inside:avoid; }
@@ -73,8 +73,32 @@
   .toolbar button.gold { background:var(--gold); border-color:var(--gold); color:#fff; font-weight:600; }
   @media (max-width:760px) { .page, .toolbar { padding-left:16px; padding-right:16px; }
                              .table-scroll { overflow-x:auto; } }
-  @media print { .toolbar { display:none; } .page { padding:0; max-width:none; }
-                 @page { size:A4 landscape; margin:10mm; } }
+  @media print {
+    @page { size:A4 portrait; margin:8mm 7mm; }
+    .toolbar { display:none; }
+    .page { padding:0; max-width:none; }
+    body { font-size:8.6px; line-height:1.3; }
+    header { padding-bottom:6px; margin-bottom:8px; border-bottom-width:2px; }
+    header img { width:38px; height:38px; }
+    header .co { font-size:12px; }
+    header .meta { font-size:8px; }
+    h1 { font-size:15px; }
+    .sub { margin:0 0 6px; font-size:8.5px; }
+    .counts { margin:0 0 8px; gap:5px; }
+    .counts span { font-size:8px; padding:1px 7px; }
+    th { font-size:6.8px; padding:3px 3px; letter-spacing:.02em; }
+    td { padding:3px 3px; }
+    .small { font-size:7.6px; }
+    .pill { font-size:7.4px; padding:0 4px; }
+    a.link { font-size:8px; }
+    .group { margin-bottom:9px; }
+    .group-head { font-size:10.5px; padding:3px 8px; margin-bottom:3px; }
+    .group-head .count { font-size:8px; }
+    .grand { padding:6px 10px; margin:2px 0 4px; }
+    .grand-title { font-size:11px; }
+    .grand-figs b { font-size:12px; }
+    .note, footer { font-size:7.5px; margin-top:6px; }
+  }
 </style>
 </head>
 <body>
@@ -111,9 +135,9 @@
   <div class="table-scroll">
   <table class="fixed">
     <colgroup>
-      <col style="width:3%"><col style="width:11%"><col style="width:14%"><col style="width:6%">
-      <col style="width:8%"><col style="width:11%"><col style="width:10%"><col style="width:10%">
-      <col style="width:11%"><col style="width:8%"><col style="width:8%">
+      <col style="width:3%"><col style="width:11%"><col style="width:10%"><col style="width:5%">
+      <col style="width:8%"><col style="width:17%"><col style="width:10%"><col style="width:11%">
+      <col style="width:11%"><col style="width:7%"><col style="width:7%">
     </colgroup>
     <thead><tr>
       <th>#</th>
@@ -139,12 +163,10 @@
           {% if p.ref %}<div class="small">{{ p.ref }}</div>{% endif %}</td>
         <td class="num">{{ p.floor_no or '—' }}</td>
         <td class="num"><b>{{ p.unit_no or '—' }}</b></td>
-        <td>{{ t(p.prop_type) }}{% if p.prop_type in ('Apartment', 'Villa') %}{% if p.bedrooms %} · {{ p.bedrooms }} {{ t('bed') }}{% endif %}{% endif %}
-          {% if p.size_sqm %}<div class="small">{{ p.size_sqm | round | int }} m²</div>{% endif %}
-          {% if kind == 'all' %}<div class="small">{{ t(p.listing_type) }}</div>{% endif %}</td>
+        <td>{{ t(p.prop_type) }}{% if p.prop_type in ('Apartment', 'Villa') and p.bedrooms %} · {{ p.bedrooms }} {{ t('bed') }}{% endif %}
+          <span class="small">{% if p.size_sqm %}· {{ p.size_sqm | round | int }} m²{% endif %}{% if p.listing_type == 'Sale' %} · <b>{{ t('Sale') }}</b>{% endif %}</span></td>
         <td>{{ t(p.furnishing) if p.furnishing else '—' }}</td>
-        <td class="num"><b>{% if p.price %}{{ currency }} {{ p.price | money }}{% else %}—{% endif %}</b>
-          {% if p.price and p.listing_type == 'Rent' %}<div class="small">/ {{ t('month') }}</div>{% endif %}</td>
+        <td class="num"><b>{% if p.price %}{{ currency }} {{ p.price | money }}{% else %}—{% endif %}</b>{% if p.price and p.listing_type == 'Rent' %}<span class="small"> /{{ t('mo') }}</span>{% endif %}</td>
         <td>{% if p.vacant_now %}<span class="pill now">{{ t('Vacant now') }}</span>
             {% else %}<span class="pill soon">{{ t('From') }} {{ p.free_from | nice_date }}</span>{% endif %}</td>
         <td>{% if p.map_url %}<a class="link" href="{{ p.map_url }}" target="_blank" rel="noopener">{{ t('Open map') }}</a>{% else %}<span class="faint">—</span>{% endif %}</td>
@@ -152,13 +174,13 @@
       </tr>
     {% endfor %}
     </tbody>
-    <tfoot>
+    <tbody class="totals">
       {% if sec.rent_n %}
       <tr class="total">
         <td></td>
         <td colspan="6">{{ t('Total') }} {{ t(sec.label) }}{% if sec.sale_n %} · {{ t('Rent') }}{% endif %}
           <span class="small">({{ sec.rent_n }} {{ t('unit') if (sec.rent_n) == 1 else t('units') }})</span></td>
-        <td class="num"><b>{{ currency }} {{ sec.rent_total | money }}</b><div class="small">/ {{ t('month') }}</div></td>
+        <td class="num"><b>{{ currency }} {{ sec.rent_total | money }}</b><span class="small"> /{{ t('mo') }}</span></td>
         <td colspan="3"></td>
       </tr>
       {% endif %}
@@ -171,7 +193,7 @@
         <td colspan="3"></td>
       </tr>
       {% endif %}
-    </tfoot>
+    </tbody>
   </table>
   </div>
   </section>
