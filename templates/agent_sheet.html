@@ -23,6 +23,17 @@
   .counts { display:flex; gap:8px; flex-wrap:wrap; margin:0 0 14px; }
   .counts span { border:1px solid var(--line); border-radius:999px; padding:3px 11px; font-size:12px; }
   .counts b { font-variant-numeric:tabular-nums; }
+  .group { margin-bottom:22px; }
+  table.fixed { table-layout:fixed; }
+  table.fixed td { overflow-wrap:anywhere; }
+  .group-head { font-size:15px; margin:0 0 8px; padding:6px 10px; border-radius:6px;
+                display:flex; align-items:center; gap:8px;
+                -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .group-head.res { background:var(--green-pale); color:var(--green); }
+  .group-head.com { background:#E6ECF5; color:#2D4A7A; }
+  .group-head.land { background:var(--gold-pale); color:#7A6222; }
+  .group-head .count { background:#fff; border-radius:999px; padding:0 9px; font-size:12px; }
+  @media print { .group-head { break-after:avoid; } }
   table { width:100%; border-collapse:collapse; }
   th { text-align:start; font-size:10.5px; text-transform:uppercase; letter-spacing:.05em;
        color:var(--muted); border-bottom:1.5px solid var(--ink); padding:7px 7px; white-space:nowrap; }
@@ -83,8 +94,16 @@
   </div>
 
   {% if rows %}
+  {% for sec in sections %}
+  <section class="group">
+  <h2 class="group-head {{ sec.key }}">{{ t(sec.label) }} <span class="count">{{ sec.rows|length }}</span></h2>
   <div class="table-scroll">
-  <table>
+  <table class="fixed">
+    <colgroup>
+      <col style="width:3%"><col style="width:11%"><col style="width:14%"><col style="width:6%">
+      <col style="width:8%"><col style="width:11%"><col style="width:10%"><col style="width:10%">
+      <col style="width:11%"><col style="width:8%"><col style="width:8%">
+    </colgroup>
     <thead><tr>
       <th>#</th>
       <th>{{ t('Area') }}</th>
@@ -99,7 +118,7 @@
       <th>{{ t('Photos') }}</th>
     </tr></thead>
     <tbody>
-    {% for p in rows %}
+    {% for p in sec.rows %}
       <tr>
         <td class="num small">{{ loop.index }}</td>
         <td>{% if p.area %}<b>{{ p.area }}</b>
@@ -124,6 +143,8 @@
     </tbody>
   </table>
   </div>
+  </section>
+  {% endfor %}
   <p class="note">{{ t('Map and photo links open when you tap them in the PDF. Photo links stay valid for 30 days and can be forwarded to clients.') }}</p>
   {% else %}
     <div class="empty">{{ t('None of our own units is vacant or coming free within a month.') }}</div>

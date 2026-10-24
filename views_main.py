@@ -283,10 +283,25 @@ def agent_sheet():
     for r in rows:
         r["photo_url"], r["photo_count"] = media_share.listing_link(r, g.user["id"])
 
+    # Residential first, then offices and shops; land (rare) on its own.
+    groups = [
+        ("Residential", "res", ("Villa", "Apartment", "Studio")),
+        ("Office & Commercial", "com", ("Office", "Commercial")),
+        ("Land", "land", ("Land",)),
+    ]
+    known = {tp for _, _, types in groups for tp in types}
+    sections = []
+    for label, key, types in groups:
+        part = [r for r in rows if r["prop_type"] in types
+                or (key == "res" and r["prop_type"] not in known)]
+        if part:
+            sections.append({"label": label, "key": key, "rows": part})
+
     log(g.user["id"], "Printed the vacant list",
         detail=f"{len(own['rows'])} vacant now, {len(own['soon'])} coming free")
     import areas
     return render_template("agent_sheet.html", rows=rows, own=own, kind=own["kind"],
+                           sections=sections,
                            area_ar=areas.in_arabic,
                            printed_at=local_now().strftime("%d %b %Y, %H:%M"),
                            printed_day=local_now().strftime("%d %b %Y"))
