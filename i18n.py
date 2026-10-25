@@ -1311,6 +1311,9 @@ AR.update({
 AR.update({
     "Phone app": "تطبيق الجوال",
     "Notifications are working on this phone.": "الإشعارات تعمل على هذا الجوال.",
+    "Your phone is showing the desktop version.": "جوالك يعرض نسخة الكمبيوتر.",
+    'To get the phone layout: open Chrome, tap ⋮ and untick "Desktop site" (Samsung Internet: ≡ → "Mobile version"). Then close the CRM app and open it again.':
+        "لعرض نسخة الجوال: افتح كروم، اضغط ⋮ وألغِ تحديد «موقع سطح المكتب» (متصفح سامسونج: ≡ ← «نسخة الجوال»). ثم أغلق تطبيق النظام وافتحه من جديد.",
     "App on your phone": "التطبيق على جوالك",
     "You are using the CRM app on this phone.": "أنت تستخدم تطبيق النظام على هذا الجوال.",
     "Put the CRM on this phone as an app: an icon on the home screen that opens full-screen, without the browser.":

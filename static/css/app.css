@@ -2183,7 +2183,7 @@ a.area-stat:hover { border-color: var(--gold); }
    The "turn on notifications" banner and the Phone app card on My account
    (see static/js/pwa.js). Everything here is hidden until the script decides
    it applies, so a desktop browser never sees an install prompt it can't use. */
-.push-banner[hidden], .pwa-card [hidden] { display: none !important; }
+.push-banner[hidden], .pwa-card [hidden], .desktop-mode-note[hidden] { display: none !important; }
 
 .push-banner {
   display: flex;
@@ -2217,4 +2217,19 @@ a.area-stat:hover { border-color: var(--gold); }
   .push-banner-actions { width: 100%; }
   .push-banner-actions .btn { flex: 1; height: 40px; }
   .pwa-card .btn { height: 40px; }
+}
+
+/* Sizes are in em: pwa.js sets the font size to undo the desktop-mode shrink. */
+.desktop-mode-note {
+  position: sticky; top: 0; z-index: 60;
+  display: flex; flex-direction: column; gap: .35em;
+  padding: .9em 2.6em .9em 1em;
+  background: var(--ink); color: #F6F2E9;
+  border-bottom: .2em solid var(--gold);
+  line-height: 1.45;
+}
+.desktop-mode-note button {
+  position: absolute; top: .4em; inset-inline-end: .5em;
+  width: 1.8em; height: 1.8em; font-size: 1.3em; line-height: 1;
+  background: transparent; border: 0; color: #F6F2E9; cursor: pointer;
 }

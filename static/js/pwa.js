@@ -11,6 +11,29 @@
 (function () {
   "use strict";
 
+  /* --------------------------------------------- "Desktop site" on a phone
+     A phone set to "Desktop site" ignores the viewport tag and lays the page
+     out ~1000px wide, shrunk to fit: the whole desktop screen in miniature.
+     Nothing in the page can undo that setting, so say how to turn it off.
+     The note is scaled up by the same factor the page was shrunk, or it
+     would be as unreadable as everything else. */
+  (function () {
+    var note = document.getElementById("desktop-mode-note");
+    if (!note) return;
+    var touch = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+    var phoneWide = Math.min(screen.width, screen.height);
+    if (!(touch && phoneWide && phoneWide < 700 && window.innerWidth > 860)) return;
+    try { if (sessionStorage.getItem("crm-desktop-note") === "closed") return; } catch (e) {}
+    var scale = Math.max(1, window.innerWidth / phoneWide);
+    note.style.fontSize = Math.round(15 * scale) + "px";
+    note.hidden = false;
+    var close = note.querySelector("[data-desktop-note-close]");
+    if (close) close.addEventListener("click", function () {
+      note.hidden = true;
+      try { sessionStorage.setItem("crm-desktop-note", "closed"); } catch (e) {}
+    });
+  })();
+
   if (!("serviceWorker" in navigator)) {
     setPush("unsupported");
     setInstall("manual");

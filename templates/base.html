@@ -266,6 +266,15 @@
 
   {# Offered once the CRM is opened from the home-screen icon, until the
      person turns notifications on or taps "Later" (see static/js/pwa.js). #}
+  {# Shown by static/js/pwa.js when a phone is set to "Desktop site", which
+     makes the browser ignore the phone layout and draw the whole desktop
+     screen shrunk to fit. #}
+  <div class="desktop-mode-note" id="desktop-mode-note" hidden>
+    <b>{{ t('Your phone is showing the desktop version.') }}</b>
+    <span>{{ t('To get the phone layout: open Chrome, tap ⋮ and untick "Desktop site" (Samsung Internet: ≡ → "Mobile version"). Then close the CRM app and open it again.') }}</span>
+    <button type="button" data-desktop-note-close aria-label="{{ t('Close') }}">×</button>
+  </div>
+
   <div class="push-banner" id="push-banner" hidden>
     <span>{{ t('Get new leads, follow-ups and listing updates on this phone.') }}</span>
     <span class="push-banner-actions">
