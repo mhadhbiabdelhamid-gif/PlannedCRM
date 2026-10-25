@@ -358,6 +358,37 @@ and every sleep — the database and all uploaded photos would vanish. The disk 
 
 ---
 
+## The phone app
+
+The CRM installs on phones as an app — an icon on the home screen that opens
+full-screen without the browser — and sends push notifications. No app store.
+
+**Install (each person, once):** open the CRM on the phone, sign in, go to
+**My account → Phone app** and follow the steps there.
+
+- Android (Chrome): tap **Install the app** (or ⋮ menu → Install app).
+- iPhone (Safari): Share → **Add to Home Screen** → Add. Then open the CRM from
+  the new icon.
+
+**Notifications:** in the installed app, tap **Turn on notifications** (a
+banner offers it, or My account → Phone app). From then on, every CRM
+notification meant for that person — lead assigned, stage changed, follow-up
+set, listing approved, lease ending — also arrives on their phone, and tapping
+it opens the record. Use **Send a test** to check.
+
+Good to know:
+
+- iPhone needs iOS 16.4 or later, and notifications only work in the app
+  opened from the home-screen icon, not in a Safari tab.
+- It needs HTTPS, which Render provides. On the office computer over plain
+  `http://` the app still works, but phones can't install it or get pushes.
+- Keys: generated once and kept in the database (settings `vapid_keys`), so
+  there is nothing to configure. To set your own, put `VAPID_PRIVATE_KEY`
+  (PEM) and `VAPID_PUBLIC_KEY` in the environment. Changing keys turns
+  everyone's notifications off until they tap Turn on again.
+- If `pywebpush` isn't installed the app still installs; it just can't push.
+- New logo? Run `python make_pwa_icons.py` to rebuild the icons.
+
 ## Backups
 
 **Automatic.** While the CRM is running it takes a copy of the database once a day and

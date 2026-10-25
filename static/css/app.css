@@ -2178,3 +2178,43 @@ a.area-stat:hover { border-color: var(--gold); }
 .fix-areas td { vertical-align: top; }
 .fix-areas td:first-child { max-width: 380px; }
 .fix-areas .area-select { min-width: 240px; }
+
+/* ------------------------------------------------------------ phone app
+   The "turn on notifications" banner and the Phone app card on My account
+   (see static/js/pwa.js). Everything here is hidden until the script decides
+   it applies, so a desktop browser never sees an install prompt it can't use. */
+.push-banner[hidden], .pwa-card [hidden] { display: none !important; }
+
+.push-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 14px 26px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--gold);
+  border-radius: var(--radius);
+  background: var(--card);
+  font-size: 14px;
+}
+.push-banner-actions { display: flex; gap: 8px; }
+[dir="rtl"] .push-banner { border-left: 1px solid var(--line); border-right: 3px solid var(--gold); }
+
+.pwa-card .pwa-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.pwa-card .pwa-state { display: inline-flex; align-items: center; gap: 7px; font-weight: 550; }
+.pwa-card .pwa-state::before {
+  content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--faint);
+}
+.pwa-card .pwa-state.on::before { background: var(--ok); }
+.pwa-card .pwa-state.bad::before { background: var(--bad); }
+.pwa-card ol { margin: 6px 0 0; padding-inline-start: 20px; line-height: 1.7; }
+.pwa-card .pwa-note { margin: 10px 0 0; }
+
+@media (max-width: 860px) {
+  .push-banner { margin: 12px 14px 0; }
+  .push-banner-actions { width: 100%; }
+  .push-banner-actions .btn { flex: 1; height: 40px; }
+  .pwa-card .btn { height: 40px; }
+}

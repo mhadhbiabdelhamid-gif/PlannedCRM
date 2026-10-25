@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#23201A">
+<title>No connection · Planned CRM</title>
+<style>
+  /* Self-contained: this page is shown when nothing else can load. */
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #23201A; color: #F6F2E9;
+    font-family: system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif; }
+  .wrap { min-height: 100%; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 18px; padding: 24px; text-align: center; box-sizing: border-box; }
+  img { width: 88px; height: 88px; border-radius: 20px; }
+  h1 { margin: 0; font-size: 20px; font-weight: 600; }
+  p { margin: 0; max-width: 320px; line-height: 1.5; color: #CFC8B8; font-size: 15px; }
+  .ar { direction: rtl; }
+  button { margin-top: 6px; background: #A88848; color: #14141A; border: 0; border-radius: 6px;
+    padding: 12px 22px; font-size: 15px; font-weight: 600; min-width: 160px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <img src="{{ url_for('static', filename='img/pwa/icon-192.png') }}" alt="">
+  <h1>No internet connection</h1>
+  <p>The CRM needs a connection to show live listings and leads. Check your Wi-Fi or mobile data and try again.</p>
+  <h1 class="ar">لا يوجد اتصال بالإنترنت</h1>
+  <p class="ar">يحتاج النظام إلى اتصال لعرض العقارات والعملاء. تحقق من الواي فاي أو بيانات الجوال وحاول مرة أخرى.</p>
+  <button type="button" onclick="location.reload()">Try again · إعادة المحاولة</button>
+</div>
+</body>
+</html>

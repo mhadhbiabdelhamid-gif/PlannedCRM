@@ -27,6 +27,74 @@
     </div>
   </div>
 </div>
+{# Install on the home screen and turn on notifications. Which lines show is
+   decided by static/js/pwa.js for this phone and browser. #}
+<div class="card pwa-card" id="pwa-card" style="max-width:560px;margin-bottom:16px">
+  <div class="card-head"><h3>{{ t('Phone app') }}</h3></div>
+  <div class="card-body">
+    <div class="eyebrow" style="margin-bottom:8px">{{ t('App on your phone') }}</div>
+
+    <p class="pwa-state on" data-install-show="installed" style="margin:0" hidden>
+      {{ t('You are using the CRM app on this phone.') }}</p>
+
+    <div data-install-show="can-install" hidden>
+      <p class="small muted" style="margin:0 0 10px">{{ t('Put the CRM on this phone as an app: an icon on the home screen that opens full-screen, without the browser.') }}</p>
+      <button type="button" class="btn btn-gold" data-pwa-install>{{ t('Install the app') }}</button>
+    </div>
+
+    <div data-install-show="ios-browser" hidden>
+      <p class="small muted" style="margin:0">{{ t('On iPhone, add the CRM to your home screen from Safari:') }}</p>
+      <ol class="small">
+        <li>{{ t('Tap the Share button at the bottom of Safari (the square with an arrow).') }}</li>
+        <li>{{ t('Scroll down and tap "Add to Home Screen", then "Add".') }}</li>
+        <li>{{ t('Open the CRM from the new icon, sign in, and come back here to turn on notifications.') }}</li>
+      </ol>
+    </div>
+
+    <div data-install-show="manual" hidden>
+      <p class="small muted" style="margin:0">{{ t('Open this page on your phone — in Chrome on Android or Safari on iPhone — to install the CRM as an app.') }}</p>
+      <ol class="small">
+        <li>{{ t('Android (Chrome): tap the ⋮ menu, then "Install app" or "Add to Home screen".') }}</li>
+        <li>{{ t('iPhone (Safari): tap Share, then "Add to Home Screen".') }}</li>
+      </ol>
+    </div>
+
+    <div class="hairline"></div>
+    <div class="eyebrow" style="margin-bottom:8px">{{ t('Notifications') }}</div>
+
+    <div data-push-show="on" hidden>
+      <div class="pwa-row">
+        <span class="pwa-state on">{{ t('On for this phone') }}</span>
+        <button type="button" class="btn btn-sm" data-push-test>{{ t('Send a test') }}</button>
+        <button type="button" class="btn btn-quiet btn-sm" data-push-off>{{ t('Turn off') }}</button>
+      </div>
+    </div>
+
+    <div data-push-show="off" hidden>
+      <p class="small muted" style="margin:0 0 10px">{{ t('Get new leads, follow-ups and listing updates on this phone, even when the CRM is closed.') }}</p>
+      <button type="button" class="btn btn-gold" data-push-on>{{ t('Turn on notifications') }}</button>
+    </div>
+
+    <p class="small muted" data-push-show="busy" style="margin:0" hidden>{{ t('One moment…') }}</p>
+
+    <p class="small" data-push-show="ios-install" style="margin:0" hidden>
+      {{ t('On iPhone, notifications work once the CRM is added to your home screen. Add it with the steps above, open it from the icon, then turn notifications on here.') }}</p>
+
+    <div data-push-show="denied" hidden>
+      <span class="pwa-state bad">{{ t('Blocked on this phone') }}</span>
+      <p class="small muted" style="margin:8px 0 0">{{ t('Notifications were blocked. To allow them: open your phone Settings → Notifications → Planned CRM (iPhone), or long-press the app icon → App info → Notifications (Android). Then reopen the app.') }}</p>
+    </div>
+
+    <p class="small muted" data-push-show="unsupported" style="margin:0" hidden>
+      {{ t('This browser cannot receive notifications. Use Chrome on Android or the home-screen app on iPhone.') }}</p>
+
+    <p class="small pwa-note" data-push-note="enabled" hidden>{{ t('Done — you will get your CRM notifications on this phone.') }}</p>
+    <p class="small pwa-note" data-push-note="disabled" hidden>{{ t('Notifications are off for this phone.') }}</p>
+    <p class="small pwa-note" data-push-note="test-sent" hidden>{{ t('Test sent. It should appear on this phone in a few seconds.') }}</p>
+    <p class="small pwa-note" data-push-note="failed" style="color:var(--bad)" hidden>{{ t('That did not work. Check your connection and try again.') }}</p>
+  </div>
+</div>
+
 <form method="post" class="card" style="max-width:560px">
   <div class="card-body">
     <div class="field"><label>{{ t('Full name') }}</label>

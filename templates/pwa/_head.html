@@ -1,0 +1,8 @@
+{# Makes the CRM installable on phones as a home-screen app (see pwa.py). #}
+<link rel="manifest" href="{{ url_for('pwa.manifest') }}">
+<meta name="theme-color" content="#23201A">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Planned CRM">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='img/pwa/apple-touch-icon.png') }}">
