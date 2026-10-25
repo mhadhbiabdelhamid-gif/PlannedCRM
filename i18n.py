@@ -1307,6 +1307,51 @@ AR.update({
     "Only an admin or manager can change area photos.": "تغيير صور المناطق متاح للمدير أو المشرف فقط.",
 })
 
+# ---- phone app: install and notifications (pwa.py, static/js/pwa.js)
+AR.update({
+    "Phone app": "تطبيق الجوال",
+    "Notifications are working on this phone.": "الإشعارات تعمل على هذا الجوال.",
+    "App on your phone": "التطبيق على جوالك",
+    "You are using the CRM app on this phone.": "أنت تستخدم تطبيق النظام على هذا الجوال.",
+    "Put the CRM on this phone as an app: an icon on the home screen that opens full-screen, without the browser.":
+        "ثبّت النظام على هذا الجوال كتطبيق: أيقونة على الشاشة الرئيسية تفتح بملء الشاشة، بدون المتصفح.",
+    "Install the app": "تثبيت التطبيق",
+    "On iPhone, add the CRM to your home screen from Safari:": "على الآيفون، أضف النظام إلى الشاشة الرئيسية من سفاري:",
+    "Tap the Share button at the bottom of Safari (the square with an arrow).":
+        "اضغط زر المشاركة أسفل سفاري (المربع مع السهم).",
+    'Scroll down and tap "Add to Home Screen", then "Add".':
+        "مرّر للأسفل واضغط «إضافة إلى الشاشة الرئيسية»، ثم «إضافة».",
+    "Open the CRM from the new icon, sign in, and come back here to turn on notifications.":
+        "افتح النظام من الأيقونة الجديدة، وسجّل الدخول، ثم عد إلى هنا لتفعيل الإشعارات.",
+    "Open this page on your phone — in Chrome on Android or Safari on iPhone — to install the CRM as an app.":
+        "افتح هذه الصفحة على جوالك — في كروم على أندرويد أو سفاري على الآيفون — لتثبيت النظام كتطبيق.",
+    'Android (Chrome): tap the ⋮ menu, then "Install app" or "Add to Home screen".':
+        "أندرويد (كروم): اضغط قائمة ⋮ ثم «تثبيت التطبيق» أو «إضافة إلى الشاشة الرئيسية».",
+    'iPhone (Safari): tap Share, then "Add to Home Screen".':
+        "آيفون (سفاري): اضغط مشاركة ثم «إضافة إلى الشاشة الرئيسية».",
+    "On for this phone": "مفعّلة على هذا الجوال",
+    "Send a test": "إرسال تجربة",
+    "Turn off": "إيقاف",
+    "Turn on notifications": "تفعيل الإشعارات",
+    "Later": "لاحقاً",
+    "One moment…": "لحظة…",
+    "Get new leads, follow-ups and listing updates on this phone.":
+        "استلم العملاء الجدد والمتابعات وتحديثات العقارات على هذا الجوال.",
+    "Get new leads, follow-ups and listing updates on this phone, even when the CRM is closed.":
+        "استلم العملاء الجدد والمتابعات وتحديثات العقارات على هذا الجوال، حتى عندما يكون النظام مغلقاً.",
+    "On iPhone, notifications work once the CRM is added to your home screen. Add it with the steps above, open it from the icon, then turn notifications on here.":
+        "على الآيفون، تعمل الإشعارات بعد إضافة النظام إلى الشاشة الرئيسية. أضفه بالخطوات أعلاه، وافتحه من الأيقونة، ثم فعّل الإشعارات من هنا.",
+    "Blocked on this phone": "محظورة على هذا الجوال",
+    "Notifications were blocked. To allow them: open your phone Settings → Notifications → Planned CRM (iPhone), or long-press the app icon → App info → Notifications (Android). Then reopen the app.":
+        "تم حظر الإشعارات. للسماح بها: افتح الإعدادات ← الإشعارات ← Planned CRM (آيفون)، أو اضغط مطولاً على أيقونة التطبيق ← معلومات التطبيق ← الإشعارات (أندرويد). ثم أعد فتح التطبيق.",
+    "This browser cannot receive notifications. Use Chrome on Android or the home-screen app on iPhone.":
+        "هذا المتصفح لا يستقبل الإشعارات. استخدم كروم على أندرويد أو التطبيق من الشاشة الرئيسية على الآيفون.",
+    "Done — you will get your CRM notifications on this phone.": "تم — ستصلك إشعارات النظام على هذا الجوال.",
+    "Notifications are off for this phone.": "الإشعارات متوقفة على هذا الجوال.",
+    "Test sent. It should appear on this phone in a few seconds.": "تم إرسال التجربة. يجب أن تظهر على هذا الجوال خلال ثوانٍ.",
+    "That did not work. Check your connection and try again.": "لم تنجح العملية. تحقق من الاتصال وحاول مرة أخرى.",
+})
+
 
 def t(text):
     if current_lang() == "ar":

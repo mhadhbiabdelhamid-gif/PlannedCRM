@@ -213,6 +213,18 @@ CREATE TABLE IF NOT EXISTS notifications (
     created_at TEXT NOT NULL
 );
 
+-- Phones that turned on notifications (see pwa.py). One row per phone; a
+-- person with a work phone and a personal phone has two.
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    endpoint   TEXT NOT NULL UNIQUE,
+    p256dh     TEXT NOT NULL,
+    auth       TEXT NOT NULL,
+    device     TEXT,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS imports (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id     INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -251,6 +263,7 @@ CREATE INDEX IF NOT EXISTS idx_import_when ON imports(created_at);
 CREATE INDEX IF NOT EXISTS idx_lead_agent  ON leads(agent_id);
 CREATE INDEX IF NOT EXISTS idx_comment_ent ON comments(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_notif_user  ON notifications(user_id, is_read);
+CREATE INDEX IF NOT EXISTS idx_push_user   ON push_subscriptions(user_id);
 CREATE INDEX IF NOT EXISTS idx_deal_agents_user ON deal_agents(user_id);
 CREATE INDEX IF NOT EXISTS idx_deal_agents_payout ON deal_agents(payout_status);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_ad_lead_id ON leads(ad_lead_id)
@@ -732,6 +745,13 @@ def notify(user_id, message, link=None):
         " VALUES (?,?,?,0,?)",
         (user_id, message, link, now()),
     )
+    # The same message to their phone, if they turned notifications on. The
+    # row above is the record; the push is a copy and can never fail the save.
+    try:
+        import pwa
+        pwa.send(user_id, message, link)
+    except Exception as exc:
+        print(f"  Push skipped: {exc}")
 
 
 def get_setting(key, default=""):

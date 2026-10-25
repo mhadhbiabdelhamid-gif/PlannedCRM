@@ -13,6 +13,7 @@ import auth
 import backups
 import mailer
 import media_share
+import pwa
 import views_admin
 import views_ads_leads
 import views_deals
@@ -168,6 +169,7 @@ def create_app():
     app.register_blueprint(intake_bp)
     app.register_blueprint(social_bp)
     app.register_blueprint(restore_bp)
+    app.register_blueprint(pwa.bp)
 
     # ------------------------------------------------------- language switch
     @app.route("/language/<code>")

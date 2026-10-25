@@ -3,6 +3,9 @@ waitress==3.0.2
 gunicorn==23.0.0
 openpyxl==3.1.5
 Pillow>=10.4
+# Phone notifications (pwa.py). Optional: without it the app still installs
+# on phones, it just can't send push notifications.
+pywebpush>=2.0
 
 # Pillow is used to shrink uploaded profile photos, draw the desktop shortcut
 # icon, and embed the company logo in Excel exports. Everything except the
