@@ -1,0 +1,44 @@
+{#
+  Top bar for the standalone assistant pages (listing intake, social posts),
+  which don't extend base.html and so have no side menu. Without it, the
+  installed desktop/phone app has no way back to the main menu: there's no
+  browser address bar or back button there.
+  Include right after <body>:  {% include "_appbar.html" %}
+#}
+<style>
+  .appbar { position: sticky; top: 0; z-index: 50; display: flex; align-items: center;
+            gap: 10px; flex-wrap: wrap; margin: -32px -20px 24px; padding: 10px 20px;
+            background: #121315; border-bottom: 1px solid #33363b;
+            font: 500 14px/1.2 "IBM Plex Sans", system-ui, sans-serif; }
+  .appbar a, .appbar button { display: inline-flex; align-items: center; gap: 6px;
+            color: #e8e6e1; text-decoration: none; background: transparent;
+            border: 1px solid #33363b; border-radius: 6px; padding: 7px 12px;
+            font: inherit; cursor: pointer; width: auto; margin: 0; }
+  .appbar a:hover, .appbar button:hover { border-color: #c9a227; color: #c9a227; }
+  .appbar a:focus-visible, .appbar button:focus-visible { outline: 2px solid #c9a227; outline-offset: 2px; }
+  .appbar .home { border: 0; padding: 4px 6px 4px 0; font-weight: 600; }
+  .appbar .home img { height: 30px; width: auto; border-radius: 4px; background: #fff; }
+  .appbar .home .mark { display: inline-grid; place-items: center; width: 30px; height: 30px;
+            border-radius: 6px; background: #c9a227; color: #17181a; font-weight: 700; }
+  .appbar .sp { flex: 1; }
+  .appbar .on { border-color: #c9a227; color: #c9a227; }
+  @media (max-width: 560px) { .appbar .label { display: none; } }
+</style>
+<nav class="appbar" aria-label="{{ t('Main menu') }}">
+  <a class="home" href="{{ url_for('main.dashboard') }}" title="{{ t('Dashboard') }}">
+    {% if logo_exists %}<img src="{{ logo_url }}" alt="">{% else %}<span class="mark">P</span>{% endif %}
+    <span class="label">{{ t('Dashboard') }}</span>
+  </a>
+  <button type="button" onclick="appbarBack()" title="{{ t('Back') }}">← {{ t('Back') }}</button>
+  <span class="sp"></span>
+  <a class="{{ 'on' if request.blueprint == 'intake' }}" href="{{ url_for('intake.index') }}">{{ t('Listing intake') }}</a>
+  <a class="{{ 'on' if request.endpoint in ('social.index', 'social.review') }}" href="{{ url_for('social.index') }}">{{ t('Social posts') }}</a>
+  <a class="{{ 'on' if request.endpoint == 'social.settings' }}" href="{{ url_for('social.settings') }}">{{ t('Social settings') }}</a>
+</nav>
+<script>
+  // Go back one page; if this page was opened directly (no history), go to the dashboard.
+  function appbarBack() {
+    if (history.length > 1 && document.referrer) { history.back(); }
+    else { location.href = "{{ url_for('main.dashboard') }}"; }
+  }
+</script>

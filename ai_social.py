@@ -251,9 +251,13 @@ def generate(rows):
 
 
 def _graph(path, params):
-    """POST to the Graph API. Returns the decoded response."""
+    """POST to the Graph API. Returns the decoded response.
+
+    No automatic retry: a publish that seemed to fail may have gone through,
+    and retrying would post the same listing twice.
+    """
     return _post(f"{GRAPH}/{path}", params,
-                 {"content-type": "application/json"})
+                 {"content-type": "application/json"}, retry=False)
 
 
 def publish_facebook(caption, image_urls):

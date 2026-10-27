@@ -230,6 +230,19 @@
         <path d="M0 1h16M0 6h16M0 11h16"/></svg>
     </button>
 
+    {# The installed app has no browser back button, so give every page one.
+       Opened directly (no history) it goes to the dashboard instead. #}
+    {% if request.endpoint != 'main.dashboard' %}
+    <button type="button" class="btn btn-quiet btn-sm topbar-back"
+            onclick="if (history.length > 1 && document.referrer) { history.back(); } else { location.href='{{ url_for('main.dashboard') }}'; }"
+            aria-label="{{ t('Back') }}">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+           {% if rtl %}style="transform: scaleX(-1)"{% endif %}><path d="M10 3L5 8l5 5"/></svg>
+      {{ t('Back') }}
+    </button>
+    {% endif %}
+
     <form class="searchbox" action="{{ url_for('main.search') }}" method="get" role="search">
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8">
         <circle cx="7" cy="7" r="5"/><path d="M11 11l4 4"/></svg>

@@ -266,33 +266,84 @@ apartment, Al Sadd" / "شقة غرفتين مفروشة، السد".
 - If the message is not a property listing at all, return {"listings": []}."""
 
 
-def _post(url, payload, headers):
-    """POST JSON and return the decoded response, retrying on rate limits."""
-    body = json.dumps(payload).encode("utf-8")
-    delay = 2
-    for attempt in range(4):
-        req = urllib.request.Request(url, data=body, headers=headers,
-                                     method="POST")
+# HTTP codes that mean "try again shortly": rate limit, and the provider's
+# servers being overloaded or briefly down (Gemini returns 503 UNAVAILABLE
+# under high demand). These are retried with a growing pause.
+RETRYABLE = (429, 500, 502, 503, 504)
+MAX_ATTEMPTS = 4          # 1 try + 3 retries, waiting 2s, 4s, 8s between them
+TOTAL_BUDGET = 100        # seconds for all attempts together
+
+BUSY_MESSAGE = ("The AI writer is busy right now (high demand on the AI "
+                "service). Nothing is wrong with the CRM - wait a minute "
+                "and click the button again.")
+
+
+def _post(url, payload, headers, retry=True):
+    """POST JSON and return the decoded response.
+
+    retry=True (AI calls): retries automatically when the AI service is
+    rate-limited, overloaded or briefly unreachable, so a passing spike
+    doesn't reach the user, and fails with a plain-language message.
+
+    retry=False (Meta publishing, via ai_social._graph): one attempt only.
+    A publish that timed out may still have gone through, so retrying could
+    post the same listing twice. Errors keep Meta's own detail.
+    """
+    if not retry:
+        req = urllib.request.Request(url, data=json.dumps(payload).encode(
+            "utf-8"), headers=headers, method="POST")
         try:
             with urllib.request.urlopen(req, timeout=API_TIMEOUT) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8")[:300]
-            if exc.code == 429 and attempt < 3:
+            detail = exc.read().decode("utf-8", "replace")[:300]
+            raise RuntimeError(f"API returned {exc.code}: {detail}")
+        except (urllib.error.URLError, TimeoutError) as exc:
+            raise RuntimeError(
+                f"Could not reach the API: {getattr(exc, 'reason', exc)}")
+
+    body = json.dumps(payload).encode("utf-8")
+    delay = 2
+    # gunicorn kills a request after 120s (Procfile), so all attempts together
+    # must finish well inside that, or the user gets a blank error page.
+    deadline = time.monotonic() + TOTAL_BUDGET
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        remaining = deadline - time.monotonic()
+        # Last try if out of attempts, or not enough time left to wait and
+        # still give the next call a fair chance.
+        last = attempt == MAX_ATTEMPTS or remaining - delay < 20
+        req = urllib.request.Request(url, data=body, headers=headers,
+                                     method="POST")
+        try:
+            with urllib.request.urlopen(
+                    req, timeout=max(10, min(API_TIMEOUT, remaining))) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", "replace")[:300]
+            if exc.code in RETRYABLE and not last:
                 time.sleep(delay)
                 delay *= 2
                 continue
             if exc.code == 429:
                 raise RuntimeError(
-                    "Rate limit reached. The free tier allows a limited number "
-                    "of requests per minute - wait a moment and try again.")
+                    "The AI writer has reached its limit of requests per "
+                    "minute. Wait a minute and try again.")
+            if exc.code in RETRYABLE:
+                raise RuntimeError(BUSY_MESSAGE)
             if exc.code in (401, 403):
                 raise RuntimeError(
                     "The API key was rejected. Check it is correct and active.")
             raise RuntimeError(f"API returned {exc.code}: {detail}")
-        except urllib.error.URLError as exc:
-            raise RuntimeError(f"Could not reach the API: {exc.reason}")
-    raise RuntimeError("Rate limit reached after several retries.")
+        except (urllib.error.URLError, TimeoutError) as exc:
+            if not last:
+                time.sleep(delay)
+                delay *= 2
+                continue
+            reason = getattr(exc, "reason", exc)
+            raise RuntimeError(
+                "Could not reach the AI service (check the internet "
+                f"connection), then try again. Details: {reason}")
+    raise RuntimeError(BUSY_MESSAGE)
 
 
 def _parse_listings(text):
