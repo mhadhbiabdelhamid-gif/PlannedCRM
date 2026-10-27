@@ -31,10 +31,12 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
-from datetime import datetime
+import time
+from datetime import datetime, timedelta
 
 from flask import (Blueprint, current_app, flash, g, jsonify, redirect,
-                   render_template, request, session, url_for)
+                   render_template, request, send_from_directory, session,
+                   url_for)
 
 from ai_intake import _post, ask_model, db, current_user_id
 from areas import lookup as area_lookup
@@ -260,6 +262,28 @@ def _graph(path, params):
                  {"content-type": "application/json"}, retry=False)
 
 
+def _wait_until_ready(container, max_wait=40):
+    """Instagram processes an uploaded image before it can be published;
+    publishing too early fails with 'media not ready'. Poll its status."""
+    url = (f"{GRAPH}/{container}?fields=status_code&access_token="
+           + urllib.parse.quote(cfg("fb_page_token")))
+    waited = 0
+    while waited < max_wait:
+        try:
+            with urllib.request.urlopen(url, timeout=20) as resp:
+                status = json.loads(resp.read().decode("utf-8")).get(
+                    "status_code")
+        except (urllib.error.URLError, ValueError):
+            status = None               # can't tell; just try to publish
+        if status in ("FINISHED", None):
+            return
+        if status in ("ERROR", "EXPIRED"):
+            raise RuntimeError("Instagram couldn't process the image "
+                               f"(status {status}). Try a different photo.")
+        time.sleep(3)
+        waited += 3
+
+
 def publish_facebook(caption, image_urls):
     if len(image_urls) == 1:
         res = _graph(f"{cfg('fb_page_id')}/photos",
@@ -301,9 +325,25 @@ def publish_instagram(caption, image_urls):
                       "caption": caption, "access_token": cfg("fb_page_token")})
         container = res["id"]
 
+    _wait_until_ready(container)
     res = _graph(f"{cfg('ig_user_id')}/media_publish",
                  {"creation_id": container, "access_token": cfg("fb_page_token")})
-    return f"https://instagram.com/p/{res.get('id', '')}"
+    # media_publish returns an internal ID; ask for the real post link.
+    link = _graph_get(res.get("id", ""), "permalink").get("permalink")
+    return link or "https://www.instagram.com/"
+
+
+def _graph_get(object_id, fields):
+    """Best-effort GET from the Graph API; returns {} on any failure."""
+    if not object_id:
+        return {}
+    url = (f"{GRAPH}/{object_id}?fields={fields}&access_token="
+           + urllib.parse.quote(cfg("fb_page_token")))
+    try:
+        with urllib.request.urlopen(url, timeout=20) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except (urllib.error.URLError, ValueError):
+        return {}
 
 
 # ----------------------------------------------------------------------------
@@ -320,7 +360,9 @@ def index():
         "FROM properties WHERE status = 'Available' "
         "ORDER BY is_own DESC, id DESC LIMIT 60").fetchall()
     posts = conn.execute(
-        "SELECT * FROM social_posts WHERE status IN ('draft','approved') "
+        # Half-posted and failed posts stay listed so they can be retried.
+        "SELECT * FROM social_posts WHERE status IN "
+        "('draft','approved','partial','failed','posting') "
         "ORDER BY id DESC LIMIT 30").fetchall()
     drafts = []
     for row in posts:
@@ -447,7 +489,8 @@ def review(post_id):
         "social_review.html", post=dict(row),
         content=json.loads(row["content_json"]),
         properties=ordered, can_publish=can_publish(),
-        contact=contact_block())
+        contact=contact_block(), posted=_posted_urls(row),
+        platform_names=PLATFORM_NAMES)
 
 
 @social_bp.route("/post/<int:post_id>/save", methods=["POST"])
@@ -471,56 +514,167 @@ def save(post_id):
     return redirect(url_for("social.review", post_id=post_id))
 
 
+PLATFORM_NAMES = {"facebook": "Facebook", "instagram": "Instagram"}
+CARD_DIR = "social_cards"            # under UPLOAD_FOLDER (persistent disk)
+CARD_NAME = re.compile(r"^[0-9a-f]{32}\.jpg$")
+LOCK_MINUTES = 5                     # a "posting" lock older than this is stale
+
+
+def _card_folder():
+    folder = os.path.join(current_app.config["UPLOAD_FOLDER"], CARD_DIR)
+    os.makedirs(folder, exist_ok=True)
+    return folder
+
+
+@social_bp.route("/card/<name>")
+def card_image(name):
+    """Public, no sign-in: Facebook and Instagram download the post images
+    from here. Names are random 32-hex strings, so nothing else in the uploads
+    folder can be reached and cards can't be guessed."""
+    if not CARD_NAME.match(name):
+        return "Not found", 404
+    return send_from_directory(_card_folder(), name, mimetype="image/jpeg")
+
+
+def _save_cards(files):
+    """Store the card images drawn in the browser; return their public URLs."""
+    base = cfg("public_base_url").rstrip("/")
+    urls = []
+    for f in files[:10]:
+        data = f.read()
+        if not data:
+            continue
+        name = uuid.uuid4().hex + ".jpg"
+        with open(os.path.join(_card_folder(), name), "wb") as out:
+            out.write(data)
+        urls.append(base + url_for("social.card_image", name=name))
+    return urls
+
+
+def _posted_urls(row):
+    try:
+        return json.loads(row["post_urls"] or "{}") or {}
+    except (json.JSONDecodeError, TypeError):
+        return {}
+
+
 @social_bp.route("/post/<int:post_id>/publish", methods=["POST"])
 @admin_required
 def publish(post_id):
-    """Publishes to the platforms ticked on the review form."""
+    """Publish to the ticked platforms and answer in JSON, so the review page
+    can show exactly what worked and what didn't.
+
+    Guards against double posting:
+      * a platform this post already went to is skipped, never re-posted;
+      * the post is locked while publishing, so a second click (or a second
+        person) is refused until the first attempt finishes.
+    """
+    def answer(status, message, results=None, errors=None, code=200):
+        return jsonify({"status": status, "message": message,
+                        "results": results or {}, "errors": errors or {}}), code
+
     if not can_publish():
-        flash("Publishing is not configured. Copy the caption and post "
-              "manually, or add the Meta credentials first.", "info")
-        return redirect(url_for("social.review", post_id=post_id))
+        return answer("error", "Direct posting isn't set up. Fill in Social "
+                      "settings first.", code=400)
 
     conn = db()
     row = conn.execute("SELECT * FROM social_posts WHERE id = ?",
                        (post_id,)).fetchone()
-    if not row or row["status"] == "posted":
-        return "Post not available", 404
+    if not row or row["status"] == "discarded":
+        return answer("error", "This post no longer exists.", code=404)
 
-    content = json.loads(row["content_json"])
-    caption = request.form.get("caption_en") or content.get("caption_en", "")
-    if content.get("hashtags"):
-        caption += "\n\n" + " ".join("#" + h for h in content["hashtags"])
+    already = _posted_urls(row)
+    wanted = [p for p in request.form.getlist("platform") if p in PLATFORM_NAMES]
+    if not wanted:
+        return answer("error", "Tick Facebook, Instagram or both.", code=400)
+    todo = [p for p in wanted if p not in already]
+    if not todo:
+        return answer("posted", "Already posted to " + " and ".join(
+            PLATFORM_NAMES[p] for p in wanted) + ". Nothing was posted again.",
+            results={p: already[p] for p in wanted})
 
-    image_urls = [u for u in request.form.getlist("image_url") if u]
-    if not image_urls:
-        flash("No images were provided. Save the card images first.", "info")
-        return redirect(url_for("social.review", post_id=post_id))
-
-    results, errors = {}, []
-    for platform in request.form.getlist("platform"):
-        try:
-            if platform == "facebook":
-                results["facebook"] = publish_facebook(caption, image_urls)
-            elif platform == "instagram":
-                results["instagram"] = publish_instagram(caption, image_urls)
-        except (RuntimeError, KeyError) as exc:
-            errors.append(f"{platform}: {exc}")
-
-    now = datetime.now().isoformat(timespec="seconds")
-    conn.execute(
-        "UPDATE social_posts SET status = ?, post_urls = ?, error = ?, "
-        "posted_by = ?, posted_at = ? WHERE id = ?",
-        ("posted" if results else "failed",
-         json.dumps(results), "; ".join(errors) or None,
-         current_user_id(), now, post_id))
+    # Take the lock in one statement so two clicks can't both get through.
+    now = datetime.now()
+    stale = (now - timedelta(minutes=LOCK_MINUTES)).isoformat(timespec="seconds")
+    got = conn.execute(
+        "UPDATE social_posts SET status = 'posting', posted_at = ? "
+        "WHERE id = ? AND (status != 'posting' OR posted_at < ?)",
+        (now.isoformat(timespec="seconds"), post_id, stale)).rowcount
     conn.commit()
+    if not got:
+        return answer("busy", "This post is already being published. Wait for "
+                      "the result instead of clicking again.", code=409)
 
-    if results:
-        flash("Posted to " + ", ".join(results) +
-              (f". Failed: {'; '.join(errors)}" if errors else "."), "success")
+    results, errors = {}, {}
+    try:
+        content = json.loads(row["content_json"])
+        caption = (request.form.get("caption_en")
+                   or content.get("caption_en", "")).strip()
+        if content.get("hashtags"):
+            caption += "\n\n" + " ".join("#" + h for h in content["hashtags"])
+
+        image_urls = _save_cards(request.files.getlist("card"))
+        if not image_urls:
+            errors["all"] = ("The post images didn't come through. Reload the "
+                             "page so the cards are drawn, then try again.")
+        else:
+            for platform in todo:
+                try:
+                    if platform == "facebook":
+                        results[platform] = publish_facebook(caption, image_urls)
+                    else:
+                        results[platform] = publish_instagram(caption, image_urls)
+                except (RuntimeError, KeyError, ValueError) as exc:
+                    errors[platform] = _friendly_meta_error(str(exc))
+    finally:
+        # Always release the lock and record what happened.
+        merged = {**already, **results}
+        if all(p in merged for p in wanted):
+            status = "posted"
+        elif merged:
+            status = "partial"
+        else:
+            status = "failed"
+        conn.execute(
+            "UPDATE social_posts SET status = ?, post_urls = ?, error = ?, "
+            "posted_by = ?, posted_at = ? WHERE id = ?",
+            (status, json.dumps(merged),
+             "; ".join(f"{k}: {v}" for k, v in errors.items()) or None,
+             current_user_id(), datetime.now().isoformat(timespec="seconds"),
+             post_id))
+        conn.commit()
+
+    ok = [PLATFORM_NAMES[p] for p in results]
+    bad = [PLATFORM_NAMES.get(p, "Post") for p in errors]
+    if ok and not bad:
+        msg = "Posted to " + " and ".join(ok) + "."
+    elif ok:
+        msg = ("Posted to " + " and ".join(ok) + ", but " + " and ".join(bad) +
+               " failed. Click Post again to retry only " + " and ".join(bad) + ".")
     else:
-        flash("Nothing was posted. " + "; ".join(errors), "error")
-    return redirect(url_for("social.review", post_id=post_id))
+        msg = "Nothing was posted."
+    return answer(status, msg, results={**already, **results}, errors=errors)
+
+
+def _friendly_meta_error(raw):
+    """Turn Meta's error JSON into one plain sentence, keeping the detail."""
+    detail = raw
+    m = re.search(r'"message"\s*:\s*"([^"]+)"', raw)
+    if m:
+        detail = m.group(1)
+    low = raw.lower()
+    code = re.search(r'"code"\s*:\s*(\d+)', raw)
+    code = int(code.group(1)) if code else None
+    if code == 190 or "access token" in low:
+        return ("The Meta access token has expired or is invalid. Make a new "
+                "one and paste it in Social settings. (" + detail + ")")
+    if (("image" in low or "media" in low)
+            and any(w in low for w in ("download", "fetch", " uri", " url"))):
+        return ("Meta couldn't download the image. Check the Public address in "
+                "Social settings is your live CRM address. (" + detail + ")")
+    if code in (10, 200) or "permission" in low:
+        return "Meta refused: missing permission. (" + detail + ")"
+    return detail
 
 
 ALLOWED_IMAGES = {".jpg", ".jpeg", ".png", ".webp"}

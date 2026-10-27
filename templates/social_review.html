@@ -36,6 +36,14 @@
            margin-bottom:16px; }
   .alert.flag { background:#2a2318; border:1px solid #5a4a1e; }
   .alert.info { background:#1b2328; border:1px solid #2f4a5a; }
+  .alert.ok   { background:#1b2620; border:1px solid #2f5a3f; }
+  .alert.bad  { background:#2b1c1b; border:1px solid #6a2f2a; }
+  .alert a { color:var(--gold); }
+  .res-line { margin-top:6px; }
+  .res-line.bad { color:#e0a39d; }
+  .save[disabled] { opacity:.55; cursor:not-allowed; }
+  .plat .done { color:#6fbf8a; font-size:12px; }
+  .wait { color:var(--muted); font-size:13px; margin-top:10px; }
   .actions { display:flex; gap:12px; flex-wrap:wrap; margin-top:18px; }
   button { border:0; border-radius:6px; padding:11px 20px;
            font:600 14px inherit; cursor:pointer; }
@@ -66,9 +74,22 @@
   {% if content.best_time_note %}
   <div class="alert info">{{ content.best_time_note }}</div>
   {% endif %}
-  {% if post.status == 'posted' %}
-  <div class="alert info">Already posted{% if post.post_urls %} — {{ post.post_urls }}{% endif %}</div>
-  {% endif %}
+  {# Result of the last publish, also filled in live by the Post button. #}
+  <div id="pubresult" role="status" aria-live="polite">
+    {% if posted %}
+    <div class="alert {{ 'ok' if post.status == 'posted' else 'flag' }}">
+      <b>{{ 'Posted' if post.status == 'posted' else 'Partly posted' }}</b>
+      {% for p, link in posted.items() %}
+        <div class="res-line">✓ {{ platform_names.get(p, p) }} —
+          <a href="{{ link }}" target="_blank" rel="noopener">open the post</a></div>
+      {% endfor %}
+      {% if post.error %}<div class="res-line bad">✗ {{ post.error }}</div>{% endif %}
+    </div>
+    {% elif post.status == 'failed' and post.error %}
+    <div class="alert bad"><b>Last attempt failed — nothing was posted.</b>
+      <div class="res-line">{{ post.error }}</div></div>
+    {% endif %}
+  </div>
 
   <div class="cols">
     <div>
@@ -98,19 +119,26 @@
             class="panel" id="pubform">
         <h2>Publish</h2>
         {% if can_publish %}
+          {# A platform this post already went to is shown as done and can't
+             be ticked again, so nothing is ever posted twice. #}
+          {% for key, label in [('facebook', 'Facebook Page'), ('instagram', 'Instagram')] %}
           <div class="plat">
-            <input type="checkbox" id="fb" name="platform" value="facebook" checked>
-            <label for="fb" style="margin:0;text-transform:none;letter-spacing:0;color:var(--text);font-size:14px">Facebook Page</label>
+            <input type="checkbox" id="pl_{{ key }}" name="platform" value="{{ key }}"
+                   {% if key in posted %}disabled{% else %}checked{% endif %}>
+            <label for="pl_{{ key }}" style="margin:0;text-transform:none;letter-spacing:0;color:var(--text);font-size:14px">{{ label }}</label>
+            {% if key in posted %}<span class="done">✓ already posted</span>{% endif %}
           </div>
-          <div class="plat">
-            <input type="checkbox" id="ig" name="platform" value="instagram" checked>
-            <label for="ig" style="margin:0;text-transform:none;letter-spacing:0;color:var(--text);font-size:14px">Instagram</label>
-          </div>
+          {% endfor %}
           <input type="hidden" name="caption_en" id="pub_caption">
           <div class="actions">
-            <button type="submit" class="save"
-              {% if post.status == 'posted' %}disabled{% endif %}>Post now</button>
+            {% set all_done = 'facebook' in posted and 'instagram' in posted %}
+            <button type="submit" class="save" id="pubbtn"
+              {% if all_done %}disabled{% endif %}>
+              {{ 'Posted ✓' if all_done else ('Post to the rest' if posted else 'Post now') }}</button>
           </div>
+          <div class="wait" id="pubwait" hidden>
+            Posting… this can take up to a minute. Please don't close this page
+            or click again.</div>
         {% else %}
           <p style="color:var(--muted);font-size:13px;margin:0">
             Direct posting isn't configured. Copy the caption and the card
@@ -177,10 +205,110 @@ function copyAll() {
     document.getElementById('caption_en').value + '\n\n' + tags);
 }
 
+// ---- Publishing --------------------------------------------------------
+// The card images exist only in this page (drawn on canvas), so they're sent
+// along with the request. The answer comes back as JSON and is shown in
+// #pubresult: what was posted (with links) and what failed, in plain words.
+// The button is locked from the first click until the answer arrives, and
+// the server refuses a second attempt while one is running.
 const pubform = document.getElementById('pubform');
-if (pubform) pubform.addEventListener('submit', () => {
-  document.getElementById('pub_caption').value =
-    document.getElementById('caption_en').value;
+let publishing = false;
+
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, ch =>
+    ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[ch]));
+}
+
+function showResult(data) {
+  const names = {facebook: 'Facebook', instagram: 'Instagram', all: 'Post'};
+  const kind = data.status === 'posted' ? 'ok'
+             : data.status === 'partial' ? 'flag' : 'bad';
+  let html = '<div class="alert ' + kind + '"><b>' + esc(data.message) + '</b>';
+  Object.entries(data.results || {}).forEach(([p, link]) => {
+    html += '<div class="res-line">✓ ' + esc(names[p] || p) + ' — <a href="' +
+            esc(link) + '" target="_blank" rel="noopener">open the post</a></div>';
+  });
+  Object.entries(data.errors || {}).forEach(([p, msg]) => {
+    html += '<div class="res-line bad">✗ ' + esc(names[p] || p) + ': ' +
+            esc(msg) + '</div>';
+  });
+  html += '</div>';
+  const box = document.getElementById('pubresult');
+  box.innerHTML = html;
+  box.scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+
+function cardBlob(c) {
+  // Instagram only accepts JPEG.
+  return new Promise(res => c.toBlob(res, 'image/jpeg', 0.92));
+}
+
+if (pubform) pubform.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  if (publishing) return;                       // ignore double clicks
+  const btn = document.getElementById('pubbtn');
+  const wait = document.getElementById('pubwait');
+  const ticked = [...pubform.querySelectorAll('input[name=platform]:checked')]
+                   .map(i => i.value);
+  if (!ticked.length) {
+    showResult({status: 'failed', message: 'Tick Facebook, Instagram or both.'});
+    return;
+  }
+  if (!canvases.length) {
+    showResult({status: 'failed', message: 'The images are still being drawn. ' +
+                'Wait a second and try again.'});
+    return;
+  }
+  const where = ticked.map(p => p === 'facebook' ? 'Facebook' : 'Instagram');
+  if (!confirm('Post this now to ' + where.join(' and ') + '?')) return;
+
+  publishing = true;
+  btn.disabled = true;
+  const label = btn.textContent;
+  btn.textContent = 'Posting…';
+  wait.hidden = false;
+
+  let data;
+  try {
+    const fd = new FormData();
+    ticked.forEach(p => fd.append('platform', p));
+    fd.append('caption_en', document.getElementById('caption_en').value);
+    for (let i = 0; i < canvases.length; i++) {
+      fd.append('card', await cardBlob(canvases[i]), 'card-' + (i + 1) + '.jpg');
+    }
+    const resp = await fetch(pubform.action, {
+      method: 'POST', body: fd, credentials: 'same-origin',
+      headers: {'Accept': 'application/json'}});
+    try { data = await resp.json(); }
+    catch (e) {
+      data = {status: 'failed', message: 'The server took too long or returned ' +
+        'an error (' + resp.status + '). Check the Facebook Page and Instagram ' +
+        'before trying again — it may have posted anyway.'};
+    }
+  } catch (e) {
+    data = {status: 'failed', message: 'Lost the connection while posting. ' +
+      'Check the Facebook Page and Instagram before trying again — it may ' +
+      'have posted anyway.'};
+  }
+
+  showResult(data);
+  wait.hidden = true;
+  publishing = false;
+
+  // Lock platforms that are now done; keep the button only if something's left.
+  const done = Object.keys(data.results || {});
+  pubform.querySelectorAll('input[name=platform]').forEach(box => {
+    if (done.includes(box.value)) { box.checked = false; box.disabled = true; }
+  });
+  const left = pubform.querySelectorAll('input[name=platform]:not(:disabled)').length;
+  if (data.status === 'busy') {
+    btn.textContent = label; btn.disabled = false;
+  } else if (!left) {
+    btn.textContent = 'Posted ✓'; btn.disabled = true;
+  } else {
+    btn.textContent = done.length ? 'Post to the rest' : 'Try again';
+    btn.disabled = false;
+  }
 });
 
 // ---- Cards are 1080x1350 portrait, Instagram's 4:5 ----
@@ -324,34 +452,6 @@ function downloadAll() {
   });
 }
 
-function wrap(ctx, text, x0, y0, maxW, lh) {
-  const words = String(text).split(' ');
-  let line = '', y = y0;
-  words.forEach(w => {
-    if (ctx.measureText(line + w).width > maxW && line) {
-      ctx.fillText(line.trim(), x0, y); line = ''; y += lh;
-    }
-    line += w + ' ';
-  });
-  ctx.fillText(line.trim(), x0, y);
-}
-
-const holder = document.getElementById('cards');
-const canvases = [];
-(SLIDES.length ? SLIDES : [{}]).forEach((s, i) => {
-  const c = drawCard(s, PROPS[i] || PROPS[0] || {}, i);
-  canvases.push(c);
-  holder.appendChild(c);
-});
-
-function downloadAll() {
-  canvases.forEach((c, i) => {
-    const a = document.createElement('a');
-    a.download = 'post-{{ post.id }}-' + (i + 1) + '.png';
-    a.href = c.toDataURL('image/png');
-    a.click();
-  });
-}
 </script>
 </body>
 </html>
