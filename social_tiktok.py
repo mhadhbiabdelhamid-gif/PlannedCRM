@@ -304,6 +304,23 @@ def _root_verify_route(state):
                            lambda name: _verify_file(name + ".txt"))
 
 
+def _legal(page):
+    from flask import render_template
+    email = cfg("company_email") or "info@plannedrealestate.com"
+    phone = cfg("company_phone") or "+974 3111 4024"
+    return render_template("legal/page.html", page=page, email=email,
+                           phone=phone, updated="28 October 2026",
+                           title="Terms of Service" if page == "terms"
+                           else "Privacy Policy")
+
+
+@social_bp.record_once
+def _legal_routes(state):
+    # Public pages the TikTok (and Meta) app registration links to.
+    state.app.add_url_rule("/terms", "legal_terms", lambda: _legal("terms"))
+    state.app.add_url_rule("/privacy", "legal_privacy", lambda: _legal("privacy"))
+
+
 def serve_verify_file(name):
     """Called by /social/m/<name> for the verification file's name."""
     return _verify_file(name)

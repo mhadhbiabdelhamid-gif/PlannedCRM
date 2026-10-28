@@ -1,0 +1,88 @@
+{# Public Terms of Service / Privacy Policy pages for the CRM's social
+   publishing (required by TikTok and Meta app registrations). No sign-in. #}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title }} · Planned CRM · Planned Real Estate</title>
+<style>
+  body { margin:0; background:#FAF8F4; color:#14120F; font:16px/1.65 "Segoe UI", system-ui, sans-serif; }
+  .wrap { max-width:760px; margin:0 auto; padding:40px 20px 60px; }
+  header { border-bottom:3px solid #C9A227; padding-bottom:14px; margin-bottom:24px; }
+  .brand { font-weight:700; letter-spacing:.04em; color:#8A5F14; font-size:14px; text-transform:uppercase; }
+  h1 { font-size:28px; margin:6px 0 4px; }
+  h2 { font-size:18px; margin:28px 0 6px; }
+  .muted { color:#57524A; font-size:14px; }
+  a { color:#8A5F14; }
+  footer { margin-top:40px; padding-top:14px; border-top:1px solid #E4DDD0; font-size:14px; color:#57524A; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">Planned Real Estate · بلاند العقارية</div>
+    <h1>{{ title }}</h1>
+    <div class="muted">Planned CRM · Last updated {{ updated }}</div>
+  </header>
+  {% if page == 'terms' %}
+  <p>Planned CRM is the internal business system of Planned Real Estate, a licensed real estate
+    agency in Doha, Qatar ("we", "us"). These terms cover Planned CRM and its connection to social
+    media accounts, including Facebook, Instagram and TikTok.</p>
+  <h2>Who may use it</h2>
+  <p>Planned CRM is used only by Planned Real Estate staff with an account we create. It is not
+    offered to the public, and no one outside the company can sign up.</p>
+  <h2>What it does with social media</h2>
+  <p>Our staff use Planned CRM to prepare and publish the company's own content (property listings,
+    market updates, real estate news and tips) to the company's own social media accounts, at the
+    time they choose. It publishes only to accounts that the company owns and has connected itself,
+    and only content our staff have reviewed and approved.</p>
+  <h2>Responsibility for content</h2>
+  <p>Planned Real Estate is responsible for everything published from Planned CRM. Content must be
+    accurate, must follow Qatar's real estate regulations and the rules of each platform (including
+    TikTok's Community Guidelines and Terms of Service, and Meta's terms), and must respect other
+    people's rights.</p>
+  <h2>Third-party platforms</h2>
+  <p>Facebook, Instagram and TikTok are run by their own companies under their own terms. Planned
+    CRM uses their official interfaces and is not endorsed by them. A connected account can be
+    disconnected at any time from Planned CRM or from the platform's own settings.</p>
+  <h2>Changes and contact</h2>
+  <p>We may update these terms; the date above shows the latest version. Questions:
+    <a href="mailto:{{ email }}">{{ email }}</a> · {{ phone }}.</p>
+  {% else %}
+  <p>This policy explains what information Planned CRM, the internal system of Planned Real Estate
+    (Doha, Qatar), handles when it is connected to the company's social media accounts, including
+    Facebook, Instagram and TikTok.</p>
+  <h2>Whose information</h2>
+  <p>Planned CRM connects only to Planned Real Estate's own business accounts. It is used by our
+    staff only. It does not collect information from members of the public through these
+    platforms.</p>
+  <h2>What we receive from the platforms</h2>
+  <ul>
+    <li><b>Account details:</b> the connected account's ID, username and display name, so staff can
+      see which account they are posting to.</li>
+    <li><b>Access tokens:</b> the keys the platform issues so Planned CRM can publish on the
+      company's behalf. They are stored on our server, never shown in full, and never shared.</li>
+    <li><b>Posting results:</b> the status and link of each post we publish.</li>
+  </ul>
+  <p>We do not read, store or analyse followers' data, messages, comments or viewing data.</p>
+  <h2>How it is used</h2>
+  <p>Only to publish the company's content to the company's own accounts and to show staff whether
+    it was published. It is not sold, shared with third parties or used for advertising.</p>
+  <h2>Storage and security</h2>
+  <p>Information is stored on our server with access limited to signed-in administrators.
+    Connections to the platforms use encrypted HTTPS.</p>
+  <h2>Removing the connection</h2>
+  <p>An administrator can disconnect an account at any time in Planned CRM (Social settings), which
+    deletes its access tokens and account details from Planned CRM. The connection can also be
+    removed from the platform's own app settings. To ask for any information to be deleted, contact
+    us below.</p>
+  <h2>Contact</h2>
+  <p>Planned Real Estate, Doha, Qatar ·
+    <a href="mailto:{{ email }}">{{ email }}</a> · {{ phone }}.</p>
+  {% endif %}
+  <footer>Planned Real Estate · <a href="https://plannedrealestate.com">plannedrealestate.com</a> ·
+    <a href="/terms">Terms of Service</a> · <a href="/privacy">Privacy Policy</a></footer>
+</div>
+</body>
+</html>
