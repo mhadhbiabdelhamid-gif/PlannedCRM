@@ -173,7 +173,7 @@ def photo_options(conn, row, content, properties):
     property id (as text) for listing posts, or "main" for an area guide."""
     if row["kind"] == "area":
         return {"main": area_photos(conn, (content.get("inputs") or {}).get("area", ""))}
-    if row["kind"] in ("tip", "market"):
+    if row["kind"] in NO_PHOTO_KINDS:
         return {}
     return {str(p["id"]): all_photos(conn, p["id"]) for p in properties}
 
@@ -189,7 +189,7 @@ def chosen_photos(options, content):
 
 
 def needs_photos(row):
-    return row["kind"] not in ("tip", "market")
+    return row["kind"] not in NO_PHOTO_KINDS
 
 
 @social_bp.route("/post/<int:post_id>/photos", methods=["POST"])
@@ -300,7 +300,12 @@ CONTENT_SECTIONS = {
              ("details", "What we have there"), ("contact", "Call to action")],
     "market": [("title", "Title"), ("intro", "What it means"),
                ("details", "Source"), ("contact", "Call to action")],
+    "news": [("title", "Title"), ("intro", "The news"),
+             ("details", "Source"), ("contact", "Call to action")],
 }
+NO_PHOTO_KINDS = ("tip", "market", "news")
+KIND_LABELS = {"tip": "Tip", "area": "Area guide", "market": "Market update",
+               "news": "News"}
 
 
 def sections_for(content):
@@ -366,9 +371,36 @@ property; reuse these when they fit: #عقارات_قطر #الدوحة_قطر #
 double-check before posting (for example a general statement about an area)."""
 
 
+def _official_block(inputs):
+    """The official text a post must be written from, if there is one."""
+    art = inputs.get("article")
+    if not art:
+        return {}
+    return {"official_source": {
+        "issued_by": art.get("source_ar"), "issued_by_en": art.get("source_en"),
+        "link": art.get("url"), "date": art.get("date"),
+        "title": art.get("title"), "text": art.get("text")},
+        "rule": "Use ONLY facts, figures, names and dates found in "
+                "official_source.text. Write in your own words; do not copy "
+                "whole sentences. If something isn't in the text, leave it out."}
+
+
 def _generate(kind, inputs, conn):
     phone = cfg("company_phone")
-    if kind == "tip":
+    official = _official_block(inputs)
+    if kind == "news":
+        task = {
+            "post": "real estate news for people in Qatar, from an official source",
+            **official,
+            "card_format": {"titleAr": "the news as a headline, max 9 words",
+                            "bodyAr": "one or two short sentences, max 24 words",
+                            "labelEn": "2-4 words in English, e.g. NEW REGULATION"},
+            "intro": "the news in 2-4 short lines, and why it matters to tenants, "
+                     "buyers, owners or investors",
+            "details": "credit the source: who issued it, then the link",
+            "phone": phone,
+        }
+    elif kind == "tip":
         done = conn.execute("SELECT content_json FROM social_posts WHERE kind = 'tip' "
                             "AND status != 'discarded' ORDER BY id DESC LIMIT 12").fetchall()
         recent = []
@@ -387,6 +419,11 @@ def _generate(kind, inputs, conn):
             "details": "leave empty",
             "phone": phone,
         }
+        if official:
+            task.update(official)
+            task["post"] = ("practical tip based on an official rule or service in "
+                            "Qatar, part of a numbered tips series")
+            task["details"] = "credit the source: who issued it, then the link"
     elif kind == "area":
         a = inputs["stats"]
         task = {
@@ -417,6 +454,12 @@ def _generate(kind, inputs, conn):
             "details": "credit the source exactly as given",
             "phone": phone,
         }
+        if official:
+            task.update(official)
+            task["intro"] = ("what this means for tenants, buyers or investors. You may "
+                             "add one or two more figures, only exactly as they appear "
+                             "in official_source.text")
+            task["details"] = "credit the source: who issued it, then the link"
     out = ask_model(CONTENT_PROMPT, json.dumps(task, ensure_ascii=False))
     out.setdefault("hashtags", [])
     out["hashtags"] = [h for h in (str(x).strip().lstrip("#") for x in out["hashtags"]) if h]
@@ -428,13 +471,23 @@ def _generate(kind, inputs, conn):
         out[f"sections_{lang}"] = {k: str(parts.get(k) or "") for k in keys}
 
     # The card: facts from the CRM or the person; wording from the AI.
-    if kind == "tip":
+    art = inputs.get("article") or {}
+    if kind == "news":
+        card = {"type": "news",
+                "titleAr": ai_card.get("titleAr") or out["sections_ar"]["title"],
+                "bodyAr": ai_card.get("bodyAr") or "",
+                "labelEn": ai_card.get("labelEn") or "REAL ESTATE NEWS",
+                "date": _card_date(art.get("date")),
+                "source": art.get("source_en") or ""}
+    elif kind == "tip":
         count = conn.execute("SELECT COUNT(*) FROM social_posts WHERE kind = 'tip' "
                              "AND status != 'discarded'").fetchone()[0]
         card = {"type": "tip", "number": f"{count + 1:02d}",
                 "titleAr": ai_card.get("titleAr") or out["sections_ar"]["title"],
                 "bodyAr": ai_card.get("bodyAr") or "",
                 "labelEn": ai_card.get("labelEn") or "RENTING TIP"}
+        if art:
+            card["source"] = art.get("source_en") or ""
     elif kind == "area":
         a = inputs["stats"]
         card = {"type": "area", "nameAr": a["ar"] or a["name"], "nameEn": a["name"],
@@ -445,11 +498,94 @@ def _generate(kind, inputs, conn):
                 "bodyAr": inputs.get("note") or ai_card.get("bodyAr") or "",
                 "source": inputs["source"]}
     out["card"] = card
+    if art:
+        _flag_unsupported(out, art, phone)
     out["section_keys"] = keys
     out["slides"] = [{}]
-    out.setdefault("hook_en", {"tip": "Tip", "area": "Area guide", "market": "Market update"}[kind])
+    out.setdefault("hook_en", KIND_LABELS[kind])
     out["post_kind"] = kind
     return apply_sections(out)
+
+
+def _card_date(iso):
+    try:
+        return datetime.strptime(iso[:10], "%Y-%m-%d").strftime("%d %b %Y").upper()
+    except (TypeError, ValueError):
+        return ""
+
+
+def _flag_unsupported(out, art, phone):
+    """Any number in the post that isn't in the official text gets flagged
+    for a person to check (the phone number and hashtags aside)."""
+    import official_sources as osrc
+    words = " ".join(list(out["sections_ar"].values()) + list(out["sections_en"].values()))
+    card = out.get("card") or {}
+    words += " " + " ".join(str(card.get(k) or "") for k in
+                            ("titleAr", "bodyAr", "figure", "figureLabel"))
+    for drop in (phone or "", "".join(ch for ch in (phone or "") if ch.isdigit())):
+        if drop:
+            words = words.replace(drop, " ")
+    words = re.sub(r"\+?974[\s\d]{8,12}", " ", words)
+    bad = [n for n in osrc.unsupported_numbers(words, art.get("text", "") + " "
+                                               + art.get("title", "") + " "
+                                               + art.get("date", ""))
+           if len(n.replace(".", "")) > 1]
+    if bad:
+        out["review_flags"].append(
+            "These numbers are not in the official text: " + ", ".join(bad)
+            + ". Check or remove them before posting.")
+
+
+MARKET_PICK_PROMPT = """You pick figures for real estate social media posts in \
+Qatar from official announcements. Read official_source.text and choose the \
+single figure most useful to tenants, buyers or investors (for example the \
+week's total sales value, a change in percent, the number of building \
+permits). Use it exactly as it appears in the text: never round, convert or \
+calculate. Return ONLY JSON:
+{"figure": "the figure in Latin digits, max 10 characters, may end with M, B or %, e.g. 654.4M or +21.5%",
+ "figure_label": "English, what it measures (with the unit if money) and the period, max 34 characters, e.g. Sales value, QAR · Week 39",
+ "title_ar": "Arabic headline, max 9 words",
+ "note_ar": "one Arabic line explaining it, max 14 words; any number in it must be in the text",
+ "quote": "the exact sentence from the text that contains the figure"}"""
+
+
+def pick_market_figure(article):
+    """Ask for the headline figure, then check every number it gave against
+    the official text. One retry; then refuse rather than guess."""
+    import official_sources as osrc
+    task = {"official_source": {"issued_by": article.get("source_ar"),
+                                "title": article.get("title"),
+                                "text": article.get("text")}}
+    src = article.get("text", "") + " " + article.get("title", "")
+    for attempt in range(2):
+        got = ask_model(MARKET_PICK_PROMPT, json.dumps(task, ensure_ascii=False))
+        figure = str(got.get("figure") or "").strip()
+        claimed = " ".join(str(got.get(k) or "") for k in ("figure", "figure_label",
+                                                           "title_ar", "note_ar"))
+        bad = osrc.unsupported_numbers(claimed, src)
+        if figure and not bad:
+            return {"figure": figure, "label": str(got.get("figure_label") or "").strip(),
+                    "title_ar": str(got.get("title_ar") or "").strip(),
+                    "note": str(got.get("note_ar") or "").strip(),
+                    "quote": str(got.get("quote") or "").strip()}
+        task["previous_answer_had_numbers_not_in_the_text"] = bad or ["(no figure)"]
+    raise RuntimeError("No figure in that announcement could be matched exactly to "
+                       "its text, so no market post was made. Try another item, or "
+                       "make it by hand.")
+
+
+def make_official(kind, article, conn, topic=""):
+    """A market update, news post or tip written from an official article."""
+    if kind == "market":
+        pick = pick_market_figure(article)
+        inputs = dict(pick, source=article.get("source_en") or "", article=article)
+    elif kind == "news":
+        inputs = {"article": article}
+    elif kind == "tip":
+        inputs = {"topic": topic, "article": article}
+    else:
+        raise RuntimeError("Unknown kind of post.")
+    return make_content(kind, inputs, conn)
 
 
 def _inputs_from_form(kind, conn):
@@ -483,6 +619,8 @@ def make_content(kind, inputs, conn):
     saved = dict(inputs)
     saved.pop("stats", None)
     content["inputs"] = saved
+    if inputs.get("article"):
+        content["source_url"] = inputs["article"].get("url")
     return content
 
 
@@ -519,8 +657,12 @@ WEEKLY_PLAN = [
     ("listing", "Listings", "عقارات", 3),
     ("tip", "Tips", "نصائح", 1),
     ("area", "Area guide", "دليل المناطق", 1),
+    # Aqarat and the Ministry of Justice publish weekly figures, so a market
+    # update every week; news from official sources too.
+    ("market", "Market update", "السوق العقاري", 1),
+    ("news", "News", "أخبار عقارية", 1),
 ]
-MONTHLY_PLAN = [("market", "Market update", "السوق العقاري", 1)]
+MONTHLY_PLAN = []
 
 
 def _week_start(today=None):
@@ -588,3 +730,70 @@ def suggested_area(conn):
         if a["name"] not in recent:
             return a["name"]
     return ranked[0]["name"] if ranked else ""
+
+
+# ------------------------------------------------- from official sources
+
+def _used_sources(conn):
+    """Official links already made into a post (not discarded): url -> kind."""
+    used = {}
+    for r in conn.execute("SELECT kind, content_json FROM social_posts WHERE kind IN "
+                          "('market','news','tip') AND status != 'discarded' "
+                          "ORDER BY id DESC LIMIT 300"):
+        try:
+            url = json.loads(r["content_json"]).get("source_url")
+        except ValueError:
+            continue
+        if url:
+            used.setdefault(url, r["kind"])
+    return used
+
+
+@social_bp.route("/official.json")
+@admin_required
+def official_items():
+    """Latest real-estate items from the official feeds (kept 3 hours)."""
+    import official_sources as osrc
+    from ai_social import set_cfg
+    items, problems = osrc.discover(cfg, set_cfg, force=bool(request.args.get("refresh")))
+    used = _used_sources(db())
+    for it in items:
+        it["used"] = used.get(it["link"])
+    return jsonify({"items": items, "problems": problems})
+
+
+@social_bp.route("/official/make", methods=["POST"])
+@admin_required
+def official_make():
+    """Make a market update, news post or tip from an official item or link.
+    The page is opened from the server; if it can't be, the text pasted by
+    hand is used instead."""
+    import official_sources as osrc
+    kind = request.form.get("kind", "")
+    url = (request.form.get("url") or "").strip()
+    pasted = (request.form.get("text") or "").strip()
+    back = url_for("social.index") + "#official"
+    if kind not in ("market", "news", "tip"):
+        flash("Choose Market update, News or Tip.", "error")
+        return redirect(back)
+    try:
+        article = osrc.pasted_article(url, pasted) if pasted else osrc.fetch_article(url)
+    except RuntimeError as exc:
+        flash(str(exc) if pasted or "official" in str(exc) else
+              f"{exc} You can paste the article's text in the box and try again.",
+              "error")
+        return redirect(back)
+    conn = db()
+    try:
+        content = make_official(kind, article, conn,
+                                topic=(request.form.get("topic") or "").strip())
+    except RuntimeError as exc:
+        flash(str(exc), "error")
+        return redirect(back)
+    now = datetime.now().isoformat(timespec="seconds")
+    cur = conn.execute(
+        "INSERT INTO social_posts (property_ids, kind, content_json, status, "
+        "created_by, created_at) VALUES ('[]', ?, ?, 'draft', ?, ?)",
+        (kind, json.dumps(content, ensure_ascii=False), current_user_id(), now))
+    conn.commit()
+    return redirect(url_for("social.review", post_id=cur.lastrowid))

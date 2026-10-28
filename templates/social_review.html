@@ -166,11 +166,15 @@
   {# The CRM checks each listing itself (not the AI) and says exactly what's
      missing, with a button straight to that listing's edit page. #}
   <div class="panel">
-    <h2>{{ 'Listing check' if properties else {'tip': 'Tip', 'area': 'Area guide', 'market': 'Market update'}.get(post.kind, 'Post') }}</h2>
+    <h2>{{ 'Listing check' if properties else {'tip': 'Tip', 'area': 'Area guide', 'market': 'Market update', 'news': 'News'}.get(post.kind, 'Post') }}</h2>
     {% if is_content %}
     <p class="muted small" style="margin:0">
       {% if post.kind == 'area' %}Figures on this post come from our own listings in {{ area_name }}; the
         description of the area is the AI's and worth a quick check.
+      {% elif content.source_url %}Written only from the official text:
+        <a href="{{ content.source_url }}" target="_blank" rel="noopener">{{ (content.inputs.article or {}).source_en or 'the source' }}</a>.
+        {% if post.kind == 'market' %}The figure was checked against that text.{% endif %}
+        Any number not found in it is listed below.
       {% elif post.kind == 'market' %}The figure and source are exactly as entered. The AI only wrote the wording around them.
       {% else %}A tip in the numbered series. Check it reads right before posting.{% endif %}
       {% if content.review_flags %}<br><b style="color:var(--flag)">Check:</b> {{ content.review_flags | join('; ') }}{% endif %}

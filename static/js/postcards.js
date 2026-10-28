@@ -15,7 +15,7 @@
  * overlay also keeps clear of the right-hand 150px where reels show the
  * like / comment / share buttons.
  *
- * card.type: "rent" | "sale" | "rented" | "sold" | "tip" | "area" | "market"
+ * card.type: "rent" | "sale" | "rented" | "sold" | "tip" | "area" | "market" | "news"
  * Drawn in the browser so the picture you approve is exactly what is posted.
  */
 (function () {
@@ -45,6 +45,8 @@
     globe: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0zM3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18",
     pin: "M12 21s-7-7.5-7-12a7 7 0 0 1 14 0c0 4.5-7 12-7 12zM14.5 9a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z",
     chat: "M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z",
+    news: "M4 5h13v14H6a2 2 0 0 1-2-2V5zM17 9h3v8a2 2 0 0 1-2 2h-1M7 9h7M7 12.5h7M7 16h4",
+    shield: "M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6l8-3zM8.5 12l2.5 2.5 4.5-5",
   };
 
   let LOGO = null;
@@ -510,14 +512,14 @@
     g.addColorStop(1, "rgba(250,248,244,0)");
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, 470);
     const series = { tip: ["نصائح", "TIPS"], area: ["دليل المناطق", "AREA GUIDE"],
-                     market: ["السوق العقاري", "MARKET"] }[c.type] || TAGS[c.type] || TAGS.rent;
+                     market: ["السوق العقاري", "MARKET"], news: NEWS_TAG }[c.type] || TAGS[c.type] || TAGS.rent;
     header(ctx, series[0], series[1]);
 
     const x0 = 48, pw = 852, R = x0 + pw - 34, inner = pw - 68;
     let t = c;
     if (c.type === "area") t = { titleAr: c.nameAr, titleEn: String(c.nameEn || "").toUpperCase() };
     if (c.type === "market") t = { titleAr: c.titleAr, titleEn: [c.figure, c.figureLabel].filter(Boolean).join(" · ").toUpperCase() };
-    if (c.type === "tip") t = { titleAr: c.titleAr, titleEn: c.labelEn ? String(c.labelEn).toUpperCase() : "" };
+    if (c.type === "tip" || c.type === "news") t = { titleAr: c.titleAr, titleEn: c.labelEn ? String(c.labelEn).toUpperCase() : "" };
     const listing = !!TAGS[c.type];
     // Measure first, so the panel can sit with its bottom at y=1470.
     const th = titleBlock(ctx, t, R, 0, inner, 58, 40, false);
@@ -560,6 +562,7 @@
       ctx.direction = "ltr"; font(ctx, 700, 22, "Montserrat"); spacing(ctx, 5.3); ctx.fillStyle = T.goldTxt;
       y += 60; ctx.fillText(c.labelEn.toUpperCase(), R + 5.3, y); spacing(ctx, 0);
     }
+    if (c.source) sourceLine(ctx, c.source, R, y + 40, "right");
     ctx.restore();
     const cy = F.foot - 52 - 104;
     whiteCard(ctx, 60, cy, W - 120, 104);
@@ -614,6 +617,69 @@
     footer(ctx);
   }
 
+
+  // ---------------------------------------------------------------- news
+  // Real estate news from an official source: date, headline, two lines,
+  // and who issued it, on the light ground.
+  const NEWS_TAG = ["أخبار عقارية", "REAL ESTATE NEWS"];
+
+  // "SOURCE: ..." in small spaced capitals.
+  function sourceLine(ctx, text, x, y, align) {
+    ctx.save(); ctx.direction = "ltr"; ctx.textAlign = align || "left";
+    let sz = 18; font(ctx, 600, sz, "Montserrat"); spacing(ctx, 2);
+    const label = "SOURCE: " + String(text);
+    while (textW(ctx, label) > W - 180 && sz > 12) { sz--; font(ctx, 600, sz, "Montserrat"); }
+    ctx.fillStyle = "#8a8270"; ctx.fillText(label, align === "right" ? x + 2 : x, y);
+    ctx.restore();
+  }
+
+  function news(ctx, c) {
+    const story = H > 1400;
+    ctx.fillStyle = T.bg; ctx.fillRect(0, 0, W, H);
+    accent(ctx, W - 560, F.foot - 360, 640, 320, 12);
+    header(ctx, NEWS_TAG[0], NEWS_TAG[1]);
+    ctx.save(); ctx.direction = "rtl"; ctx.textAlign = "right";
+    const R = W - 90;
+    let y = story ? 540 : 300;
+    // date chip
+    if (c.date) {
+      font(ctx, 700, 22, "Montserrat"); spacing(ctx, 3.5); ctx.direction = "ltr";
+      const dw = textW(ctx, c.date) + 48;
+      ctx.strokeStyle = T.gold; ctx.lineWidth = 2; ctx.strokeRect(R - dw, y, dw, 50);
+      ctx.fillStyle = T.goldTxt; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(c.date, R - dw / 2 + 1.75, y + 26); spacing(ctx, 0);
+      ctx.textAlign = "right"; ctx.textBaseline = "alphabetic"; ctx.direction = "rtl";
+      y += 50 + 40;
+    }
+    icon(ctx, "news", R - 64, y, 64, T.goldD, 1.5); y += 64 + 26;
+    roof(ctx, R - 170, y, 170, 52, 7); y += 52 + 16;
+    const tf = fitLines(ctx, c.titleAr, 900, 72, 50, "Cairo", W - 180, 3); ctx.fillStyle = T.ink;
+    for (const l of tf.lines) { y += tf.size + 4; ctx.fillText(l, R, y); y += 14; }
+    font(ctx, 600, 34, "Cairo"); ctx.fillStyle = T.sub; y += 8;
+    for (const l of wrap(ctx, c.bodyAr, W - 180).slice(0, story ? 6 : 3)) { y += 58; ctx.fillText(l, R, y); }
+    if (c.labelEn) {
+      ctx.direction = "ltr"; font(ctx, 700, 22, "Montserrat"); spacing(ctx, 5.3); ctx.fillStyle = T.goldTxt;
+      y += 58; ctx.fillText(String(c.labelEn).toUpperCase(), R + 5.3, y); spacing(ctx, 0);
+    }
+    ctx.restore();
+    if (c.source) {
+      const cy = F.foot - 52 - 96;
+      whiteCard(ctx, 60, cy, W - 120, 96);
+      icon(ctx, "shield", W - 60 - 30 - 40, cy + 28, 40, T.goldD);
+      ctx.save(); ctx.direction = "rtl"; ctx.textAlign = "right"; ctx.textBaseline = "middle";
+      font(ctx, 700, 24, "Cairo"); ctx.fillStyle = T.ink;
+      ctx.fillText("من مصدر رسمي", W - 60 - 30 - 40 - 16, cy + 34);
+      ctx.restore();
+      ctx.save(); ctx.direction = "ltr"; ctx.textAlign = "right"; ctx.textBaseline = "middle";
+      let sz = 17; font(ctx, 600, sz, "Montserrat"); spacing(ctx, 1.5);
+      const t = String(c.source).toUpperCase();
+      while (textW(ctx, t) > W - 300 && sz > 11) { sz--; font(ctx, 600, sz, "Montserrat"); }
+      ctx.fillStyle = T.sub; ctx.fillText(t, W - 60 - 30 - 40 - 16 + 1.5, cy + 66);
+      ctx.restore();
+    }
+    footer(ctx);
+  }
+
   // ------------------------------------------------------------- market
   function market(ctx, c) {
     ctx.fillStyle = T.bg; ctx.fillRect(0, 0, W, H);
@@ -659,6 +725,7 @@
       case "tip": tip(ctx, card); break;
       case "area": area(ctx, card, photos); break;
       case "market": market(ctx, card); break;
+      case "news": news(ctx, card); break;
       default: (story ? listingStory : listing)(ctx, card, photos);
     }
     return c;

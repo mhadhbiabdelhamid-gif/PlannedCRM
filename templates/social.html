@@ -164,6 +164,35 @@
     </form>
   </div>
 
+  {# Market updates, news and tips from official Qatari sources only:
+     QNA (the state news agency) and the government sites themselves. #}
+  <h2 id="official">From official sources</h2>
+  <p class="sub" style="margin-bottom:12px">Real estate items from the Qatar News Agency and the
+    Real Estate Regulatory Authority (Aqarat): the weekly sales bulletins, Ministry of Justice
+    figures, new rules and services. A post made from one uses only what the official text
+    says, and credits it.
+    <a href="#" id="offRefresh" style="color:var(--gold)">Check for new items</a></p>
+  <div id="offList" class="list"><div class="item"><span class="empty">Loading…</span></div></div>
+  <div id="offProblems" class="flag"></div>
+
+  <form method="post" action="{{ url_for('social.official_make') }}" class="mkc" style="margin-top:14px"
+        onsubmit="busy(this)">
+    <div class="mk-h">Use a link from an official site</div>
+    <p>Any page from a .gov.qa site, QNA (qna.org.qa) or the Planning Council (npc.qa).
+      For example a Ministry of Justice bulletin, an Aqarat announcement, a law on Al Meezan.</p>
+    <label>Link</label>
+    <input type="text" name="url" dir="ltr" required placeholder="https://www.aqarat.gov.qa/...">
+    <label>Make it into</label>
+    <select name="kind">
+      <option value="market">Market update (one figure from it)</option>
+      <option value="news">News</option>
+      <option value="tip">Tip (a practical tip based on it)</option>
+    </select>
+    <label>Article text (only if the CRM can't open the link)</label>
+    <textarea name="text" rows="3" dir="auto" style="width:100%;padding:8px 10px;background:#17181a;color:var(--text);border:1px solid var(--line);border-radius:4px;font:inherit;font-size:14px"></textarea>
+    <button type="submit">Write the post</button>
+  </form>
+
   <h2>Available listings</h2>
   <div class="list">
     {% for p in listings %}
@@ -196,7 +225,7 @@
       <a href="{{ url_for('social.review', post_id=d.id) }}" dir="auto">
         {{ d.content.hook_en or 'Untitled post' }}
       </a>
-      <div class="meta">{{ {'single': 'Listing', 'carousel': 'Listings carousel', 'tip': 'Tip', 'area': 'Area guide', 'market': 'Market update'}.get(d.kind, d.kind) }}
+      <div class="meta">{{ {'single': 'Listing', 'carousel': 'Listings carousel', 'tip': 'Tip', 'area': 'Area guide', 'market': 'Market update', 'news': 'News'}.get(d.kind, d.kind) }}
         · {{ d.status }} · {{ d.created_at }}</div>
       {% if d.content.review_flags %}
       <div class="flag">Check: {{ d.content.review_flags | join('; ') }}</div>
@@ -214,6 +243,44 @@
     const b = form.querySelector('button');
     b.disabled = true; b.textContent = 'Writing… (up to a minute)';
   }
+  // ---- Official sources ---------------------------------------------------
+  const OFF_MAKE = '{{ url_for("social.official_make") }}';
+  const KIND_NAMES = { market: 'Market update', news: 'News', tip: 'Tip' };
+  function escH(s) { return String(s || '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  async function loadOfficial(refresh) {
+    const box = document.getElementById('offList');
+    if (refresh) box.innerHTML = '<div class="item"><span class="empty">Checking the official sources…</span></div>';
+    try {
+      const d = await (await fetch('{{ url_for("social.official_items") }}' + (refresh ? '?refresh=1' : ''),
+                                   { credentials: 'same-origin' })).json();
+      document.getElementById('offProblems').textContent =
+        d.problems && d.problems.length ? 'Not reachable right now: ' + d.problems.join(' · ') : '';
+      if (!d.items.length) {
+        box.innerHTML = '<div class="item"><span class="empty">No real estate items in the official feeds right now. ' +
+          'Paste a link below instead.</span></div>';
+        return;
+      }
+      box.innerHTML = d.items.slice(0, 15).map(it => {
+        const order = it.suggest === 'market' ? ['market', 'news', 'tip'] : ['news', 'tip', 'market'];
+        const buttons = order.map((k, i) =>
+          '<form method="post" action="' + OFF_MAKE + '" onsubmit="busy(this)" style="display:inline">' +
+          '<input type="hidden" name="url" value="' + escH(it.link) + '">' +
+          '<input type="hidden" name="kind" value="' + k + '">' +
+          '<button type="submit" style="padding:6px 10px;font-size:12px;' + (i ? 'background:transparent;color:var(--muted);border:1px solid var(--line)' : '') + '">' +
+          KIND_NAMES[k] + '</button></form>').join(' ');
+        return '<div class="item" style="align-items:flex-start"><div style="flex:1">' +
+          '<a href="' + escH(it.link) + '" target="_blank" rel="noopener" dir="rtl" style="color:var(--text);text-decoration:none;font-weight:600">' + escH(it.title) + '</a>' +
+          '<div class="meta">' + escH(it.feed_en) + (it.date ? ' · ' + escH(it.date.replace('T', ' ')) : '') +
+          (it.used ? ' · <span style="color:#8fd1a6">✓ already made into a ' + escH(KIND_NAMES[it.used] || it.used) + '</span>' : '') + '</div></div>' +
+          '<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">' + buttons + '</div></div>';
+      }).join('');
+    } catch (e) {
+      box.innerHTML = '<div class="item"><span class="empty">Couldn\'t load the official items. Paste a link below instead.</span></div>';
+    }
+  }
+  document.getElementById('offRefresh').addEventListener('click', e => { e.preventDefault(); loadOfficial(true); });
+  loadOfficial(false);
+
   const btn = document.getElementById('go');
   const out = document.getElementById('status');
 

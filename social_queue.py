@@ -285,8 +285,8 @@ def queue_images(post_id):
 
 def _title(post, content):
     return (content.get("hook_en") or "").strip()[:120] or \
-        {"tip": "Tip", "area": "Area guide", "market": "Market update"}.get(
-            post["kind"], "Listing")
+        {"tip": "Tip", "area": "Area guide", "market": "Market update",
+         "news": "News"}.get(post["kind"], "Listing")
 
 
 # ---------------------------------------------------------- make a video
@@ -945,10 +945,31 @@ def tick(app=None):
                        for k, v in errors.items()) or None,
              utc_str(utc_now()), qid))
         conn.commit()
+        if item["format"] == "post" and results and item["post_id"]:
+            _mark_post_published(conn, item["post_id"], results)
         if status != "posted":
             _notify(item, f"Scheduled {item['format_label'].lower()} "
                     f"{'partly ' if status == 'partial' else ''}failed: "
                     f"{item['title'] or ''}. Open the schedule to retry.")
+
+
+def _mark_post_published(conn, post_id, results):
+    """A feed post that went out from the schedule counts as posted, the
+    same as one posted by hand (content plan, drafts list)."""
+    row = conn.execute("SELECT post_urls FROM social_posts WHERE id = ?",
+                       (post_id,)).fetchone()
+    if not row:
+        return
+    try:
+        merged = {**json.loads(row["post_urls"] or "{}"), **results}
+    except ValueError:
+        merged = dict(results)
+    status = "posted" if all(p in merged for p in PLATFORM_NAMES) else "partial"
+    conn.execute("UPDATE social_posts SET status = ?, post_urls = ?, posted_at = ?"
+                 " WHERE id = ?", (status, json.dumps(merged),
+                                   datetime.now().isoformat(timespec="seconds"),
+                                   post_id))
+    conn.commit()
 
 
 def _tick_safely(app):
