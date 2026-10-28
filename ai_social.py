@@ -62,6 +62,29 @@ CONFIG_KEYS = list(DEFAULTS)
 SECRET_KEYS = {"fb_page_token"}      # never sent back to the browser in full
 
 
+_TABLES_READY = False
+
+
+@social_bp.before_app_request
+def _ensure_tables():
+    """Create the social tables if they're missing. They used to be created by
+    hand (see README_social.md), so a fresh install or a restored backup
+    without them broke the Social pages. Runs once per server process."""
+    global _TABLES_READY
+    if _TABLES_READY:
+        return
+    conn = db()
+    conn.executescript(
+        "CREATE TABLE IF NOT EXISTS social_posts (id INTEGER PRIMARY KEY "
+        "AUTOINCREMENT, property_ids TEXT NOT NULL, kind TEXT NOT NULL, "
+        "content_json TEXT NOT NULL, status TEXT NOT NULL, post_urls TEXT, "
+        "error TEXT, created_by INTEGER, created_at TEXT NOT NULL, "
+        "posted_by INTEGER, posted_at TEXT);"
+        "CREATE TABLE IF NOT EXISTS social_config (key TEXT PRIMARY KEY, value TEXT);")
+    conn.commit()
+    _TABLES_READY = True
+
+
 def cfg(key):
     """Read a setting: database first, then environment, then empty."""
     try:
@@ -465,8 +488,16 @@ def index():
         item = dict(row)
         item["content"] = json.loads(row["content_json"])
         drafts.append(item)
+    import social_cards as sc
+    stats = sc.area_stats(conn)
+    area_choices = sorted((a for a in stats.values() if a["available"]),
+                          key=lambda a: -a["available"])
     return render_template("social.html", listings=listings, drafts=drafts,
-                           can_publish=can_publish())
+                           can_publish=can_publish(), plan=sc.content_plan(conn),
+                           tip_topic=sc.next_tip_topic(conn),
+                           area_choices=area_choices,
+                           suggested_area=sc.suggested_area(conn),
+                           flashes=get_flashed_messages(with_categories=True))
 
 
 @social_bp.route("/generate", methods=["POST"])
@@ -573,10 +604,13 @@ def review(post_id):
                        (post_id,)).fetchone()
     if not row:
         return "Post not found", 404
-    ids = json.loads(row["property_ids"])
-    marks = ",".join("?" for _ in ids)
-    props = conn.execute(
-        f"SELECT * FROM properties WHERE id IN ({marks})", ids).fetchall()
+    import social_cards as sc
+    ids = json.loads(row["property_ids"] or "[]")
+    props = []
+    if ids:
+        marks = ",".join("?" for _ in ids)
+        props = conn.execute(
+            f"SELECT * FROM properties WHERE id IN ({marks})", ids).fetchall()
     by_id = {p["id"]: p for p in props}
     ordered = [dict(by_id[i]) for i in ids if i in by_id]
     here = url_for("social.review", post_id=post_id, listing_saved=1)
@@ -596,15 +630,32 @@ def review(post_id):
              "ref": None, "edit_url": url_for("social.settings")})
 
     content = json.loads(row["content_json"])
+    is_content = row["kind"] in sc.CONTENT_SECTIONS
+    if is_content:
+        by_section = {}                    # no listing to check
+    # Design data: one card per listing (or the content post's own card),
+    # plus every photo it may use and the ones currently chosen.
+    for item in ordered:
+        item["card"] = sc.listing_card(item)
+    options = sc.photo_options(conn, row, content, ordered)
+    chosen = sc.chosen_photos(options, content)
+    if is_content:
+        cards = [dict(content.get("card") or {}, key="main")]
+    else:
+        cards = [dict(p["card"], key=str(p["id"]), ref=p.get("ref")) for p in ordered]
     return render_template(
         "social_review.html", post=dict(row), content=content,
         properties=ordered, can_publish=can_publish(),
         contact=contact_block(), posted=_posted_urls(row),
-        platform_names=PLATFORM_NAMES, sections=SECTIONS,
+        platform_names=PLATFORM_NAMES, sections=sc.sections_for(content),
         has_sections=isinstance(content.get("sections_en"), dict),
         gaps_by_section=by_section, multi=len(ordered) > 1,
         listing_saved=bool(request.args.get("listing_saved")),
-        flashes=get_flashed_messages(with_categories=True))
+        flashes=get_flashed_messages(with_categories=True),
+        is_content=is_content, cards=cards, photo_options=options,
+        chosen_photos=chosen, needs_photos=sc.needs_photos(row) and bool(options),
+        photos_ok=bool(content.get("photos_ok")), card_contact=sc.card_contact(),
+        area_name=(content.get("inputs") or {}).get("area", ""))
 
 
 @social_bp.route("/post/<int:post_id>/save", methods=["POST"])
@@ -618,10 +669,11 @@ def save(post_id):
     content = json.loads(row["content_json"])
     if isinstance(content.get("sections_en"), dict):
         # One box per section and language; the captions are rebuilt from them.
+        keys = content.get("section_keys") or SECTION_KEYS
         for lang in ("en", "ar"):
             content[f"sections_{lang}"] = {
                 k: request.form.get(f"sec_{lang}_{k}", "").strip()
-                for k in SECTION_KEYS}
+                for k in keys}
         apply_sections(content)
     else:
         content["caption_en"] = request.form.get("caption_en", "").strip()
@@ -651,20 +703,37 @@ def rewrite(post_id):
               "Create a new post for the listing instead.", "error")
         return redirect(url_for("social.review", post_id=post_id))
 
-    ids = json.loads(row["property_ids"])
-    marks = ",".join("?" for _ in ids)
-    rows = conn.execute(
-        f"SELECT * FROM properties WHERE id IN ({marks})", ids).fetchall()
-    by_id = {r["id"]: r for r in rows}
-    rows = [by_id[i] for i in ids if i in by_id]
-    if not rows:
-        flash("The listings in this post no longer exist.", "error")
-        return redirect(url_for("social.review", post_id=post_id))
-    try:
-        content = generate(rows)
-    except RuntimeError as exc:
-        flash(str(exc), "error")
-        return redirect(url_for("social.review", post_id=post_id))
+    import social_cards as sc
+    old = json.loads(row["content_json"])
+    if row["kind"] in sc.CONTENT_SECTIONS:
+        # Tips, area guides, market updates: write again from the same inputs
+        # (an area guide picks up the latest figures from the listings).
+        try:
+            content = sc.make_content(row["kind"], old.get("inputs") or {}, conn)
+        except (RuntimeError, KeyError) as exc:
+            flash(str(exc) or "This post can't be rewritten.", "error")
+            return redirect(url_for("social.review", post_id=post_id))
+    else:
+        ids = json.loads(row["property_ids"] or "[]")
+        rows = []
+        if ids:
+            marks = ",".join("?" for _ in ids)
+            rows = conn.execute(
+                f"SELECT * FROM properties WHERE id IN ({marks})", ids).fetchall()
+        by_id = {r["id"]: r for r in rows}
+        rows = [by_id[i] for i in ids if i in by_id]
+        if not rows:
+            flash("The listings in this post no longer exist.", "error")
+            return redirect(url_for("social.review", post_id=post_id))
+        try:
+            content = generate(rows)
+        except RuntimeError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("social.review", post_id=post_id))
+    # Keep the photos already chosen; the text is what's being rewritten.
+    for keep in ("photos", "photos_ok"):
+        if keep in old:
+            content[keep] = old[keep]
     conn.execute(
         "UPDATE social_posts SET content_json = ?, status = 'draft', "
         "error = NULL WHERE id = ?",
@@ -829,6 +898,10 @@ def publish(post_id):
             results={p: already[p] for p in wanted})
 
     content = json.loads(row["content_json"])
+    import social_cards as sc
+    if sc.needs_photos(row) and not content.get("photos_ok"):
+        return answer("failed", "Choose and approve the photos first "
+                      "(Step 1 on the right), then post.", code=400)
     caption = build_caption(
         request.form.get("caption_ar") or content.get("caption_ar", ""),
         request.form.get("caption_en") or content.get("caption_en", ""),
@@ -928,26 +1001,20 @@ ALLOWED_IMAGES = {".jpg", ".jpeg", ".png", ".webp"}
 @social_bp.route("/post/<int:post_id>/photo", methods=["POST"])
 @admin_required
 def upload_photo(post_id):
-    """Add a photo to a listing from the review page.
+    """Add photos from the review page.
 
-    It attaches to the property rather than to the post, so the listing itself
-    gains the picture too.
+    For a listing post they attach to the listing itself, so the listing gains
+    the pictures too. For an area guide the photo becomes the area's cover.
     """
-    try:
-        property_id = int(request.form.get("property_id", ""))
-    except ValueError:
-        flash("No listing was chosen for that photo.", "error")
-        return redirect(url_for("social.review", post_id=post_id))
-
-    upload = request.files.get("photo")
-    if not upload or not upload.filename:
+    back = url_for("social.review", post_id=post_id) + "#photos"
+    uploads = [u for u in request.files.getlist("photo") if u and u.filename]
+    if not uploads:
         flash("Choose an image file first.", "error")
-        return redirect(url_for("social.review", post_id=post_id))
-
-    ext = os.path.splitext(upload.filename)[1].lower()
-    if ext not in ALLOWED_IMAGES:
-        flash("Images only — JPG, PNG or WEBP.", "error")
-        return redirect(url_for("social.review", post_id=post_id))
+        return redirect(back)
+    for u in uploads:
+        if os.path.splitext(u.filename)[1].lower() not in ALLOWED_IMAGES:
+            flash("Images only - JPG, PNG or WEBP.", "error")
+            return redirect(back)
 
     folder = os.path.join(
         current_app.config.get(
@@ -955,33 +1022,51 @@ def upload_photo(post_id):
             os.path.join(current_app.root_path, "instance", "uploads")),
         "images")
     os.makedirs(folder, exist_ok=True)
-
-    name = f"p{property_id}-{uuid.uuid4().hex[:12]}{ext}"
-    upload.save(os.path.join(folder, name))
-
     conn = db()
+
+    area = request.form.get("area", "").strip()
+    if area:
+        # Area guide: the photo becomes the area's own cover photo, the same
+        # one shown on its card under Properties > Browse by area.
+        import social_cards as sc
+        from db import set_setting
+        u = uploads[0]
+        name = f"area-{uuid.uuid4().hex[:12]}{os.path.splitext(u.filename)[1].lower()}"
+        u.save(os.path.join(folder, name))
+        set_setting(sc.AREA_COVER_KEY + area, name)
+        flash("Photo added as the area's cover photo.", "success")
+        return redirect(back)
+
+    try:
+        property_id = int(request.form.get("property_id", ""))
+    except ValueError:
+        flash("No listing was chosen for that photo.", "error")
+        return redirect(back)
+
     cols = [r[1] for r in conn.execute("PRAGMA table_info(property_images)")]
     has_any = conn.execute(
         "SELECT 1 FROM property_images WHERE property_id = ?",
         (property_id,)).fetchone()
-
-    fields = ["property_id", "filename"]
-    values = [property_id, name]
-    if "is_cover" in cols:
-        fields.append("is_cover")
-        values.append(0 if has_any else 1)
-    if "created_at" in cols:
-        fields.append("created_at")
-        values.append(datetime.now().isoformat(timespec="seconds"))
-
-    conn.execute(
-        f"INSERT INTO property_images ({', '.join(fields)}) "
-        f"VALUES ({', '.join('?' for _ in fields)})", values)
+    for u in uploads:
+        name = f"p{property_id}-{uuid.uuid4().hex[:12]}{os.path.splitext(u.filename)[1].lower()}"
+        u.save(os.path.join(folder, name))
+        fields = ["property_id", "filename"]
+        values = [property_id, name]
+        if "is_cover" in cols:
+            fields.append("is_cover")
+            values.append(0 if has_any else 1)
+            has_any = True
+        if "created_at" in cols:
+            fields.append("created_at")
+            values.append(datetime.now().isoformat(timespec="seconds"))
+        conn.execute(
+            f"INSERT INTO property_images ({', '.join(fields)}) "
+            f"VALUES ({', '.join('?' for _ in fields)})", values)
     conn.commit()
 
-    flash("Photo added to the listing." if has_any
-          else "Photo added and set as the cover image.", "success")
-    return redirect(url_for("social.review", post_id=post_id))
+    flash(f"{len(uploads)} photo{'s' if len(uploads) > 1 else ''} added. "
+          "Pick them below.", "success")
+    return redirect(back)
 
 
 @social_bp.route("/post/<int:post_id>/discard", methods=["POST"])
@@ -993,3 +1078,7 @@ def discard(post_id):
     conn.commit()
     flash("Post discarded.", "info")
     return redirect(url_for("social.index"))
+
+
+# Branded designs, photo choice and content posts add routes to social_bp.
+import social_cards  # noqa: E402,F401

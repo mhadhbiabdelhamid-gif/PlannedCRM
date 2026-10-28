@@ -103,6 +103,20 @@
     .sec-cols { display:none; }
     .sec-pair { grid-template-columns:1fr; }
   }
+  /* Step 1: photo picker */
+  .pk { display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; }
+  .pk-i { position:relative; aspect-ratio:1; border:2px solid transparent; border-radius:6px;
+          background:#17181a center/cover no-repeat; cursor:pointer; padding:0; }
+  .pk-i:hover { border-color:#5a4a1e; }
+  .pk-i.on { border-color:var(--gold); }
+  .pk-i b { position:absolute; top:4px; right:4px; min-width:22px; height:22px; border-radius:11px;
+            background:var(--gold); color:#17181a; font:700 13px/22px "Segoe UI", sans-serif;
+            text-align:center; display:none; }
+  .pk-i.on b { display:block; }
+  .pk-add { display:inline-block; margin:8px 0 4px; color:var(--gold); cursor:pointer; font-size:13px;
+            text-transform:none; letter-spacing:0; }
+  .pk-ref { font-size:13px; margin:12px 0 6px; }
+  #cards canvas { max-width:100%; }
 </style>
 </head>
 <body>
@@ -124,7 +138,16 @@
   {# The CRM checks each listing itself (not the AI) and says exactly what's
      missing, with a button straight to that listing's edit page. #}
   <div class="panel">
-    <h2>Listing check</h2>
+    <h2>{{ 'Listing check' if properties else {'tip': 'Tip', 'area': 'Area guide', 'market': 'Market update'}.get(post.kind, 'Post') }}</h2>
+    {% if is_content %}
+    <p class="muted small" style="margin:0">
+      {% if post.kind == 'area' %}Figures on this post come from our own listings in {{ area_name }}; the
+        description of the area is the AI's and worth a quick check.
+      {% elif post.kind == 'market' %}The figure and source are exactly as entered. The AI only wrote the wording around them.
+      {% else %}A tip in the numbered series. Check it reads right before posting.{% endif %}
+      {% if content.review_flags %}<br><b style="color:var(--flag)">Check:</b> {{ content.review_flags | join('; ') }}{% endif %}
+    </p>
+    {% endif %}
     {% for p in properties %}
     <div class="lrow">
       <div class="lname">
@@ -147,8 +170,8 @@
     <form method="post" action="{{ url_for('social.rewrite', post_id=post.id) }}"
           class="rewrite"
           onsubmit="if (!confirm('Write this post again from the listing as it is now? The text below will be replaced, including any edits you made here.')) return false; const b = this.querySelector('button'); b.disabled = true; b.textContent = 'Rewriting… (up to a minute)';">
-      <button type="submit" class="ghost">↻ Rewrite from listing</button>
-      <span class="muted small">After fixing a listing, use this to bring the new details into the post.</span>
+      <button type="submit" class="ghost">↻ {{ 'Write it again' if is_content else 'Rewrite from listing' }}</button>
+      <span class="muted small">{{ 'Get a fresh version of the text. The photos you chose are kept.' if is_content else 'After fixing a listing, use this to bring the new details into the post.' }}</span>
     </form>
     {% endif %}
   </div>
@@ -279,37 +302,52 @@
       </form>
     </div>
 
-    <div class="panel">
-      <h2>Images</h2>
-      <div class="plat">
-        <input type="radio" id="st_clean" name="cardstyle" checked onchange="setStyle('clean')">
-        <label for="st_clean" style="margin:0;text-transform:none;letter-spacing:0;color:var(--text);font-size:14px">Photo only</label>
-        <input type="radio" id="st_brand" name="cardstyle" onchange="setStyle('branded')" style="margin-left:14px">
-        <label for="st_brand" style="margin:0;text-transform:none;letter-spacing:0;color:var(--text);font-size:14px">Branded card</label>
-      </div>
-
-      {% for p in properties %}
-        {% if not p.photo_url %}
-        <form method="post" enctype="multipart/form-data"
-              action="{{ url_for('social.upload_photo', post_id=post.id) }}"
-              style="background:#17181a;border:1px dashed var(--line);border-radius:6px;padding:12px;margin-bottom:12px">
-          <input type="hidden" name="property_id" value="{{ p.id }}">
-          <div class="small" style="margin-bottom:8px">
-            {{ p.ref }} has no photo yet.
+    <div>
+      {% if needs_photos %}
+      {# Step 1: the photos are chosen and approved before the design is made.
+         Click to pick: 1 = main photo, 2 and 3 = the two small photos. #}
+      <div class="panel" id="photos">
+        <h2>Step 1 · Choose the photos</h2>
+        <p class="muted small" style="margin:0 0 10px">
+          {% if post.kind == 'area' %}Click the photo to use for this area.
+          {% else %}Click photos in order: <b>1</b> is the main photo, <b>2</b> and <b>3</b> are the small ones. Click again to remove.{% endif %}
+        </p>
+        {% for key, urls in photo_options.items() %}
+          {% set p = (properties | selectattr('id', 'equalto', key | int) | first) if key != 'main' else none %}
+          {% if p and multi %}<div class="pk-ref">{{ p.ref }} · <span dir="auto">{{ p.card.titleAr }}</span></div>{% endif %}
+          <div class="pk" data-key="{{ key }}" data-max="{{ 1 if post.kind == 'area' else 3 }}">
+            {% for u in urls %}
+            <button type="button" class="pk-i" data-url="{{ u }}" style="background-image:url('{{ u }}')" aria-label="Photo {{ loop.index }}"><b></b></button>
+            {% else %}
+            <span class="muted small">No photos yet. Add some below.</span>
+            {% endfor %}
           </div>
-          <input type="file" name="photo" accept="image/jpeg,image/png,image/webp"
-                 required style="font-size:13px;width:100%;margin-bottom:8px">
-          <button type="submit" class="ghost">Add photo to this listing</button>
-        </form>
-        {% endif %}
-      {% endfor %}
+          <form method="post" enctype="multipart/form-data" class="pk-up"
+                action="{{ url_for('social.upload_photo', post_id=post.id) }}">
+            {% if key == 'main' %}<input type="hidden" name="area" value="{{ area_name }}">
+            {% else %}<input type="hidden" name="property_id" value="{{ key }}">{% endif %}
+            <label class="pk-add">+ Add {{ 'a photo of ' ~ area_name if key == 'main' else 'photos' }}
+              <input type="file" name="photo" accept="image/jpeg,image/png,image/webp"
+                     {{ '' if key == 'main' else 'multiple' }} onchange="this.form.submit()" hidden></label>
+          </form>
+        {% endfor %}
+        <div class="actions" style="margin-top:12px;align-items:center">
+          <button type="button" class="save" id="approveBtn">Approve these photos</button>
+          <span class="small" id="photoState">{% if photos_ok %}<span style="color:#8fd1a6">✓ Approved</span>{% else %}<span style="color:var(--flag)">Not approved yet</span>{% endif %}</span>
+        </div>
+      </div>
+      {% endif %}
 
-      <div id="cards"></div>
-      <button type="button" class="ghost" onclick="downloadAll()">Download images</button>
+      <div class="panel">
+        <h2>{{ 'Step 2 · ' if needs_photos }}The design</h2>
+        <div id="cards"><p class="muted small">Drawing…</p></div>
+        <button type="button" class="ghost" onclick="downloadAll()">Download images</button>
+      </div>
     </div>
   </div>
 </div>
 
+<script src="{{ url_for('static', filename='js/postcards.js') }}"></script>
 <script>
 const SLIDES = {{ content.slides | tojson }};
 const PROPS  = {{ properties | tojson }};
@@ -518,137 +556,29 @@ if (pubform) pubform.addEventListener('submit', async (ev) => {
   }
 });
 
-// ---- Cards are 1080x1350 portrait, Instagram's 4:5 ----
-// "clean" is the house style: the photo alone, no overlay.
-// "branded" adds the gold frame, specs and contact details.
-let cardStyle = 'clean';
-function setStyle(s) { cardStyle = s; redraw(); }
-
-function loadImage(src) {
-  return new Promise(resolve => {
-    if (!src) return resolve(null);
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
-    img.onerror = () => resolve(null);
-    img.src = src;
-  });
-}
-
-function coverDraw(x, img) {
-  // Fill 1080x1080 without distorting the photo.
-  const scale = Math.max(1080 / img.width, 1350 / img.height);
-  const w = img.width * scale, h = img.height * scale;
-  x.drawImage(img, (1080 - w) / 2, (1350 - h) / 2, w, h);
-}
-
-async function drawCard(slide, prop, i) {
-  const W = 1080, H = 1350;
-  const c = document.createElement('canvas');
-  c.width = W; c.height = H;
-  const x = c.getContext('2d');
-
-  x.fillStyle = '#17181a';
-  x.fillRect(0, 0, W, H);
-
-  const img = await loadImage(prop.photo_url);
-  if (img) coverDraw(x, img);
-
-  if (cardStyle === 'clean') {
-    if (!img) {
-      // No photo to show, so fall back to something legible.
-      x.fillStyle = '#c9a227';
-      x.font = '600 40px Segoe UI, sans-serif';
-      x.fillText(CONTACT.company, 80, H / 2);
-    }
-    return c;
-  }
-
-  if (img) {
-    // Dark gradient so text stays readable over any photo.
-    const g = x.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0,   'rgba(23,24,26,0.45)');
-    g.addColorStop(0.4, 'rgba(23,24,26,0.72)');
-    g.addColorStop(1,   'rgba(23,24,26,0.96)');
-    x.fillStyle = g;
-    x.fillRect(0, 0, W, H);
-  }
-
-  x.strokeStyle = '#c9a227'; x.lineWidth = 6;
-  x.strokeRect(40, 40, W - 80, H - 80);
-
-  x.fillStyle = '#c9a227';
-  x.font = '600 30px Segoe UI, sans-serif';
-  x.fillText((prop.ref || '').toString(), 90, 130);
-
-  if (SLIDES.length > 1) {
-    x.textAlign = 'right';
-    x.fillText((i + 1) + ' / ' + SLIDES.length, W - 90, 130);
-    x.textAlign = 'left';
-  }
-
-  x.fillStyle = '#ffffff';
-  x.font = '700 66px Segoe UI, sans-serif';
-  wrap(x, slide.headline_en || prop.title || '', 90, 300, W - 180, 74);
-
-  x.fillStyle = '#c9a227';
-  x.fillRect(90, 390, 120, 4);
-
-  x.font = '400 40px Segoe UI, sans-serif';
-  let y = 480;
-  (slide.lines || []).slice(0, 5).forEach(line => {
-    x.fillStyle = '#c9a227'; x.fillText('•', 90, y);
-    x.fillStyle = '#ffffff'; x.fillText(line, 130, y);
-    y += 66;
-  });
-
-  if (prop.price) {
-    x.fillStyle = '#c9a227';
-    x.font = '700 76px Segoe UI, sans-serif';
-    x.fillText(Number(prop.price).toLocaleString() + ' QAR', 90, 1090);
-  }
-
-  // Contact footer
-  x.fillStyle = 'rgba(201,162,39,0.9)';
-  x.fillRect(90, 1150, W - 180, 2);
-
-  x.fillStyle = '#ffffff';
-  x.font = '600 32px Segoe UI, sans-serif';
-  x.fillText(CONTACT.company, 90, 1205);
-
-  const bits = [CONTACT.phone, CONTACT.email, CONTACT.website].filter(Boolean);
-  x.fillStyle = '#c9a227';
-  x.font = '400 29px Segoe UI, sans-serif';
-  wrap(x, bits.join('   ·   '), 90, 1255, W - 180, 38);
-
-  return c;
-}
-
-function wrap(ctx, text, x0, y0, maxW, lh) {
-  const words = String(text).split(' ');
-  let line = '', y = y0;
-  words.forEach(w => {
-    if (ctx.measureText(line + w).width > maxW && line) {
-      ctx.fillText(line.trim(), x0, y); line = ''; y += lh;
-    }
-    line += w + ' ';
-  });
-  ctx.fillText(line.trim(), x0, y);
-}
+// ---- The design ---------------------------------------------------------
+// Drawn by static/js/postcards.js (Gold Light). The picture shown here is the
+// one that gets posted. It is redrawn whenever the chosen photos change.
+const CARDS = {{ cards | tojson }};
+let CHOSEN = {{ chosen_photos | tojson }};
+let PHOTOS_OK = {{ 'true' if photos_ok else 'false' }};
+const NEEDS_PHOTOS = {{ 'true' if needs_photos else 'false' }};
+PostCards.setContact({{ card_contact | tojson }});
 
 const holder = document.getElementById('cards');
 let canvases = [];
+let drawSeq = 0;
 async function redraw() {
-  holder.innerHTML = '';
-  canvases = [];
-  const slides = SLIDES.length ? SLIDES : [{}];
-  for (let i = 0; i < slides.length; i++) {
-    const c = await drawCard(slides[i], PROPS[i] || PROPS[0] || {}, i);
-    canvases.push(c);
-    holder.appendChild(c);
+  const seq = ++drawSeq;
+  const out = [];
+  for (const c of CARDS) {
+    out.push(await PostCards.draw(Object.assign({}, c, { photos: CHOSEN[c.key] || [] })));
   }
+  if (seq !== drawSeq) return;            // a newer redraw has started
+  canvases = out;
+  holder.innerHTML = '';
+  out.forEach(cv => holder.appendChild(cv));
 }
-redraw();
 
 function downloadAll() {
   canvases.forEach((c, i) => {
@@ -659,6 +589,73 @@ function downloadAll() {
   });
 }
 
+// ---- Step 1: choose and approve the photos ----------------------------------
+function paintPicker() {
+  document.querySelectorAll('.pk').forEach(pk => {
+    const sel = CHOSEN[pk.dataset.key] || [];
+    pk.querySelectorAll('.pk-i').forEach(b => {
+      const i = sel.indexOf(b.dataset.url);
+      b.classList.toggle('on', i >= 0);
+      b.querySelector('b').textContent = i >= 0 ? (i + 1) : '';
+    });
+  });
+}
+
+function setPhotosOk(ok) {
+  PHOTOS_OK = ok;
+  const s = document.getElementById('photoState');
+  if (s) s.innerHTML = ok ? '<span style="color:#8fd1a6">✓ Approved</span>'
+                          : '<span style="color:var(--flag)">Not approved yet</span>';
+  updatePostBtn();
+}
+
+function updatePostBtn() {
+  const b = document.getElementById('pubbtn');
+  if (!b || /Posted/.test(b.textContent)) return;
+  if (NEEDS_PHOTOS && !PHOTOS_OK) {
+    b.disabled = true; b.title = 'Approve the photos first (Step 1)';
+  } else if (!publishing) {
+    b.disabled = false; b.title = '';
+  }
+}
+
+document.querySelectorAll('.pk').forEach(pk => pk.addEventListener('click', (e) => {
+  const b = e.target.closest('.pk-i');
+  if (!b) return;
+  const key = pk.dataset.key, max = +pk.dataset.max, url = b.dataset.url;
+  let sel = (CHOSEN[key] || []).slice();
+  const i = sel.indexOf(url);
+  if (i >= 0) sel.splice(i, 1);
+  else if (max === 1) sel = [url];
+  else if (sel.length < max) sel.push(url);
+  else sel[max - 1] = url;
+  CHOSEN[key] = sel;
+  setPhotosOk(false);
+  paintPicker();
+  redraw();
+}));
+
+const approveBtn = document.getElementById('approveBtn');
+if (approveBtn) approveBtn.addEventListener('click', async () => {
+  const empty = [...document.querySelectorAll('.pk')].some(pk => !(CHOSEN[pk.dataset.key] || []).length);
+  if (empty) { alert('Choose at least one photo for every listing first.'); return; }
+  approveBtn.disabled = true;
+  try {
+    const r = await fetch('{{ url_for("social.save_photos", post_id=post.id) }}', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin', body: JSON.stringify({ photos: CHOSEN }) });
+    const d = await r.json();
+    if (d.ok) setPhotosOk(true); else alert(d.error || 'Could not save the photos.');
+  } catch (e) {
+    alert('Could not reach the server. Try again.');
+  } finally {
+    approveBtn.disabled = false;
+  }
+});
+
+paintPicker();
+updatePostBtn();
+PostCards.ready('{{ url_for("static", filename="") }}').then(redraw);
 </script>
 </body>
 </html>

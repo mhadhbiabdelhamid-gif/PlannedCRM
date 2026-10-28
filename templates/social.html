@@ -42,6 +42,32 @@
   .card a:hover { color:var(--gold); }
   .flag { color:var(--flag); font-size:13px; margin-top:6px; }
   .empty { color:var(--muted); font-size:14px; }
+  /* content plan */
+  .plan { display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; }
+  @media (max-width:760px) { .plan { grid-template-columns:repeat(2, 1fr); } }
+  .pl { background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:12px 14px; }
+  .pl.done { border-color:#2f5a3f; }
+  .pl-top { display:flex; justify-content:space-between; align-items:baseline; }
+  .pl-ar { font-weight:700; font-size:16px; }
+  .pl-n { font-weight:700; color:var(--gold); }
+  .pl-en { color:var(--muted); font-size:12px; }
+  .pl-bar { height:5px; background:#33363b; border-radius:3px; margin:10px 0 6px; overflow:hidden; }
+  .pl-bar i { display:block; height:100%; background:var(--gold); }
+  .pl.done .pl-bar i { background:#6fbf8a; }
+  .pl-note { font-size:12px; color:var(--muted); }
+  .pl.done .pl-note { color:#8fd1a6; }
+  /* create content posts */
+  .mk { display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; align-items:start; }
+  @media (max-width:820px) { .mk { grid-template-columns:1fr; } }
+  .mkc { background:var(--panel); border:1px solid var(--line); border-top:3px solid var(--gold);
+         border-radius:6px; padding:14px 16px; }
+  .mk-h { font-weight:700; font-size:15px; } .mk-h .ar { color:var(--gold); margin-right:6px; }
+  .mkc p { color:var(--muted); font-size:13px; margin:6px 0 4px; }
+  .mkc label { display:block; font-size:12px; color:var(--muted); margin:10px 0 4px; }
+  .mkc input[type=text], .mkc select { width:100%; padding:8px 10px; background:#17181a; color:var(--text);
+         border:1px solid var(--line); border-radius:4px; font:inherit; font-size:14px; }
+  .mkc .hint { font-size:12px; color:var(--muted); margin-top:4px; }
+  .mkc button { margin-top:14px; width:100%; }
 </style>
 </head>
 <body>
@@ -57,6 +83,72 @@
     to copy and post by hand. Add the Meta credentials to turn on direct
     posting.</div>
   {% endif %}
+
+  {% for cat, msg in flashes %}
+  <div class="warn" style="{{ 'background:#2b1c1b;border-color:#6a2f2a' if cat == 'error' else 'background:#1b2620;border-color:#2f5a3f' }}">{{ msg }}</div>
+  {% endfor %}
+
+  {# The content plan: listings sell, but tips, area guides and market updates
+     are what make people follow the page between listings. Counts only posts
+     that actually went out; drafts are shown alongside. #}
+  <h2 id="plan">Content plan</h2>
+  <div class="plan">
+    {% for it in plan['items'] %}
+    <div class="pl {{ 'done' if it.done }}">
+      <div class="pl-top"><span class="pl-ar">{{ it.ar }}</span><span class="pl-n">{{ it.posted }} / {{ it.target }}</span></div>
+      <div class="pl-en">{{ it.en }} · {{ it.period }}</div>
+      <div class="pl-bar"><i style="width:{{ [100, (100 * it.posted / it.target) | round(0, 'floor') | int] | min }}%"></i></div>
+      <div class="pl-note">{% if it.done %}✓ Done{% elif it.drafts %}{{ it.drafts }} waiting to post{% else %}Not started{% endif %}</div>
+    </div>
+    {% endfor %}
+  </div>
+  <p class="sub" style="margin-top:10px">A good week: 3 listings, 1 tip and 1 area guide, plus a market
+    update each month. Suggested days: listings Sun / Tue / Thu, tip on Mon, area guide on Wed.</p>
+
+  <h2>Create a content post</h2>
+  <div class="mk">
+    <form method="post" action="{{ url_for('social.new_content') }}" class="mkc" onsubmit="busy(this)">
+      <input type="hidden" name="kind" value="tip">
+      <div class="mk-h"><span class="ar">نصيحة</span> Tip</div>
+      <p>One practical tip for tenants, buyers or owners. Numbered as a series.</p>
+      <label>Topic (optional)</label>
+      <input type="text" name="topic" placeholder="{{ tip_topic }}">
+      <div class="hint">Leave empty to use the next topic in the rotation.</div>
+      <button type="submit">Write a tip</button>
+    </form>
+
+    <form method="post" action="{{ url_for('social.new_content') }}" class="mkc" onsubmit="busy(this)">
+      <input type="hidden" name="kind" value="area">
+      <div class="mk-h"><span class="ar">دليل المناطق</span> Area guide</div>
+      <p>What an area is like, with what we have available there. Figures come
+        from our own listings.</p>
+      <label>Area</label>
+      <select name="area">
+        {% for a in area_choices %}
+        <option value="{{ a.name }}" {{ 'selected' if a.name == suggested_area }}>{{ a.name }}{% if a.ar %} · {{ a.ar }}{% endif %} ({{ a.available }} available)</option>
+        {% endfor %}
+      </select>
+      <div class="hint">Suggested: the area with the most units that hasn't had a guide lately.</div>
+      <button type="submit" {{ 'disabled' if not area_choices }}>Write an area guide</button>
+    </form>
+
+    <form method="post" action="{{ url_for('social.new_content') }}" class="mkc" onsubmit="busy(this)">
+      <input type="hidden" name="kind" value="market">
+      <div class="mk-h"><span class="ar">السوق العقاري</span> Market update</div>
+      <p>One real figure about the market, with its source. The AI never adds numbers.</p>
+      <label>Figure</label>
+      <input type="text" name="figure" placeholder="+6%" required>
+      <label>What the figure is (English, short)</label>
+      <input type="text" name="label" placeholder="Rental demand · Q3">
+      <label>Headline (Arabic)</label>
+      <input type="text" name="title_ar" dir="rtl" placeholder="ارتفاع الطلب على الشقق في لوسيل" required>
+      <label>One line of explanation (Arabic, optional)</label>
+      <input type="text" name="note" dir="rtl">
+      <label>Source</label>
+      <input type="text" name="source" placeholder="e.g. Ministry of Municipality, Q3 2026 report" required>
+      <button type="submit">Write a market update</button>
+    </form>
+  </div>
 
   <h2>Available listings</h2>
   <div class="list">
@@ -90,7 +182,8 @@
       <a href="{{ url_for('social.review', post_id=d.id) }}" dir="auto">
         {{ d.content.hook_en or 'Untitled post' }}
       </a>
-      <div class="meta">{{ d.kind }} · {{ d.status }} · {{ d.created_at }}</div>
+      <div class="meta">{{ {'single': 'Listing', 'carousel': 'Listings carousel', 'tip': 'Tip', 'area': 'Area guide', 'market': 'Market update'}.get(d.kind, d.kind) }}
+        · {{ d.status }} · {{ d.created_at }}</div>
       {% if d.content.review_flags %}
       <div class="flag">Check: {{ d.content.review_flags | join('; ') }}</div>
       {% endif %}
@@ -102,6 +195,11 @@
 
 </div>
 <script>
+  // Writing a content post takes the AI a few seconds; lock the button meanwhile.
+  function busy(form) {
+    const b = form.querySelector('button');
+    b.disabled = true; b.textContent = 'Writing… (up to a minute)';
+  }
   const btn = document.getElementById('go');
   const out = document.getElementById('status');
 
