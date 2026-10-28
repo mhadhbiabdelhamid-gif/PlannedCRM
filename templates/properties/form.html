@@ -3,13 +3,18 @@
 {% block title %}{{ t('Edit listing') if p else t('Add listing') }}{% endblock %}
 
 {% block content %}
+{# Opened from another page (e.g. a social post's "Edit listing"): Cancel goes
+   back there. Saving goes back there too (see views_properties.form). #}
+{% set back_to = request.args.get('next', '') if request.args.get('next', '').startswith('/') and not request.args.get('next', '').startswith('//') else '' %}
+{% set back_to = back_to.replace('?listing_saved=1', '') %}
+
 <div class="page-head">
   <div>
     <div class="eyebrow">02 · {{ t('Listings') }}</div>
     <h1 class="page-title">{{ t('Edit listing') if p else t('Add a listing') }}</h1>
   </div>
   <div class="actions">
-    <a class="btn btn-quiet" href="{{ url_for('properties.detail', pid=p.id) if p else url_for('properties.index') }}">{{ t('Cancel') }}</a>
+    <a class="btn btn-quiet" href="{{ back_to or (url_for('properties.detail', pid=p.id) if p else url_for('properties.index')) }}">{{ t('Cancel') }}</a>
   </div>
 </div>
 
@@ -293,7 +298,7 @@
   </div>
 
   <div class="modal-foot">
-    <a class="btn btn-quiet" href="{{ url_for('properties.detail', pid=p.id) if p else url_for('properties.index') }}">{{ t('Cancel') }}</a>
+    <a class="btn btn-quiet" href="{{ back_to or (url_for('properties.detail', pid=p.id) if p else url_for('properties.index')) }}">{{ t('Cancel') }}</a>
     <button class="btn btn-gold" type="submit">{{ t('Save listing') if p else t('Add listing') }}</button>
   </div>
 </form>

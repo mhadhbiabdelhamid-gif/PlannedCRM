@@ -59,6 +59,50 @@
   .plat input { accent-color:var(--gold); }
   button:focus-visible, input:focus-visible, textarea:focus-visible {
           outline:2px solid var(--gold); outline-offset:2px; }
+
+  /* Listing check */
+  .muted { color:var(--muted); }
+  .small { font-size:12px; }
+  .lrow { display:flex; align-items:center; gap:10px 14px; flex-wrap:wrap;
+          padding:10px 0; border-top:1px solid var(--line); }
+  .lrow:first-of-type { border-top:0; padding-top:0; }
+  .lname { flex:1 1 260px; font-size:14px; }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; }
+  .chip { font-size:12px; padding:3px 9px; border-radius:999px; white-space:nowrap; }
+  .chip.ok          { background:#1b2620; border:1px solid #2f5a3f; color:#8fd1a6; }
+  .chip.required    { background:#2b1c1b; border:1px solid #6a2f2a; color:#f0a59d; }
+  .chip.recommended { background:#2a2318; border:1px solid #5a4a1e; color:#e6c27a; }
+  .btn-edit { color:var(--gold); border:1px solid var(--gold); border-radius:6px;
+              padding:6px 12px; font-size:13px; text-decoration:none; white-space:nowrap; }
+  .btn-edit:hover { background:var(--gold); color:#17181a; }
+  .rewrite { display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+             margin-top:12px; padding-top:12px; border-top:1px solid var(--line); }
+  .rewrite button { padding:8px 14px; }
+
+  /* Caption sections */
+  .sec-cols, .sec-pair { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .sec-cols { font-size:12px; text-transform:uppercase; letter-spacing:.06em;
+              color:var(--muted); margin-bottom:4px; }
+  .sec { padding:10px 10px 12px; margin:0 -10px; border-radius:6px;
+         border-left:3px solid transparent; }
+  .sec.has-gap { border-left-color:var(--flag); background:rgba(217,131,36,.06); }
+  .sec-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+              margin-bottom:6px; }
+  .sec-name { font-size:13px; font-weight:600; color:var(--text); }
+  .gap { font-size:12px; text-decoration:none; padding:2px 8px; border-radius:999px; }
+  .gap.required    { color:#f0a59d; border:1px solid #6a2f2a; }
+  .gap.recommended { color:#e6c27a; border:1px solid #5a4a1e; }
+  .gap:hover { background:#33363b; }
+  .empty-note { font-size:12px; color:var(--muted); font-style:italic; }
+  .sec-pair textarea { resize:vertical; min-height:48px; }
+  .preview { margin-top:14px; }
+  .preview summary { cursor:pointer; color:var(--muted); font-size:13px; }
+  .preview summary:hover { color:var(--gold); }
+  .preview textarea[readonly] { opacity:.85; }
+  @media (max-width:600px) {
+    .sec-cols { display:none; }
+    .sec-pair { grid-template-columns:1fr; }
+  }
 </style>
 </head>
 <body>
@@ -68,9 +112,47 @@
   <a class="back" href="{{ url_for('social.index') }}">&larr; Back to social posts</a>
   <h1 dir="auto">{{ content.hook_en or 'Review post' }}</h1>
 
-  {% if content.review_flags %}
-  <div class="alert flag">Check before posting: {{ content.review_flags | join('; ') }}</div>
+  {% for cat, msg in flashes %}
+  <div class="alert {{ 'bad' if cat == 'error' else 'ok' }}">{{ msg }}</div>
+  {% endfor %}
+  {% set locked = posted or post.status in ('posted', 'partial', 'posting') %}
+  {% if listing_saved and not locked %}
+  <div class="alert info">Listing saved. Click <b>Rewrite from listing</b> below
+    so the post uses the new details.</div>
   {% endif %}
+
+  {# The CRM checks each listing itself (not the AI) and says exactly what's
+     missing, with a button straight to that listing's edit page. #}
+  <div class="panel">
+    <h2>Listing check</h2>
+    {% for p in properties %}
+    <div class="lrow">
+      <div class="lname">
+        <b>{{ p.ref }}</b> <span dir="auto">{{ p.title }}</span>
+        <span class="muted">· {{ p.prop_type or 'Type?' }}{% if p.area %} · {{ p.area }}{% endif %}</span>
+      </div>
+      <div class="chips">
+        {% if not p.gaps %}
+          <span class="chip ok">✓ Complete</span>
+        {% endif %}
+        {% for label, section, level in p.gaps %}
+          <span class="chip {{ level }}" title="{{ 'Needed before posting' if level == 'required' else 'Recommended' }}">
+            {{ '✗' if level == 'required' else '!' }} {{ label }} missing</span>
+        {% endfor %}
+      </div>
+      <a class="btn-edit" href="{{ p.edit_url }}">Edit listing →</a>
+    </div>
+    {% endfor %}
+    {% if not locked %}
+    <form method="post" action="{{ url_for('social.rewrite', post_id=post.id) }}"
+          class="rewrite"
+          onsubmit="if (!confirm('Write this post again from the listing as it is now? The text below will be replaced, including any edits you made here.')) return false; const b = this.querySelector('button'); b.disabled = true; b.textContent = 'Rewriting… (up to a minute)';">
+      <button type="submit" class="ghost">↻ Rewrite from listing</button>
+      <span class="muted small">After fixing a listing, use this to bring the new details into the post.</span>
+    </form>
+    {% endif %}
+  </div>
+
   {% if content.best_time_note %}
   <div class="alert info">{{ content.best_time_note }}</div>
   {% endif %}
@@ -93,9 +175,50 @@
 
   <div class="cols">
     <div>
-      <form method="post" action="{{ url_for('social.save', post_id=post.id) }}" class="panel">
+      <form method="post" action="{{ url_for('social.save', post_id=post.id) }}" class="panel" id="capform">
         <h2>Caption</h2>
 
+        {% if has_sections %}
+        {# One box per part of the post, English and Arabic side by side.
+           A part with missing listing details is marked, with a link to fix it. #}
+        <div class="sec-cols"><span>English</span><span dir="rtl">العربية</span></div>
+        {% for key, label in sections %}
+          {% set gaps = gaps_by_section.get(key, []) %}
+          {% set en = content.sections_en.get(key, '') %}
+          {% set ar = content.sections_ar.get(key, '') if content.sections_ar else '' %}
+          <div class="sec {{ 'has-gap' if gaps }}" data-key="{{ key }}">
+            <div class="sec-head">
+              <span class="sec-name">{{ label }}</span>
+              {% for g in gaps %}
+                <a class="gap {{ g.level }}" href="{{ g.edit_url }}">
+                  {{ g.label }} missing{% if multi and g.ref %} ({{ g.ref }}){% endif %} — fix in listing</a>
+              {% endfor %}
+              <span class="empty-note" hidden>Empty — left out of the post</span>
+            </div>
+            <div class="sec-pair">
+              <textarea name="sec_en_{{ key }}" dir="ltr" data-lang="en"
+                        rows="{{ [2, en.count('\n') + 1] | max }}"
+                        aria-label="{{ label }} (English)">{{ en }}</textarea>
+              <textarea name="sec_ar_{{ key }}" dir="rtl" data-lang="ar"
+                        rows="{{ [2, ar.count('\n') + 1] | max }}"
+                        aria-label="{{ label }} (Arabic)">{{ ar }}</textarea>
+            </div>
+          </div>
+        {% endfor %}
+
+        <details class="preview">
+          <summary>Preview the full caption</summary>
+          <label for="caption_en">English — this is what gets posted, plus the hashtags</label>
+          <textarea id="caption_en" rows="10" dir="ltr" readonly>{{ content.caption_en or '' }}</textarea>
+          <div class="count" id="c_en"></div>
+          <label for="caption_ar">العربية</label>
+          <textarea id="caption_ar" rows="10" dir="rtl" readonly>{{ content.caption_ar or '' }}</textarea>
+          <div class="count" id="c_ar"></div>
+        </details>
+        {% else %}
+        <div class="alert info" style="margin-bottom:8px">This post was written
+          before posts were split into sections. Click <b>Rewrite from listing</b>
+          above to get the section-by-section editor.</div>
         <label for="caption_en">English</label>
         <textarea id="caption_en" name="caption_en" rows="6" dir="ltr"
           oninput="count(this,'c_en')">{{ content.caption_en or '' }}</textarea>
@@ -105,6 +228,7 @@
         <textarea id="caption_ar" name="caption_ar" rows="6" dir="rtl"
           oninput="count(this,'c_ar')">{{ content.caption_ar or '' }}</textarea>
         <div class="count" id="c_ar"></div>
+        {% endif %}
 
         <label for="hashtags">Hashtags</label>
         <input type="text" id="hashtags" name="hashtags" dir="auto"
@@ -204,6 +328,58 @@ function copyAll() {
   navigator.clipboard.writeText(
     document.getElementById('caption_en').value + '\n\n' + tags);
 }
+
+// ---- Caption sections ----------------------------------------------------
+// The posted caption is the sections joined in order with a blank line
+// between them, the same way the server builds it. Kept live in the preview.
+const capform = document.getElementById('capform');
+const secBoxes = capform ? [...capform.querySelectorAll('.sec textarea')] : [];
+
+function grow(t) {
+  t.style.height = 'auto';
+  t.style.height = (t.scrollHeight + 2) + 'px';
+}
+
+function rebuildCaptions() {
+  if (!secBoxes.length) return;
+  ['en', 'ar'].forEach(lang => {
+    const text = secBoxes.filter(t => t.dataset.lang === lang)
+      .map(t => t.value.trim()).filter(Boolean).join('\n\n');
+    const out = document.getElementById('caption_' + lang);
+    if (out) { out.value = text; count(out, 'c_' + lang); }
+  });
+  capform.querySelectorAll('.sec').forEach(sec => {
+    const empty = [...sec.querySelectorAll('textarea')].every(t => !t.value.trim());
+    sec.querySelector('.empty-note').hidden = !empty;
+  });
+}
+
+// Warn before leaving with unsaved edits (e.g. clicking "Edit listing").
+let dirty = false;
+if (capform) {
+  capform.addEventListener('input', (e) => {
+    dirty = true;
+    if (e.target.matches('.sec textarea')) { grow(e.target); rebuildCaptions(); }
+  });
+  capform.addEventListener('submit', () => { dirty = false; });
+}
+window.addEventListener('beforeunload', (e) => {
+  if (dirty) { e.preventDefault(); e.returnValue = ''; }
+});
+document.querySelectorAll('a.gap, a.btn-edit').forEach(a =>
+  a.addEventListener('click', (e) => {
+    if (dirty && !confirm('You have unsaved changes to this post. ' +
+        'Leave without saving them? (Click Cancel, then "Save changes" first.)')) {
+      e.preventDefault();
+    } else {
+      dirty = false;
+    }
+  }));
+document.querySelectorAll('form.rewrite').forEach(f =>
+  f.addEventListener('submit', (e) => { if (!e.defaultPrevented) dirty = false; }));
+
+secBoxes.forEach(grow);
+rebuildCaptions();
 
 // ---- Publishing --------------------------------------------------------
 // The card images exist only in this page (drawn on canvas), so they're sent

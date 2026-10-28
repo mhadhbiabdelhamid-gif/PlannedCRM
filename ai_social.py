@@ -34,9 +34,9 @@ import uuid
 import time
 from datetime import datetime, timedelta
 
-from flask import (Blueprint, current_app, flash, g, jsonify, redirect,
-                   render_template, request, send_from_directory, session,
-                   url_for)
+from flask import (Blueprint, current_app, flash, g, get_flashed_messages,
+                   jsonify, redirect, render_template, request,
+                   send_from_directory, session, url_for)
 
 from ai_intake import _post, ask_model, db, current_user_id
 from areas import lookup as area_lookup
@@ -160,8 +160,10 @@ actually listed instead.
 Return ONLY a JSON object, no preamble and no markdown fences:
 
 {{
-  "caption_en": string,
-  "caption_ar": string,
+  "sections_ar": {{"title": string, "intro": string, "details": string,
+                  "amenities": string, "price": string, "contact": string}},
+  "sections_en": {{"title": string, "intro": string, "details": string,
+                  "amenities": string, "price": string, "contact": string}},
   "hashtags": [string],
   "hook_en": string,
   "hook_ar": string,
@@ -169,6 +171,20 @@ Return ONLY a JSON object, no preamble and no markdown fences:
   "best_time_note": string,
   "review_flags": [string]
 }}
+
+sections_ar / sections_en: the caption template above, split into its parts \
+in order. Each holds exactly the text that appears in the caption for that \
+part, including its own label line, so that joining them in order with one \
+blank line between them gives the full caption:
+- title: the first line (type, area, emoji).
+- intro: the one framing sentence.
+- details: the details label line and the rooms / size / bathrooms line.
+- amenities: the features line, with its label.
+- price: the price label line and the price line.
+- contact: the closing call to action and the phone line.
+A section with no data behind it (for example no features listed) is an \
+empty string. Never fill one in by guessing. For a post with several \
+properties, write each section to cover all of them, in the order given.
 
 hashtags: 8 to 12, mixed Arabic and English, relevant to Qatar property, \
 including the area name in both scripts. No generic filler.
@@ -187,8 +203,9 @@ def property_payload(rows):
         item = {k: row[k] for k in row.keys()
                 if k in ("ref", "title", "area", "prop_type", "listing_type",
                          "size_sqm", "bedrooms", "bathrooms",
-                         "features", "description", "building_no", "floor_no")
-                and row[k] is not None}
+                         "features", "description", "building_no", "floor_no",
+                         "furnishing", "view", "balcony", "bills")
+                and row[k] not in (None, "")}
 
         extra = {}
         if row["extras"]:
@@ -244,7 +261,86 @@ def generate(rows):
     content["hashtags"] = [t for t in
                            (str(h).strip().lstrip("#").strip()
                             for h in content["hashtags"]) if t]
+    return apply_sections(content)
+
+
+# The caption, part by part. Each part is edited in its own box on the review
+# page; the caption that gets posted is the parts joined in this order.
+SECTIONS = [
+    ("title", "Title"),
+    ("intro", "Description"),
+    ("details", "Property details"),
+    ("amenities", "Amenities"),
+    ("price", "Price"),
+    ("contact", "Contact"),
+]
+SECTION_KEYS = [k for k, _ in SECTIONS]
+
+
+def join_sections(parts):
+    return "\n\n".join(str(parts.get(k) or "").strip() for k in SECTION_KEYS
+                       if str(parts.get(k) or "").strip())
+
+
+def apply_sections(content):
+    """Normalise the section dicts and rebuild both captions from them.
+    Posts written before sections existed have no section dicts and are
+    left as they are."""
+    for lang in ("en", "ar"):
+        parts = content.get(f"sections_{lang}")
+        if not isinstance(parts, dict):
+            continue
+        parts = {k: str(parts.get(k) or "").strip() for k in SECTION_KEYS}
+        content[f"sections_{lang}"] = parts
+        content[f"caption_{lang}"] = join_sections(parts)
     return content
+
+
+# What a listing should have before it's posted, and which part of the post
+# each item feeds. Checked by the CRM itself from the listing, not by the AI,
+# so the list is reliable and never asks an office for bedrooms.
+NO_BEDROOMS = {"office", "shop", "warehouse", "land", "studio",
+               "full_building", "full building"}
+NO_BATHROOMS = {"land"}
+NO_FURNISHING = {"land", "warehouse", "full_building", "full building"}
+
+
+def listing_gaps(prop, photo_url):
+    """[(field label, section key or 'images', 'required'|'recommended')]."""
+    kind = str(prop.get("prop_type") or "").strip().lower()
+    gaps = []
+
+    def need(ok, label, section, level="recommended"):
+        if not ok:
+            gaps.append((label, section, level))
+
+    need(prop.get("area"), "Area", "title", "required")
+    need(prop.get("price"), "Price", "price", "required")
+    need(photo_url, "Photo", "images", "required")
+    need(prop.get("size_sqm"), "Size (sqm)", "details")
+    if kind not in NO_BEDROOMS:
+        need(prop.get("bedrooms"), "Bedrooms", "details")
+    if kind not in NO_BATHROOMS:
+        need(prop.get("bathrooms"), "Bathrooms", "details")
+    need(str(prop.get("features") or "").strip(), "Features / amenities",
+         "amenities")
+    if kind not in NO_FURNISHING:
+        # Older listings keep furnishing inside the extras JSON instead of
+        # the furnishing column; the post reads both, so the check does too.
+        furnishing = prop.get("furnishing")
+        if not furnishing:
+            try:
+                furnishing = (json.loads(prop.get("extras") or "{}") or {}).get(
+                    "furnishing")
+            except (json.JSONDecodeError, TypeError, AttributeError):
+                furnishing = None
+        if not furnishing:
+            # Often typed into Features ("Furnished") instead of the dropdown.
+            text = " ".join(str(prop.get(k) or "") for k in
+                            ("features", "description", "title")).lower()
+            furnishing = "furnish" in text or "مفروش" in text
+        need(furnishing, "Furnishing", "amenities")
+    return gaps
 
 
 # ----------------------------------------------------------------------------
@@ -483,14 +579,32 @@ def review(post_id):
         f"SELECT * FROM properties WHERE id IN ({marks})", ids).fetchall()
     by_id = {p["id"]: p for p in props}
     ordered = [dict(by_id[i]) for i in ids if i in by_id]
+    here = url_for("social.review", post_id=post_id, listing_saved=1)
+    # Which listings are missing what, and the post section each gap affects.
+    by_section = {}
     for item in ordered:
         item["photo_url"] = first_photo(conn, item["id"])
+        item["gaps"] = listing_gaps(item, item["photo_url"])
+        item["edit_url"] = url_for("properties.form", pid=item["id"], next=here)
+        for label, section, level in item["gaps"]:
+            by_section.setdefault(section, []).append(
+                {"label": label, "level": level, "ref": item.get("ref"),
+                 "edit_url": item["edit_url"]})
+    if not cfg("company_phone"):
+        by_section.setdefault("contact", []).append(
+            {"label": "Company phone (Social settings)", "level": "required",
+             "ref": None, "edit_url": url_for("social.settings")})
+
+    content = json.loads(row["content_json"])
     return render_template(
-        "social_review.html", post=dict(row),
-        content=json.loads(row["content_json"]),
+        "social_review.html", post=dict(row), content=content,
         properties=ordered, can_publish=can_publish(),
         contact=contact_block(), posted=_posted_urls(row),
-        platform_names=PLATFORM_NAMES)
+        platform_names=PLATFORM_NAMES, sections=SECTIONS,
+        has_sections=isinstance(content.get("sections_en"), dict),
+        gaps_by_section=by_section, multi=len(ordered) > 1,
+        listing_saved=bool(request.args.get("listing_saved")),
+        flashes=get_flashed_messages(with_categories=True))
 
 
 @social_bp.route("/post/<int:post_id>/save", methods=["POST"])
@@ -502,8 +616,16 @@ def save(post_id):
     if not row:
         return "Post not found", 404
     content = json.loads(row["content_json"])
-    content["caption_en"] = request.form.get("caption_en", "").strip()
-    content["caption_ar"] = request.form.get("caption_ar", "").strip()
+    if isinstance(content.get("sections_en"), dict):
+        # One box per section and language; the captions are rebuilt from them.
+        for lang in ("en", "ar"):
+            content[f"sections_{lang}"] = {
+                k: request.form.get(f"sec_{lang}_{k}", "").strip()
+                for k in SECTION_KEYS}
+        apply_sections(content)
+    else:
+        content["caption_en"] = request.form.get("caption_en", "").strip()
+        content["caption_ar"] = request.form.get("caption_ar", "").strip()
     content["hashtags"] = [h.strip().lstrip("#") for h in
                            request.form.get("hashtags", "").split() if h.strip()]
     conn.execute(
@@ -511,6 +633,45 @@ def save(post_id):
         "WHERE id = ?", (json.dumps(content, ensure_ascii=False), post_id))
     conn.commit()
     flash("Saved. Ready to post.", "success")
+    return redirect(url_for("social.review", post_id=post_id))
+
+
+@social_bp.route("/post/<int:post_id>/rewrite", methods=["POST"])
+@admin_required
+def rewrite(post_id):
+    """Write the post again from the listings as they are now, e.g. after
+    filling in missing details. Replaces the text of this same post."""
+    conn = db()
+    row = conn.execute("SELECT * FROM social_posts WHERE id = ?",
+                       (post_id,)).fetchone()
+    if not row or row["status"] == "discarded":
+        return "Post not found", 404
+    if row["status"] in ("posted", "partial", "posting") or _posted_urls(row):
+        flash("This post has already gone out, so it can't be rewritten. "
+              "Create a new post for the listing instead.", "error")
+        return redirect(url_for("social.review", post_id=post_id))
+
+    ids = json.loads(row["property_ids"])
+    marks = ",".join("?" for _ in ids)
+    rows = conn.execute(
+        f"SELECT * FROM properties WHERE id IN ({marks})", ids).fetchall()
+    by_id = {r["id"]: r for r in rows}
+    rows = [by_id[i] for i in ids if i in by_id]
+    if not rows:
+        flash("The listings in this post no longer exist.", "error")
+        return redirect(url_for("social.review", post_id=post_id))
+    try:
+        content = generate(rows)
+    except RuntimeError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("social.review", post_id=post_id))
+    conn.execute(
+        "UPDATE social_posts SET content_json = ?, status = 'draft', "
+        "error = NULL WHERE id = ?",
+        (json.dumps(content, ensure_ascii=False), post_id))
+    conn.commit()
+    flash("Rewritten from the latest listing details. Check each section, "
+          "then save or post.", "success")
     return redirect(url_for("social.review", post_id=post_id))
 
 

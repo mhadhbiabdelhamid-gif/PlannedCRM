@@ -553,6 +553,15 @@ def detail(pid):
                            editable=can_edit(p), cutoff=days_ago(STALE_DAYS))
 
 
+def _safe_next():
+    """The ?next= page to return to after saving, only if it's a page of this
+    CRM (a path like /social/post/5), never an outside address."""
+    nxt = (request.args.get("next") or "").strip()
+    if nxt.startswith("/") and not nxt.startswith("//") and "\\" not in nxt:
+        return nxt
+    return None
+
+
 @bp.route("/new", methods=("GET", "POST"))
 @bp.route("/<int:pid>/edit", methods=("GET", "POST"))
 @login_required
@@ -716,7 +725,9 @@ def form(pid=None):
         if skipped_videos:
             flash("Couldn't use " + ", ".join(skipped_videos) +
                   " — upload videos as MP4 or MOV.", "error")
-        return redirect(url_for("properties.detail", pid=pid))
+        # Opened from somewhere else (e.g. a social post's "Edit listing"),
+        # go straight back there instead of to the listing page.
+        return redirect(_safe_next() or url_for("properties.detail", pid=pid))
 
     owners = query("SELECT id, name FROM owners ORDER BY name")
     partners = query("SELECT id, name, partner_type FROM partners ORDER BY name")
