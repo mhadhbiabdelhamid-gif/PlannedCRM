@@ -33,6 +33,7 @@
   <span class="sp"></span>
   <a class="{{ 'on' if request.blueprint == 'intake' }}" href="{{ url_for('intake.index') }}">{{ t('Listing intake') }}</a>
   <a class="{{ 'on' if request.endpoint in ('social.index', 'social.review') }}" href="{{ url_for('social.index') }}">{{ t('Social posts') }}</a>
+  <a class="{{ 'on' if request.endpoint == 'social.schedule' }}" href="{{ url_for('social.schedule') }}">{{ t('Schedule') }}</a>
   <a class="{{ 'on' if request.endpoint == 'social.settings' }}" href="{{ url_for('social.settings') }}">{{ t('Social settings') }}</a>
 </nav>
 <script>

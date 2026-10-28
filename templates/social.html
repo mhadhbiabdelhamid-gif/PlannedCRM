@@ -68,6 +68,10 @@
          border:1px solid var(--line); border-radius:4px; font:inherit; font-size:14px; }
   .mkc .hint { font-size:12px; color:var(--muted); margin-top:4px; }
   .mkc button { margin-top:14px; width:100%; }
+  .fmts { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  .card .fmts a { font-weight:500; font-size:12px; padding:3px 10px; border:1px solid var(--line);
+                  border-radius:999px; color:var(--muted); }
+  .card .fmts a:hover { color:var(--gold); border-color:var(--gold); }
 </style>
 </head>
 <body>
@@ -87,6 +91,17 @@
   {% for cat, msg in flashes %}
   <div class="warn" style="{{ 'background:#2b1c1b;border-color:#6a2f2a' if cat == 'error' else 'background:#1b2620;border-color:#2f5a3f' }}">{{ msg }}</div>
   {% endfor %}
+
+  {# Where stories and reels live: every post can also go out as a story or
+     a reel, from the tabs on its own page. #}
+  <div class="card" style="border-left-color:#9cc8e0">
+    <b>Posts, stories and reels</b>
+    <div class="meta" style="margin-top:4px">Every post you write here (listing, tip, area guide, market
+      update, news) can go out in three formats. Open it from <b>Waiting to post</b> below, and in
+      <b>Step 2 · The design</b> choose a tab: <b>Post</b> (feed 4:5), <b>Story</b> (9:16 picture) or
+      <b>Video</b> (9:16 reel or video story, from a listing video or a photo slideshow). Then click
+      <b>Validate</b> on the left, and give it a time on the schedule. Or use the shortcuts on each post below.</div>
+  </div>
 
   {# Validated posts, stories and reels waiting for their time. #}
   <div class="card" style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
@@ -230,6 +245,13 @@
       {% if d.content.review_flags %}
       <div class="flag">Check: {{ d.content.review_flags | join('; ') }}</div>
       {% endif %}
+      <div class="fmts">
+        <a href="{{ url_for('social.review', post_id=d.id, tab='post') }}#design">Post</a>
+        <a href="{{ url_for('social.review', post_id=d.id, tab='story') }}#design">Story</a>
+        {% if d.kind not in ('tip', 'market', 'news') %}
+        <a href="{{ url_for('social.review', post_id=d.id, tab='video') }}#design">Reel / video story</a>
+        {% endif %}
+      </div>
     </div>
     {% endfor %}
   {% else %}
