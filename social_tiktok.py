@@ -179,8 +179,10 @@ def friendly_error(err):
         "spam_risk_user_banned_from_posting": "TikTok has blocked this account "
                                               "from posting for now.",
         "unaudited_client_can_only_post_to_private_accounts":
-            "The TikTok app isn't audited yet, so it can only post as "
-            "\"Only me\". Choose Only me, or apply for TikTok's audit.",
+            "Until TikTok approves (audits) the app, it can only post to a "
+            "TikTok account that is set to Private, whatever is chosen here. "
+            "This account is public. Test with a private TikTok account added "
+            "as a Sandbox target user, or wait for the audit.",
         "url_ownership_unverified": "TikTok can't take pictures from this "
                                     "address until it is verified (Social "
                                     "settings → TikTok → photo posts).",
