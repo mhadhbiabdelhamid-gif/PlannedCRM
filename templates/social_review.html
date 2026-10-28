@@ -206,15 +206,10 @@
           </div>
         {% endfor %}
 
-        <details class="preview">
-          <summary>Preview the full caption</summary>
-          <label for="caption_en">English — this is what gets posted, plus the hashtags</label>
-          <textarea id="caption_en" rows="10" dir="ltr" readonly>{{ content.caption_en or '' }}</textarea>
-          <div class="count" id="c_en"></div>
-          <label for="caption_ar">العربية</label>
-          <textarea id="caption_ar" rows="10" dir="rtl" readonly>{{ content.caption_ar or '' }}</textarea>
-          <div class="count" id="c_ar"></div>
-        </details>
+        {# Each language joined from its sections; kept in sync by the page script. #}
+        <textarea id="caption_en" hidden>{{ content.caption_en or '' }}</textarea>
+        <textarea id="caption_ar" hidden>{{ content.caption_ar or '' }}</textarea>
+        <div id="c_en" hidden></div><div id="c_ar" hidden></div>
         {% else %}
         <div class="alert info" style="margin-bottom:8px">This post was written
           before posts were split into sections. Click <b>Rewrite from listing</b>
@@ -233,6 +228,11 @@
         <label for="hashtags">Hashtags</label>
         <input type="text" id="hashtags" name="hashtags" dir="auto"
                value="{% for h in content.hashtags %}#{{ h }}{% if not loop.last %} {% endif %}{% endfor %}">
+
+        <details class="preview">
+          <summary>Preview — exactly what gets posted (Arabic, then English, then hashtags)</summary>
+          <textarea id="posted_preview" rows="16" dir="auto" readonly></textarea>
+        </details>
 
         <div class="actions">
           <button type="submit" class="save">Save changes</button>
@@ -254,6 +254,7 @@
           </div>
           {% endfor %}
           <input type="hidden" name="caption_en" id="pub_caption">
+          <div class="count" id="c_all"></div>
           <div class="actions">
             {% set all_done = 'facebook' in posted and 'instagram' in posted %}
             <button type="submit" class="save" id="pubbtn"
@@ -340,8 +341,32 @@ function grow(t) {
   t.style.height = (t.scrollHeight + 2) + 'px';
 }
 
+// Same rule as build_caption() on the server: Arabic, divider, English, tags.
+const IG_LIMIT = 2200;
+function postedCaption() {
+  const val = id => (document.getElementById(id) || {value: ''}).value.trim();
+  const tags = val('hashtags').split(/\s+/).map(h => h.replace(/^#+/, ''))
+                 .filter(Boolean).map(h => '#' + h).join(' ');
+  const body = [val('caption_ar'), val('caption_en')].filter(Boolean)
+                 .join('\n\n———\n\n');
+  return [body, tags].filter(Boolean).join('\n\n');
+}
+function refreshPosted() {
+  const text = postedCaption();
+  const prev = document.getElementById('posted_preview');
+  if (prev) prev.value = text;
+  const box = document.getElementById('c_all');
+  if (!box) return;
+  const ig = document.querySelector('input[name=platform][value=instagram]');
+  const over = text.length > IG_LIMIT && ig && ig.checked && !ig.disabled;
+  box.textContent = 'Caption length: ' + text.length.toLocaleString() + ' / ' +
+    IG_LIMIT.toLocaleString() + ' characters' +
+    (over ? ' — too long for Instagram, shorten a section' : '');
+  box.className = 'count' + (over ? ' over' : '');
+}
+
 function rebuildCaptions() {
-  if (!secBoxes.length) return;
+  if (!secBoxes.length) { refreshPosted(); return; }
   ['en', 'ar'].forEach(lang => {
     const text = secBoxes.filter(t => t.dataset.lang === lang)
       .map(t => t.value.trim()).filter(Boolean).join('\n\n');
@@ -352,6 +377,7 @@ function rebuildCaptions() {
     const empty = [...sec.querySelectorAll('textarea')].every(t => !t.value.trim());
     sec.querySelector('.empty-note').hidden = !empty;
   });
+  refreshPosted();
 }
 
 // Warn before leaving with unsaved edits (e.g. clicking "Edit listing").
@@ -360,9 +386,12 @@ if (capform) {
   capform.addEventListener('input', (e) => {
     dirty = true;
     if (e.target.matches('.sec textarea')) { grow(e.target); rebuildCaptions(); }
+    else { refreshPosted(); }               // hashtags, or the older single boxes
   });
   capform.addEventListener('submit', () => { dirty = false; });
 }
+// Re-check the Instagram length limit when Instagram is ticked or unticked.
+document.getElementById('pubform')?.addEventListener('change', refreshPosted);
 window.addEventListener('beforeunload', (e) => {
   if (dirty) { e.preventDefault(); e.returnValue = ''; }
 });
@@ -449,6 +478,8 @@ if (pubform) pubform.addEventListener('submit', async (ev) => {
     const fd = new FormData();
     ticked.forEach(p => fd.append('platform', p));
     fd.append('caption_en', document.getElementById('caption_en').value);
+    fd.append('caption_ar', document.getElementById('caption_ar').value);
+    fd.append('hashtags', document.getElementById('hashtags').value);
     for (let i = 0; i < canvases.length; i++) {
       fd.append('card', await cardBlob(canvases[i]), 'card-' + (i + 1) + '.jpg');
     }

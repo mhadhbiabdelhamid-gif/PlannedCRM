@@ -675,6 +675,22 @@ def rewrite(post_id):
     return redirect(url_for("social.review", post_id=post_id))
 
 
+IG_CAPTION_LIMIT = 2200
+CAPTION_DIVIDER = "\n\n———\n\n"
+
+
+def build_caption(caption_ar, caption_en, hashtags):
+    """What actually gets posted: Arabic first (the company's main language),
+    then English, then the hashtags. hashtags may be a list or a "#a #b" string."""
+    if isinstance(hashtags, str):
+        hashtags = hashtags.split()
+    tags = " ".join("#" + str(h).strip().lstrip("#") for h in hashtags
+                    if str(h).strip().lstrip("#"))
+    body = CAPTION_DIVIDER.join(t.strip() for t in (caption_ar, caption_en)
+                                if t and t.strip())
+    return "\n\n".join(p for p in (body, tags) if p)
+
+
 PLATFORM_NAMES = {"facebook": "Facebook", "instagram": "Instagram"}
 CARD_DIR = "social_cards"            # under UPLOAD_FOLDER (persistent disk)
 CARD_NAME = re.compile(r"^[0-9a-f]{32}\.jpg$")
@@ -754,6 +770,17 @@ def publish(post_id):
             PLATFORM_NAMES[p] for p in wanted) + ". Nothing was posted again.",
             results={p: already[p] for p in wanted})
 
+    content = json.loads(row["content_json"])
+    caption = build_caption(
+        request.form.get("caption_ar") or content.get("caption_ar", ""),
+        request.form.get("caption_en") or content.get("caption_en", ""),
+        request.form.get("hashtags") or content.get("hashtags", []))
+    if "instagram" in todo and len(caption) > IG_CAPTION_LIMIT:
+        return answer("failed", f"The caption is {len(caption):,} characters; "
+                      f"Instagram allows {IG_CAPTION_LIMIT:,}. Shorten a "
+                      "section or remove some hashtags, then try again.",
+                      code=400)
+
     # Take the lock in one statement so two clicks can't both get through.
     now = datetime.now()
     stale = (now - timedelta(minutes=LOCK_MINUTES)).isoformat(timespec="seconds")
@@ -768,12 +795,6 @@ def publish(post_id):
 
     results, errors = {}, {}
     try:
-        content = json.loads(row["content_json"])
-        caption = (request.form.get("caption_en")
-                   or content.get("caption_en", "")).strip()
-        if content.get("hashtags"):
-            caption += "\n\n" + " ".join("#" + h for h in content["hashtags"])
-
         image_urls = _save_cards(request.files.getlist("card"))
         if not image_urls:
             errors["all"] = ("The post images didn't come through. Reload the "
