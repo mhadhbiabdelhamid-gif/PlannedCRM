@@ -763,8 +763,17 @@ def check_public_image(url):
         return (f"Meta can't get the post image: {url} answers with error "
                 f"{exc.code} instead of a picture.{extra}" + advice)
     except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+        reason = str(getattr(exc, "reason", exc))
+        if "timed out" in reason.lower():
+            # The address is right but the server didn't answer in time:
+            # it's too busy to serve the image while it handles this post.
+            return ("Meta can't get the post image: the CRM server didn't "
+                    f"answer in time when {url} was opened (it's busy handling "
+                    "this post). Wait a minute and try again; if it keeps "
+                    "happening, the server needs more capacity "
+                    "(see gunicorn.conf.py).")
         return (f"Meta can't get the post image: {base or 'the Public address'} "
-                f"can't be reached ({getattr(exc, 'reason', exc)})." + advice)
+                f"can't be reached ({reason})." + advice)
     if ctype.startswith("image/"):
         return None
     if "/login" in final or "/auth" in final:

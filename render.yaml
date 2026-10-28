@@ -4,7 +4,7 @@ services:
     runtime: python
     plan: starter          # a paid plan is required for the persistent disk below
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn "app:create_app()" --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    startCommand: gunicorn "app:create_app()" --bind 0.0.0.0:$PORT --workers 2 --threads 8 --timeout 120
     envVars:
       - key: SECRET_KEY
         generateValue: true
