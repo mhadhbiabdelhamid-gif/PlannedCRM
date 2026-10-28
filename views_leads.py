@@ -535,13 +535,23 @@ def priority_generate():
 @bp.route("/<int:lid>")
 @login_required
 def detail(lid):
-    l = query("SELECT l.*, u.name AS agent_name, p.title AS prop_title"
+    l = query("SELECT l.*, u.name AS agent_name, u.role AS agent_role,"
+              " p.title AS prop_title"
               " FROM leads l LEFT JOIN users u ON u.id = l.agent_id"
               " LEFT JOIN properties p ON p.id = l.property_id"
               " WHERE l.id = ?", (lid,), one=True)
     if l is None:
         flash("That lead no longer exists.", "error")
         return redirect(url_for("leads.board"))
+    # The follow-up rule (lead_rules.py): when this lead goes to Lost if it
+    # stays in its stage.
+    import lead_rules
+    stage_since = lead_rules._local(l["stage_changed_at"])
+    stale_at = None
+    if (l["agent_role"] == "agent" and l["status"] not in CLOSED_STAGES
+            and not l["archived_at"] and l["stage_changed_at"]):
+        stale_at = lead_rules._local(
+            lead_rules.deadline(l["stage_changed_at"]).strftime("%Y-%m-%d %H:%M:%S"))
     comments = query("SELECT c.*, u.name AS user_name, u.photo AS user_photo FROM comments c"
                      " LEFT JOIN users u ON u.id = c.user_id"
                      " WHERE c.entity_type='lead' AND c.entity_id = ?"
@@ -565,7 +575,8 @@ def detail(lid):
                            lost_reasons=LOST_REASONS,
                            lost_label=LOST_REASON_LABELS.get(
                                l["lost_reason"] if "lost_reason" in l.keys() else None),
-                           editable=can_edit(l),
+                           editable=can_edit(l), stage_since=stage_since,
+                           stale_at=stale_at,
                            overdue=bool(nf and nf < day_start),
                            due_today=bool(nf and day_start <= nf < day_end))
 

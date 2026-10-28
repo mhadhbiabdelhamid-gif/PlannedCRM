@@ -292,7 +292,13 @@ LOST_REASONS = [
     ("requirements", "Requirements we can't match"),
     ("other",        "Other"),
 ]
-LOST_REASON_LABELS = dict(LOST_REASONS)
+# Set only by the CRM itself (lead_rules.py), never picked by a person, so
+# it isn't in the list agents choose from.
+AUTO_LOST_REASON = ("no_follow_up", "Agent didn't follow up")
+LOST_REASON_LABELS = dict(LOST_REASONS + [AUTO_LOST_REASON])
+# An agent's open lead that stays in the same pipeline stage this long is
+# marked Lost ("Agent didn't follow up"). The agent is warned a day before.
+STALE_LEAD_DAYS = 3
 
 LEAD_SOURCES = ["Walk-in", "Website", "Property Finder", "Referral",
                 "Instagram", "WhatsApp", "Phone",
@@ -524,6 +530,11 @@ MIGRATIONS = [
     # Won/lost clients still archive themselves via closed_at; this covers
     # anyone else the office wants off the board but kept for reports.
     ("leads", "archived_at", "TEXT"),
+    # When the lead entered its current pipeline stage (kept by a trigger on
+    # every change of status, wherever in the code it happens), and when its
+    # agent was last warned that it's about to be marked lost. See lead_rules.py.
+    ("leads", "stage_changed_at", "TEXT"),
+    ("leads", "stale_warned_at", "TEXT"),
 ]
 
 # How much warning the office gets before a tenancy ends. A unit that comes
@@ -662,6 +673,26 @@ def init_db(app):
     con.commit()
 
     con.executescript(INDEXES)
+    con.commit()
+
+    # Stamp the stage date whenever a lead's stage changes, from any page.
+    con.executescript("""
+        CREATE TRIGGER IF NOT EXISTS trg_leads_stage_changed
+        AFTER UPDATE OF status ON leads WHEN NEW.status IS NOT OLD.status
+        BEGIN
+          UPDATE leads SET stage_changed_at = strftime('%Y-%m-%d %H:%M:%S','now')
+           WHERE id = NEW.id;
+        END;
+        CREATE TRIGGER IF NOT EXISTS trg_leads_stage_new
+        AFTER INSERT ON leads WHEN NEW.stage_changed_at IS NULL
+        BEGIN
+          UPDATE leads SET stage_changed_at = strftime('%Y-%m-%d %H:%M:%S','now')
+           WHERE id = NEW.id;
+        END;""")
+    # Leads that existed before the rule start their 3 days from today, so
+    # turning it on doesn't sweep every old lead into Lost at once.
+    con.execute("UPDATE leads SET stage_changed_at = ? WHERE stage_changed_at IS NULL",
+                (now(),))
     con.commit()
 
     backfill_deals(con)

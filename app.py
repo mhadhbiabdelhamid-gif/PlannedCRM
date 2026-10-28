@@ -430,6 +430,9 @@ def create_app():
     if os.environ.get("BACKUP_DISABLED", "").lower() not in ("1", "true", "yes"):
         import social_queue
         social_queue.start_scheduler(app)
+        # An agent's lead left in one stage for 3 days goes to Lost.
+        import lead_rules
+        lead_rules.start_scheduler(app)
 
     # ---------------------------------------------------------- first-run admin
     with app.app_context():

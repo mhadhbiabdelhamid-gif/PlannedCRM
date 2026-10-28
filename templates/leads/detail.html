@@ -117,6 +117,14 @@
             {% endif %}
           {% endfor %}
         </div>
+        {% if stage_since and l.status not in ('Won', 'Lost') %}
+        <p class="small muted" style="margin:10px 0 0">
+          {{ t('In this stage since') }} {{ stage_since.strftime('%d %b, %H:%M') }}.
+          {% if stale_at %}<b style="color:var(--danger, #c0392b)">{{ t('Moves to Lost on') }}
+            {{ stale_at.strftime('%a %d %b, %H:%M') }}</b>
+            {{ t("if it isn't moved forward (no follow-up).") }}{% endif %}
+        </p>
+        {% endif %}
         {% if l.status == 'Lost' and l.lost_reason %}
         <div class="lost-box" style="margin-top:14px">
           <div class="eyebrow">{{ t('Why this client was lost') }}</div>
