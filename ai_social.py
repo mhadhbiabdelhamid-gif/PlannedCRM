@@ -713,9 +713,22 @@ def card_image(name):
     return send_from_directory(_card_folder(), name, mimetype="image/jpeg")
 
 
+def public_base():
+    """The site part of the Public address setting. Forgives the usual slips:
+    a missing https://, or a whole page address pasted in (".../social/settings")
+    instead of just the site."""
+    raw = (cfg("public_base_url") or "").strip()
+    if not raw:
+        return ""
+    if "://" not in raw:
+        raw = "https://" + raw
+    parts = urllib.parse.urlsplit(raw)
+    return f"{parts.scheme}://{parts.netloc}" if parts.netloc else raw.rstrip("/")
+
+
 def _save_cards(files):
     """Store the card images drawn in the browser; return their public URLs."""
-    base = cfg("public_base_url").rstrip("/")
+    base = public_base()
     urls = []
     for f in files[:10]:
         data = f.read()
@@ -726,6 +739,42 @@ def _save_cards(files):
             out.write(data)
         urls.append(base + url_for("social.card_image", name=name))
     return urls
+
+
+def check_public_image(url):
+    """Open a card link the way Meta does (from outside, not signed in) and
+    make sure a picture comes back. Returns None if fine, else a plain-language
+    explanation naming the address and what was found there instead."""
+    base = public_base()
+    advice = (f" Fix: in Social settings, set Public address to exactly the "
+              f"address you open the CRM on (now: {base or 'empty'}), "
+              "for example https://your-crm.onrender.com, with nothing after it.")
+    req = urllib.request.Request(url, headers={
+        "User-Agent": "facebookexternalhit/1.1 (Planned CRM self-check)"})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            final, ctype = resp.geturl(), resp.headers.get("Content-Type", "")
+            server = resp.headers.get("Server", "")
+    except urllib.error.HTTPError as exc:
+        server = exc.headers.get("Server", "") if exc.headers else ""
+        extra = (" It looks like Cloudflare is blocking robots; allow "
+                 "facebookexternalhit in Cloudflare." if "cloudflare" in
+                 server.lower() else "")
+        return (f"Meta can't get the post image: {url} answers with error "
+                f"{exc.code} instead of a picture.{extra}" + advice)
+    except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+        return (f"Meta can't get the post image: {base or 'the Public address'} "
+                f"can't be reached ({getattr(exc, 'reason', exc)})." + advice)
+    if ctype.startswith("image/"):
+        return None
+    if "/login" in final or "/auth" in final:
+        found = "the CRM sign-in page"
+    elif "cloudflare" in server.lower():
+        found = "a Cloudflare security page"
+    else:
+        found = f"a web page ({ctype or 'unknown type'})"
+    return (f"Meta can't get the post image: {url} opens {found} instead of a "
+            "picture." + advice)
 
 
 def _posted_urls(row):
@@ -796,9 +845,14 @@ def publish(post_id):
     results, errors = {}, {}
     try:
         image_urls = _save_cards(request.files.getlist("card"))
+        problem = check_public_image(image_urls[0]) if image_urls else None
         if not image_urls:
             errors["all"] = ("The post images didn't come through. Reload the "
                              "page so the cards are drawn, then try again.")
+        elif problem:
+            # Checked before contacting Meta, so a wrong address costs nothing
+            # and the message says exactly what to fix.
+            errors["all"] = problem
         else:
             for platform in todo:
                 try:
