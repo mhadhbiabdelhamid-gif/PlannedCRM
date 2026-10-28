@@ -1,0 +1,40 @@
+{# One queue item (a post, story or reel) on the Schedule page. Its buttons
+   belong to the empty form #q<id> at the end of the page (form= attribute),
+   so they work even inside the bulk-schedule form. #}
+<div class="th {{ i.format }}" style="background-image:url('{{ i.thumb_url or '' }}')"
+     title="{{ i.format_label }}"></div>
+<div class="who">
+  <div class="t" dir="auto">{{ i.title or 'Untitled' }}</div>
+  <div class="m">
+    <span class="pill {{ i.format }}">{{ i.format_label }}</span>
+    {% for p in i.platforms %}{{ platform_names.get(p, p) }}{{ ' + ' if not loop.last }}{% else %}No platform{% endfor %}
+    · <span class="st {{ i.status }}">{{ i.status_label }}{% if i.status == 'rendering' %} {{ ((i.progress or 0) * 100) | round | int }}%{% endif %}</span>
+    {% if i.local_at %} · <b>{{ i.local_at.strftime('%a %d %b, %H:%M') }}</b>{% endif %}
+  </div>
+  {% if i.error and i.status not in ('posted',) %}<div class="err">{{ i.error }}</div>{% endif %}
+  <div class="links">
+    {% for p, link in i.results.items() %}<a href="{{ link }}" target="_blank" rel="noopener">✓ {{ platform_names.get(p, p) }}</a>{% endfor %}
+    {% if i.video_url %}<a href="{{ i.video_url }}" target="_blank" rel="noopener">Watch the video</a>{% endif %}
+    {% if i.review_url %}<a href="{{ i.review_url }}">Open the post</a>{% endif %}
+  </div>
+</div>
+{% if i.status in ('ready', 'scheduled', 'failed', 'partial') %}
+<div class="inl" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+  <input type="datetime-local" name="publish_at" form="q{{ i.id }}" aria-label="Publish time"
+         min="{{ now_local }}" value="{{ i.local_at.strftime('%Y-%m-%dT%H:%M') if i.local_at and i.status == 'scheduled' else '' }}">
+  <button type="submit" form="q{{ i.id }}" formaction="{{ url_for('social.set_time', qid=i.id) }}" formnovalidate>Set time</button>
+  {% if i.status == 'scheduled' %}
+  <button type="submit" class="ghost" form="q{{ i.id }}" name="clear" value="1"
+          formaction="{{ url_for('social.set_time', qid=i.id) }}" formnovalidate>Unschedule</button>
+  {% endif %}
+  <button type="submit" class="ghost" form="q{{ i.id }}" formaction="{{ url_for('social.post_now', qid=i.id) }}"
+          data-confirm="Publish this {{ i.format_label|lower }} now?" formnovalidate>Post now</button>
+  <button type="submit" class="ghost drop" form="q{{ i.id }}" formaction="{{ url_for('social.remove_item', qid=i.id) }}"
+          data-confirm="Remove this {{ i.format_label|lower }} from the schedule?" formnovalidate>Remove</button>
+</div>
+{% elif i.status in ('draft', 'render_failed') %}
+<div class="inl">
+  <button type="submit" class="ghost drop" form="q{{ i.id }}" formaction="{{ url_for('social.remove_item', qid=i.id) }}"
+          data-confirm="Remove this video?" formnovalidate>Remove</button>
+</div>
+{% endif %}

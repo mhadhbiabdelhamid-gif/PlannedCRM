@@ -69,3 +69,38 @@ The voice lives in `SYSTEM_PROMPT` in `ai_social.py`. It currently bans generic
 openers, requires the price and area in the first two lines, and forbids
 inventing features not present in the listing data. When a post comes out wrong,
 add a rule there rather than editing captions by hand every time.
+
+## Stories, reels and the publishing schedule
+
+On a post's page, **Step 2 · The design** has three tabs:
+
+* **Post** — the feed picture(s), 1080×1350.
+* **Story** — the same design in 1080×1920, one story per picture. Everything
+  that matters sits between y=250 and y=1670, clear of Instagram's bars.
+* **Video** — a 1080×1920 MP4 for a **reel** or a **video story**: a listing
+  video (or a slideshow of photos you click in order) with the Planned frame
+  on top and a 3.5-second closing card with the price and contact. Made on
+  the server by `social_video.py` with ffmpeg from the `imageio-ffmpeg`
+  package (no separate install). One video at a time; it uses ~250 MB while
+  it runs. On a smaller server set `REEL_SIZE=720x1280`.
+
+**Validate & schedule** stores that format exactly as designed, with the
+caption as it is at that moment, on the schedule. Optionally give it a time
+right there. `/social/schedule` lists everything validated: set times one by
+one, or tick several and **Schedule one a day** from a start date at a time
+you pick (days that already have the same kind are skipped if you want). The
+next two weeks are shown so empty days stand out.
+
+Publishing on time is done by a background thread (`social_queue.py`), on
+the live server only: it runs when `RENDER` is set (Render sets it) or when
+`SOCIAL_SCHEDULER=1`; `SOCIAL_SCHEDULER=0` turns it off. An office copy
+restored from a backup therefore never posts the same schedule twice.
+Every item is claimed with one conditional update, so with two workers only
+one publishes it. If publishing is interrupted it is marked failed (never
+retried by itself, it may have gone out); if the server was off for more
+than 6 hours past an item's time, it goes back to "ready" for a new time.
+Failures send a notification to whoever validated the item.
+
+Meta endpoints used: Instagram `media` with `media_type=STORIES` / `REELS`;
+Facebook `photo_stories`, `video_stories` and `video_reels` (video uploaded
+by link through `rupload.facebook.com`). Same permissions as feed posts.

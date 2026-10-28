@@ -492,7 +492,19 @@ def index():
     stats = sc.area_stats(conn)
     area_choices = sorted((a for a in stats.values() if a["available"]),
                           key=lambda a: -a["available"])
+    import social_queue as sq
+    sq.ensure_table(conn)
+    queue = conn.execute(
+        "SELECT status, COUNT(*) n, MIN(publish_at) first FROM social_queue"
+        " WHERE status IN ('ready','scheduled') GROUP BY status").fetchall()
+    queue = {r["status"]: r for r in queue}
+    nxt = queue.get("scheduled")
+    schedule_summary = {
+        "ready": queue["ready"]["n"] if "ready" in queue else 0,
+        "scheduled": nxt["n"] if nxt else 0,
+        "next": sq.to_local(nxt["first"]) if nxt else None}
     return render_template("social.html", listings=listings, drafts=drafts,
+                           schedule_summary=schedule_summary,
                            can_publish=can_publish(), plan=sc.content_plan(conn),
                            tip_topic=sc.next_tip_topic(conn),
                            area_choices=area_choices,
@@ -655,7 +667,28 @@ def review(post_id):
         is_content=is_content, cards=cards, photo_options=options,
         chosen_photos=chosen, needs_photos=sc.needs_photos(row) and bool(options),
         photos_ok=bool(content.get("photos_ok")), card_contact=sc.card_contact(),
-        area_name=(content.get("inputs") or {}).get("area", ""))
+        area_name=(content.get("inputs") or {}).get("area", ""),
+        **_format_context(row, options))
+
+
+def _format_context(row, options):
+    """What the Story / Video tabs and the Validate panel need."""
+    import social_queue as sq
+    import social_video as sv
+    items = sq.post_queue_items(row["id"])
+    videos = sq.listing_videos(row)
+    latest = next((i for i in items if i["media_kind"] == "video" and i["status"]
+                   in ("rendering", "draft", "ready", "scheduled", "posted",
+                       "partial", "failed")), None)
+    return dict(
+        queue_items=items, listing_videos=videos,
+        can_video=bool(videos or any(options.values())),
+        video_tool=sv.available(),
+        latest_video={"id": latest["id"], "status": latest["status"],
+                      "video_url": latest["video_url"],
+                      "progress": latest["progress"] or 0} if latest else None,
+        tab=request.args.get("tab", "post"),
+        now_local=(datetime.utcnow() + sq._offset()).strftime("%Y-%m-%dT%H:%M"))
 
 
 @social_bp.route("/post/<int:post_id>/save", methods=["POST"])
@@ -843,7 +876,7 @@ def check_public_image(url):
                     "(see gunicorn.conf.py).")
         return (f"Meta can't get the post image: {base or 'the Public address'} "
                 f"can't be reached ({reason})." + advice)
-    if ctype.startswith("image/"):
+    if ctype.startswith(("image/", "video/")):
         return None
     if "/login" in final or "/auth" in final:
         found = "the CRM sign-in page"
@@ -1080,5 +1113,7 @@ def discard(post_id):
     return redirect(url_for("social.index"))
 
 
-# Branded designs, photo choice and content posts add routes to social_bp.
+# Branded designs, photo choice and content posts add routes to social_bp;
+# so do stories, reels and the publishing schedule.
 import social_cards  # noqa: E402,F401
+import social_queue  # noqa: E402,F401

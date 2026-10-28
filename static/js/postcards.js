@@ -5,14 +5,27 @@
  * the same dark footer. Change a token here and every post follows.
  *
  *   await PostCards.ready(baseUrl)            // fonts + logo, once per page
- *   const c = await PostCards.draw(card)      // -> 1080x1350 <canvas>
+ *   const c = await PostCards.draw(card)      // -> 1080x1350 <canvas> (feed post)
+ *   await PostCards.draw(card, null, "story")    // -> 1080x1920 story / video end card
+ *   await PostCards.draw(card, null, "overlay")  // -> 1080x1920 transparent frame laid
+ *                                                //    over a reel or video story
+ *
+ * Stories and reels keep everything that matters between y=250 and y=1670:
+ * Instagram draws its progress bar, name and reply box over the rest. The
+ * overlay also keeps clear of the right-hand 150px where reels show the
+ * like / comment / share buttons.
  *
  * card.type: "rent" | "sale" | "rented" | "sold" | "tip" | "area" | "market"
  * Drawn in the browser so the picture you approve is exactly what is posted.
  */
 (function () {
   "use strict";
-  const W = 1080, H = 1350;
+  const FORMATS = {
+    post:    { W: 1080, H: 1350, head: 56,  foot: 1232 },
+    story:   { W: 1080, H: 1920, head: 250, foot: 1560 },
+    overlay: { W: 1080, H: 1920, head: 210, foot: 1920 },
+  };
+  let F = FORMATS.post, W = F.W, H = F.H;
   const T = {
     bg: "#FAF8F4", ink: "#14120F", sub: "#57524A", line: "#E4DDD0",
     goldL: "#E8C468", gold: "#C9A227", goldD: "#9C6F1E", goldTxt: "#8A5F14", dark: "#14120F",
@@ -136,25 +149,29 @@
   function header(ctx, tagAr, tagEn) {
     if (LOGO) {
       const h = 138, w = h * LOGO.width / LOGO.height;
-      ctx.drawImage(LOGO, 60, 56, w, h);
+      ctx.drawImage(LOGO, 60, F.head, w, h);
     }
     ctx.save();
     ctx.direction = "rtl"; ctx.textAlign = "right"; ctx.textBaseline = "alphabetic";
-    font(ctx, 700, 40, "Cairo"); ctx.fillStyle = T.ink; ctx.fillText(tagAr, W - 60, 106);
+    const o = F.head - 56;
+    font(ctx, 700, 40, "Cairo"); ctx.fillStyle = T.ink; ctx.fillText(tagAr, W - 60, 106 + o);
     const wa = textW(ctx, tagAr);
     ctx.direction = "ltr"; font(ctx, 700, 20, "Montserrat"); spacing(ctx, 4.8);
-    ctx.fillStyle = T.goldTxt; ctx.fillText(tagEn, W - 60 + 4.8, 138);
+    ctx.fillStyle = T.goldTxt; ctx.fillText(tagEn, W - 60 + 4.8, 138 + o);
     const we = textW(ctx, tagEn);
     spacing(ctx, 0);
     const right = W - 60 - Math.max(wa, we) - 18;
-    ctx.fillStyle = goldGrad(ctx, right - 120, right); ctx.fillRect(right - 120, 105, 120, 2);
+    ctx.fillStyle = goldGrad(ctx, right - 120, right); ctx.fillRect(right - 120, 105 + o, 120, 2);
     ctx.restore();
   }
 
   function footer(ctx) {
-    const y = H - 118, cy = y + 59;
+    const y = F.foot, cy = y + 59;
     ctx.save();
-    ctx.fillStyle = T.dark; ctx.fillRect(0, y, W, 118);
+    ctx.fillStyle = T.dark; ctx.fillRect(0, y, W, H - y);
+    if (H - y > 118) {        // story: a gold hairline closes the contact row
+      ctx.fillStyle = goldGrad(ctx, 52, W - 52); ctx.fillRect(52, y + 118, W - 104, 1);
+    }
     ctx.strokeStyle = T.gold; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc(52 + 25, cy, 25, 0, Math.PI * 2); ctx.stroke();
     icon(ctx, "phone", 52 + 10, cy - 15, 30, T.goldL);
@@ -203,8 +220,7 @@
   }
 
   // ------------------------------------------------------------ listing
-  async function listing(ctx, c) {
-    const photos = await Promise.all((c.photos || []).slice(0, 3).map(loadImage));
+  function listing(ctx, c, photos) {
     ctx.fillStyle = T.bg; ctx.fillRect(0, 0, W, H);
     if (photos[0]) {
       ctx.save(); ctx.filter = "brightness(1.1) contrast(1.04)";
@@ -335,13 +351,203 @@
     ctx.fillText(en, 4, 56); ctx.restore();
   }
 
+
+  // ------------------------------------------------ story / video pieces
+  const TAGS = { rent: ["للإيجار", "FOR RENT"], sale: ["للبيع", "FOR SALE"],
+                 rented: ["تم التأجير", "RENTED"], sold: ["تم البيع", "SOLD"] };
+
+  // Gold price block. x is its left edge; returns its width and height.
+  function priceBox(ctx, c, x, y, big, measureOnly) {
+    const price = fmtPrice(c.price);
+    if (!price) return { w: 0, h: 0 };
+    ctx.save();
+    font(ctx, 900, big, "Montserrat"); const vw = textW(ctx, price);
+    const us = Math.round(big * 0.27);
+    font(ctx, 700, us, "Montserrat"); spacing(ctx, us * 0.12);
+    const unit2 = c.type === "sale" || c.type === "sold" ? "TOTAL" : "/ MONTH";
+    const uw = Math.max(textW(ctx, "QAR"), textW(ctx, unit2)); spacing(ctx, 0);
+    const pad = Math.round(big * 0.38);
+    const bw = pad + vw + 20 + 2 + 20 + uw + pad, bh = big + Math.round(big * 0.6);
+    if (measureOnly) { ctx.restore(); return { w: bw, h: bh }; }
+    ctx.shadowColor = "rgba(156,111,30,.25)"; ctx.shadowBlur = 24; ctx.shadowOffsetY = 10;
+    ctx.fillStyle = goldGrad(ctx, x, x + bw); ctx.fillRect(x, y, bw, bh);
+    ctx.shadowColor = "transparent";
+    ctx.direction = "ltr"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    font(ctx, 900, big, "Montserrat"); ctx.fillStyle = "#fff";
+    ctx.save(); ctx.shadowColor = "rgba(0,0,0,.18)"; ctx.shadowBlur = 6; ctx.shadowOffsetY = 2;
+    ctx.fillText(price, x + pad, y + bh / 2 + 3); ctx.restore();
+    ctx.fillStyle = "rgba(255,255,255,.7)"; ctx.fillRect(x + pad + vw + 20, y + bh / 2 - big * .36, 2, big * .72);
+    font(ctx, 700, us, "Montserrat"); spacing(ctx, us * 0.12); ctx.fillStyle = "#fff";
+    ctx.fillText("QAR", x + pad + vw + 42, y + bh / 2 - us * .62);
+    ctx.fillText(unit2, x + pad + vw + 42, y + bh / 2 + us * .72);
+    ctx.restore();
+    return { w: bw, h: bh };
+  }
+
+  // Pin + Arabic area name, English under it, right-aligned at R.
+  function areaLine(ctx, c, R, y, size) {
+    if (!(c.areaAr || c.areaEn)) return 0;
+    ctx.save(); ctx.direction = "rtl"; ctx.textAlign = "right"; ctx.textBaseline = "alphabetic";
+    icon(ctx, "pin", R - size * 1.3, y + 2, size * 1.3, T.goldD, 1.8);
+    font(ctx, 700, size, "Cairo"); ctx.fillStyle = T.ink;
+    ctx.fillText(c.areaAr || c.areaEn, R - size * 1.65, y + size);
+    let h = size + 8;
+    if (c.areaAr && c.areaEn) {
+      ctx.direction = "ltr"; font(ctx, 600, Math.round(size * .62), "Montserrat"); ctx.fillStyle = T.sub;
+      ctx.fillText(c.areaEn, R - size * 1.65, y + size * 1.9); h = size * 2;
+    }
+    ctx.restore();
+    return h;
+  }
+
+  // Arabic title (up to 2 lines) + spaced English line, right-aligned at R.
+  function titleBlock(ctx, c, R, y, maxW, max, min, draw) {
+    ctx.save(); ctx.direction = "rtl"; ctx.textAlign = "right"; ctx.textBaseline = "alphabetic";
+    const fit = fitLines(ctx, c.titleAr || "", 900, max, min, "Cairo", maxW, 2);
+    let es = Math.round(max * .34), enW = 0;
+    for (; es >= 14; es--) {
+      font(ctx, 600, es, "Montserrat"); spacing(ctx, es * 0.26);
+      enW = textW(ctx, c.titleEn || ""); if (enW <= maxW) break;
+    }
+    spacing(ctx, 0);
+    let yy = y;
+    font(ctx, 900, fit.size, "Cairo"); ctx.fillStyle = T.ink;
+    for (const l of fit.lines) { yy += fit.size; if (draw) ctx.fillText(l, R, yy); yy += Math.round(fit.size * .18); }
+    if (c.titleEn) {
+      yy += es + 24;
+      if (draw) {
+        ctx.direction = "ltr"; font(ctx, 600, es, "Montserrat"); spacing(ctx, es * 0.26); ctx.fillStyle = T.sub;
+        ctx.fillText(c.titleEn, R + es * 0.26, yy); spacing(ctx, 0);
+      }
+    }
+    ctx.restore();
+    return yy - y;
+  }
+
+  // Listing story: photo on top, details on calm ground below.
+  function listingStory(ctx, c, photos) {
+    const PH = 1080;
+    ctx.fillStyle = T.bg; ctx.fillRect(0, 0, W, H);
+    if (photos[0]) {
+      ctx.save(); ctx.filter = "brightness(1.1) contrast(1.04)";
+      cover(ctx, photos[0], 0, 0, W, PH, c.photoPos == null ? 0.5 : c.photoPos); ctx.restore();
+    }
+    let g = ctx.createLinearGradient(0, 0, 0, 560);
+    g.addColorStop(0, "rgba(250,248,244,.95)"); g.addColorStop(.62, "rgba(250,248,244,.7)");
+    g.addColorStop(1, "rgba(250,248,244,0)");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, 560);
+    g = ctx.createLinearGradient(0, PH - 300, 0, PH);
+    g.addColorStop(0, "rgba(250,248,244,0)"); g.addColorStop(1, T.bg);
+    ctx.fillStyle = g; ctx.fillRect(0, PH - 300, W, 301);
+
+    if (photos[1] || photos[2]) accent(ctx, -40, 700, 640, 260, -12);
+    if (photos[1]) framedPhoto(ctx, photos[1], 60, 660, 330, 236, -3);
+    if (photos[2]) framedPhoto(ctx, photos[2], 330, 760, 250, 180, 2.5);
+
+    const tag = TAGS[c.type] || TAGS.rent;
+    header(ctx, tag[0], tag[1]);
+
+    const R = W - 66;
+    // Anchor the text to the facts row: measure it, then start it so that
+    // it ends just above the row, whatever the title's length.
+    const specsTop = F.foot - 26 - 148 - 30;
+    const th = titleBlock(ctx, c, R, 0, W - 132, 74, 50, false);
+    const ahM = c.areaAr || c.areaEn ? (c.areaAr && c.areaEn ? 68 : 42) : 0;
+    const rowM = Math.max(ahM, priceBox(ctx, c, 0, 0, 64, true).h);
+    let y = Math.max(860, specsTop - rowM - 26 - 25 - th - 60);
+    roof(ctx, R - 170, y, 170, 52, 7); y += 60;
+    y += titleBlock(ctx, c, R, y, W - 132, 74, 50, true);
+    y += 22; ctx.fillStyle = goldGrad(ctx, R - 120, R); ctx.fillRect(R - 120, y, 120, 3); y += 3;
+
+    // Area on the right, price block on the left, on one row.
+    y += 26;
+    const ah = areaLine(ctx, c, R, y, 34);
+    const pb = priceBox(ctx, c, 66, y, 64, true);
+    if (pb.w) priceBox(ctx, c, 66, y + Math.max(0, (ah - pb.h) / 2), 64);
+    y += Math.max(ah, pb.h);
+
+    const specs = (c.specs || []).slice(0, 4);
+    if (specs.length) {
+      const x0 = 52, w = W - 104, h = 148, y0 = F.foot - 26 - h, cw = w / specs.length;
+      whiteCard(ctx, x0, y0, w, h);
+      specs.forEach((s, i) => {
+        const cx = x0 + w - cw * (i + 0.5);
+        if (i) { ctx.fillStyle = T.line; ctx.fillRect(x0 + w - cw * i, y0 + 1, 1, h - 2); }
+        icon(ctx, s.icon, cx - 20, y0 + 14, 40, T.goldD);
+        ctx.save(); ctx.textAlign = "center"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = T.ink;
+        let vs = 30; font(ctx, 800, vs, "Montserrat");
+        while (textW(ctx, s.value) > cw - 20 && vs > 18) { vs -= 2; font(ctx, 800, vs, "Montserrat"); }
+        if (/[؀-ۿ]/.test(s.value)) { font(ctx, 800, vs - 4, "Cairo"); ctx.direction = "rtl"; }
+        ctx.fillText(s.value, cx, y0 + 88);
+        ctx.direction = "rtl"; font(ctx, 700, 22, "Cairo"); ctx.fillText(s.ar, cx, y0 + 120);
+        ctx.direction = "ltr"; font(ctx, 600, 12, "Montserrat"); spacing(ctx, 1.5); ctx.fillStyle = T.sub;
+        ctx.fillText(String(s.en).toUpperCase(), cx + .75, y0 + 139); ctx.restore();
+      });
+    }
+    if (c.type === "rented" || c.type === "sold") stampAt(ctx, tag[0], tag[1], 330, 790);
+    footer(ctx);
+  }
+
+  function stampAt(ctx, ar, en, cx, cy) {
+    ctx.save();
+    font(ctx, 900, 84, "Cairo"); const wa = textW(ctx, ar);
+    const w = Math.max(wa, 260) + 88, h = 150;
+    ctx.translate(cx, cy); ctx.rotate(-7 * Math.PI / 180);
+    ctx.shadowColor = "rgba(20,18,15,.18)"; ctx.shadowBlur = 30; ctx.shadowOffsetY = 14;
+    ctx.fillStyle = "rgba(255,255,255,.94)"; ctx.fillRect(-w / 2, -h / 2, w, h);
+    ctx.shadowColor = "transparent"; ctx.strokeStyle = T.gold; ctx.lineWidth = 5;
+    ctx.strokeRect(-w / 2 + 2.5, -h / 2 + 2.5, w - 5, h - 5);
+    ctx.textAlign = "center"; ctx.direction = "rtl"; ctx.fillStyle = T.ink; ctx.fillText(ar, 0, 18);
+    ctx.direction = "ltr"; font(ctx, 800, 26, "Montserrat"); spacing(ctx, 8.3); ctx.fillStyle = T.goldTxt;
+    ctx.fillText(en, 4, 56); ctx.restore();
+  }
+
+  // Transparent frame laid over a reel or video story: the header on a soft
+  // light wash at the top, and one details panel above the caption area.
+  function overlay(ctx, c) {
+    let g = ctx.createLinearGradient(0, 0, 0, 470);
+    g.addColorStop(0, "rgba(250,248,244,.94)"); g.addColorStop(.55, "rgba(250,248,244,.78)");
+    g.addColorStop(1, "rgba(250,248,244,0)");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, 470);
+    const series = { tip: ["نصائح", "TIPS"], area: ["دليل المناطق", "AREA GUIDE"],
+                     market: ["السوق العقاري", "MARKET"] }[c.type] || TAGS[c.type] || TAGS.rent;
+    header(ctx, series[0], series[1]);
+
+    const x0 = 48, pw = 852, R = x0 + pw - 34, inner = pw - 68;
+    let t = c;
+    if (c.type === "area") t = { titleAr: c.nameAr, titleEn: String(c.nameEn || "").toUpperCase() };
+    if (c.type === "market") t = { titleAr: c.titleAr, titleEn: [c.figure, c.figureLabel].filter(Boolean).join(" · ").toUpperCase() };
+    if (c.type === "tip") t = { titleAr: c.titleAr, titleEn: c.labelEn ? String(c.labelEn).toUpperCase() : "" };
+    const listing = !!TAGS[c.type];
+    // Measure first, so the panel can sit with its bottom at y=1470.
+    const th = titleBlock(ctx, t, R, 0, inner, 58, 40, false);
+    const ah = listing ? (c.areaAr || c.areaEn ? 34 * 2 : 0) : 0;
+    const pb = listing ? priceBox(ctx, c, 0, 0, 50, true) : { w: 0, h: 0 };
+    const row = Math.max(ah, pb.h);
+    const ph = 34 + 44 + 14 + th + (row ? 26 + row : 0) + 34;
+    const y0 = 1470 - ph;
+    ctx.save();
+    ctx.shadowColor = "rgba(20,18,15,.16)"; ctx.shadowBlur = 36; ctx.shadowOffsetY = 12;
+    ctx.fillStyle = "rgba(250,248,244,.96)"; ctx.fillRect(x0, y0, pw, ph); ctx.restore();
+    ctx.fillStyle = goldGrad(ctx, x0, x0 + pw); ctx.fillRect(x0, y0, pw, 4);
+    let y = y0 + 34;
+    roof(ctx, R - 140, y, 140, 44, 6); y += 44 + 14;
+    y += titleBlock(ctx, t, R, y, inner, 58, 40, true);
+    if (row) {
+      y += 26;
+      areaLine(ctx, c, R, y + (row - ah) / 2, 30);
+      if (pb.w) priceBox(ctx, c, x0 + 34, y + (row - pb.h) / 2, 50);
+    }
+  }
+
   // ---------------------------------------------------------------- tip
   function tip(ctx, c) {
     ctx.fillStyle = T.bg; ctx.fillRect(0, 0, W, H);
-    accent(ctx, W - 540, 900, 620, 300, 12);
+    const story = H > 1400;
+    accent(ctx, W - 540, F.foot - 332, 620, 300, 12);
     header(ctx, "نصائح", "TIPS");
     ctx.save(); ctx.direction = "rtl"; ctx.textAlign = "right";
-    const R = W - 90; let y = 300;
+    const R = W - 90; let y = story ? 600 : 300;
     font(ctx, 900, 170, "Montserrat"); ctx.direction = "ltr";
     const num = String(c.number || "01"); const nw = textW(ctx, num);
     ctx.fillStyle = goldGrad(ctx, R - nw, R); ctx.fillText(num, R, y + 140); ctx.direction = "rtl";
@@ -349,13 +555,13 @@
     const tf = fitLines(ctx, c.titleAr, 900, 76, 52, "Cairo", W - 180, 2); ctx.fillStyle = T.ink;
     for (const l of tf.lines) { y += tf.size + 4; ctx.fillText(l, R, y); y += 15; }
     font(ctx, 600, 36, "Cairo"); ctx.fillStyle = T.sub; y += 10;
-    for (const l of wrap(ctx, c.bodyAr, W - 180).slice(0, 4)) { y += 62; ctx.fillText(l, R, y); }
+    for (const l of wrap(ctx, c.bodyAr, W - 180).slice(0, story ? 6 : 4)) { y += 62; ctx.fillText(l, R, y); }
     if (c.labelEn) {
       ctx.direction = "ltr"; font(ctx, 700, 22, "Montserrat"); spacing(ctx, 5.3); ctx.fillStyle = T.goldTxt;
       y += 60; ctx.fillText(c.labelEn.toUpperCase(), R + 5.3, y); spacing(ctx, 0);
     }
     ctx.restore();
-    const cy = H - 170 - 104;
+    const cy = F.foot - 52 - 104;
     whiteCard(ctx, 60, cy, W - 120, 104);
     icon(ctx, "chat", W - 60 - 34 - 44, cy + 30, 44, T.goldD);
     ctx.save(); ctx.direction = "rtl"; ctx.textAlign = "right"; ctx.textBaseline = "middle";
@@ -366,17 +572,24 @@
   }
 
   // --------------------------------------------------------------- area
-  async function area(ctx, c) {
-    const img = await loadImage((c.photos || [])[0]);
+  function area(ctx, c, photos) {
+    const img = photos[0];
     ctx.fillStyle = T.bg; ctx.fillRect(0, 0, W, H);
-    ctx.save(); ctx.filter = "brightness(1.08)"; cover(ctx, img, 0, 0, W, 720); ctx.restore();
-    let g = ctx.createLinearGradient(0, 0, 0, 720);
-    g.addColorStop(0, "rgba(250,248,244,.9)"); g.addColorStop(.28, "rgba(250,248,244,0)");
+    const story = H > 1400, PH = story ? 1240 : 720;
+    ctx.save(); ctx.filter = "brightness(1.08)"; cover(ctx, img, 0, 0, W, PH); ctx.restore();
+    let g = ctx.createLinearGradient(0, 0, 0, PH);
+    g.addColorStop(0, "rgba(250,248,244,.9)"); g.addColorStop(story ? .4 : .28, "rgba(250,248,244,0)");
     g.addColorStop(.7, "rgba(250,248,244,0)"); g.addColorStop(1, T.bg);
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, 721);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, PH + 1);
+    if (story) {               // the header sits lower on a story: wash further down
+      g = ctx.createLinearGradient(0, 0, 0, 560);
+      g.addColorStop(0, "rgba(250,248,244,.9)"); g.addColorStop(.6, "rgba(250,248,244,.6)");
+      g.addColorStop(1, "rgba(250,248,244,0)");
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, 560);
+    }
     header(ctx, "دليل المناطق", "AREA GUIDE");
     ctx.save(); ctx.direction = "rtl"; ctx.textAlign = "right";
-    const R = W - 66; let y = 560;
+    const R = W - 66; let y = story ? 1010 : 560;
     roof(ctx, R - 190, y, 190, 58, 7); y += 62;
     font(ctx, 900, 128, "Cairo"); ctx.fillStyle = T.ink;
     let size = 128; while (textW(ctx, c.nameAr) > W - 132 && size > 70) { size -= 6; font(ctx, 900, size, "Cairo"); }
@@ -404,10 +617,11 @@
   // ------------------------------------------------------------- market
   function market(ctx, c) {
     ctx.fillStyle = T.bg; ctx.fillRect(0, 0, W, H);
-    accent(ctx, -80, 260, 560, 300, -12);
+    const story = H > 1400;
+    accent(ctx, -80, story ? 600 : 260, 560, 300, -12);
     header(ctx, "السوق العقاري", "MARKET");
     ctx.save(); ctx.textAlign = "center";
-    let y = 280;
+    let y = story ? 640 : 280;
     let size = 250; font(ctx, 900, size, "Montserrat");
     while (textW(ctx, c.figure) > W - 160 && size > 110) { size -= 10; font(ctx, 900, size, "Montserrat"); }
     const fw = textW(ctx, c.figure);
@@ -421,7 +635,7 @@
     ctx.direction = "rtl"; const mf = fitLines(ctx, c.titleAr, 900, 66, 48, "Cairo", W - 160, 2); ctx.fillStyle = T.ink;
     for (const l of mf.lines) { y += mf.size + 10; ctx.fillText(l, W / 2, y); y += 10; }
     font(ctx, 600, 32, "Cairo"); ctx.fillStyle = T.sub;
-    for (const l of wrap(ctx, c.bodyAr, W - 200).slice(0, 3)) { y += 54; ctx.fillText(l, W / 2, y); }
+    for (const l of wrap(ctx, c.bodyAr, W - 200).slice(0, story ? 5 : 3)) { y += 54; ctx.fillText(l, W / 2, y); }
     if (c.source) {
       ctx.direction = "ltr"; font(ctx, 600, 18, "Montserrat"); spacing(ctx, 2.2); ctx.fillStyle = "#8a8270";
       y += 50; ctx.fillText("SOURCE: " + c.source, W / 2, y); spacing(ctx, 0);
@@ -430,19 +644,25 @@
     footer(ctx);
   }
 
-  async function draw(card, canvas) {
+  async function draw(card, canvas, format) {
+    // Load the photos first: everything after this line runs without a
+    // pause, so two drawings in different sizes can never mix their settings.
+    const photos = await Promise.all((card.photos || []).slice(0, 3).map(loadImage));
+    F = FORMATS[format] || FORMATS.post; W = F.W; H = F.H;
     const c = canvas || document.createElement("canvas");
     c.width = W; c.height = H;
     const ctx = c.getContext("2d");
     ctx.clearRect(0, 0, W, H);
+    if (F === FORMATS.overlay) { overlay(ctx, card); return c; }
+    const story = F === FORMATS.story;
     switch (card.type) {
       case "tip": tip(ctx, card); break;
-      case "area": await area(ctx, card); break;
+      case "area": area(ctx, card, photos); break;
       case "market": market(ctx, card); break;
-      default: await listing(ctx, card);
+      default: (story ? listingStory : listing)(ctx, card, photos);
     }
     return c;
   }
 
-  window.PostCards = { ready, draw, W, H, setContact: (o) => Object.assign(CONTACT, o || {}) };
+  window.PostCards = { ready, draw, FORMATS, W: 1080, H: 1350, setContact: (o) => Object.assign(CONTACT, o || {}) };
 })();

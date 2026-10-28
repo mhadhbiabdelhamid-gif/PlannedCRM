@@ -117,6 +117,34 @@
             text-transform:none; letter-spacing:0; }
   .pk-ref { font-size:13px; margin:12px 0 6px; }
   #cards canvas { max-width:100%; }
+  /* Format tabs: Post / Story / Video */
+  .tabs { display:flex; gap:4px; margin:-4px 0 14px; border-bottom:1px solid var(--line); }
+  .tab { background:transparent; color:var(--muted); border:0; border-bottom:2px solid transparent;
+         border-radius:0; padding:8px 12px; font-size:13px; }
+  .tab small { display:block; font-weight:400; font-size:11px; color:var(--muted); }
+  .tab.on { color:var(--text); border-bottom-color:var(--gold); }
+  .pane[hidden] { display:none; }
+  #storyCards canvas { max-width:220px; display:inline-block; margin:0 8px 10px 0; vertical-align:top; }
+  .vsrc { display:flex; align-items:center; gap:8px; margin:6px 0; font-size:14px;
+          text-transform:none; letter-spacing:0; color:var(--text); }
+  .vsrc input { accent-color:var(--gold); }
+  .vk { display:grid; grid-template-columns:repeat(5, 1fr); gap:6px; margin:8px 0; }
+  .vk .pk-i b { display:none; }
+  .vk .pk-i.on b { display:block; }
+  .vprev { display:flex; gap:10px; align-items:flex-start; margin-top:10px; }
+  .vprev figure { margin:0; flex:1; }
+  .vprev canvas, .vprev video { width:100%; max-width:none; border-radius:6px; background:#000; display:block; }
+  .vprev figcaption { font-size:11px; color:var(--muted); margin-top:4px; }
+  .bar { height:6px; background:#33363b; border-radius:3px; overflow:hidden; margin:8px 0 4px; }
+  .bar i { display:block; height:100%; width:0; background:var(--gold); transition:width .6s; }
+  #videoOut video { width:100%; max-width:300px; border-radius:6px; background:#000; margin-top:8px; }
+  .qi { display:flex; gap:10px; align-items:center; padding:8px 0; border-top:1px solid var(--line); font-size:13px; }
+  .qi:first-child { border-top:0; }
+  .qi .th { width:34px; height:60px; border-radius:3px; background:#000 center/cover no-repeat; flex:none; }
+  .qi .th.post { height:42px; }
+  .sched-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px; }
+  input[type=datetime-local] { background:#17181a; color:var(--text); border:1px solid var(--line);
+         border-radius:4px; padding:8px; font:inherit; font-size:13px; color-scheme:dark; }
 </style>
 </head>
 <body>
@@ -297,6 +325,43 @@
         {% endif %}
       </form>
 
+      {# Validate: store this format exactly as designed, with the caption as
+         it is now, and put it on the publishing schedule. #}
+      <div class="panel" id="valpanel">
+        <h2>Validate &amp; schedule</h2>
+        <p class="small" style="margin:0 0 8px">Validating: <b id="valWhat">the post</b>
+          <span class="muted" id="valNote"></span></p>
+        <div id="valAs" hidden>
+          <label class="vsrc"><input type="radio" name="val_as" value="reel" checked> As a reel (with the caption)</label>
+          <label class="vsrc"><input type="radio" name="val_as" value="story"> As a video story</label>
+        </div>
+        {% for key, label in [('facebook', 'Facebook Page'), ('instagram', 'Instagram')] %}
+        <div class="plat"><input type="checkbox" id="vpl_{{ key }}" class="vpl" value="{{ key }}" checked>
+          <label for="vpl_{{ key }}" style="margin:0;text-transform:none;letter-spacing:0;color:var(--text);font-size:14px">{{ label }}</label></div>
+        {% endfor %}
+        <div class="sched-row">
+          <label for="val_at" style="margin:0">Publish at (Doha time)</label>
+          <input type="datetime-local" id="val_at" min="{{ now_local }}">
+        </div>
+        <div class="muted small" style="margin-top:4px">Optional. Leave it empty and give it a time
+          later on the <a href="{{ url_for('social.schedule') }}" style="color:var(--gold)">schedule</a>,
+          one by one or one a day in bulk.</div>
+        <div class="actions"><button type="button" class="save" id="valbtn">Validate</button></div>
+        <div id="valres" role="status" aria-live="polite"></div>
+        <div id="qlist" style="margin-top:12px">
+          {% for q in queue_items %}
+          <div class="qi">
+            <div class="th {{ q.format }}" style="background-image:url('{{ q.thumb_url or '' }}')"></div>
+            <div style="flex:1"><b>{{ q.format_label }}</b> · {{ q.status_label }}
+              {% if q.local_at %}· {{ q.local_at.strftime('%a %d %b, %H:%M') }}{% endif %}
+              {% for p, link in q.results.items() %} · <a href="{{ link }}" target="_blank" rel="noopener" style="color:var(--gold)">{{ platform_names.get(p, p) }}</a>{% endfor %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        <a href="{{ url_for('social.schedule') }}" style="color:var(--gold);font-size:13px">Open the schedule →</a>
+      </div>
+
       <form method="post" action="{{ url_for('social.discard', post_id=post.id) }}">
         <button type="submit" class="ghost drop">Discard this post</button>
       </form>
@@ -338,10 +403,80 @@
       </div>
       {% endif %}
 
-      <div class="panel">
+      <div class="panel" id="design">
         <h2>{{ 'Step 2 · ' if needs_photos }}The design</h2>
-        <div id="cards"><p class="muted small">Drawing…</p></div>
-        <button type="button" class="ghost" onclick="downloadAll()">Download images</button>
+        <div class="tabs" role="tablist">
+          <button type="button" class="tab" data-tab="post" role="tab">Post<small>feed · 4:5</small></button>
+          <button type="button" class="tab" data-tab="story" role="tab">Story<small>9:16 picture</small></button>
+          {% if can_video %}
+          <button type="button" class="tab" data-tab="video" role="tab">Video<small>reel / story · 9:16</small></button>
+          {% endif %}
+        </div>
+
+        <div class="pane" id="pane-post">
+          <div id="cards"><p class="muted small">Drawing…</p></div>
+          <button type="button" class="ghost" onclick="downloadAll()">Download images</button>
+        </div>
+
+        <div class="pane" id="pane-story" hidden>
+          <p class="muted small" style="margin:0 0 10px">One story per picture, 1080×1920. Stories carry
+            no caption, so everything is on the picture.</p>
+          <div id="storyCards"><p class="muted small">Drawing…</p></div>
+          <button type="button" class="ghost" onclick="downloadAll('story')">Download stories</button>
+        </div>
+
+        {% if can_video %}
+        <div class="pane" id="pane-video" hidden>
+          {% if not video_tool %}
+          <div class="alert bad">The video maker isn't installed on this server
+            (<code>pip install imageio-ffmpeg</code>).</div>
+          {% endif %}
+          <p class="muted small" style="margin:0 0 6px">A 1080×1920 video with the Planned frame and
+            a closing card with the price and contact. The same video can be validated as a reel
+            and as a story.</p>
+          <div id="vsrcs">
+            {% for v in listing_videos %}
+            <label class="vsrc"><input type="radio" name="vsrc" value="video:{{ v.id }}" data-url="{{ v.url }}"
+              {{ 'checked' if loop.first }}> ▶ {{ v.name }}{% if multi %} <span class="muted">({{ v.ref }})</span>{% endif %}</label>
+            {% endfor %}
+            <label class="vsrc"><input type="radio" name="vsrc" value="photos" {{ 'checked' if not listing_videos }}>
+              Photo slideshow</label>
+          </div>
+          <div id="vphotos" {{ 'hidden' if listing_videos }}>
+            <p class="muted small" style="margin:6px 0 0">Click photos in the order they should appear (up to 10).
+              About 3 seconds each.</p>
+            <div class="vk" id="vk">
+              {% for key, urls in photo_options.items() %}{% for u in urls %}
+              <button type="button" class="pk-i" data-url="{{ u }}" style="background-image:url('{{ u }}')"
+                      aria-label="Photo"><b></b></button>
+              {% endfor %}{% endfor %}
+            </div>
+          </div>
+          {% if properties %}
+          <form method="post" enctype="multipart/form-data" action="{{ url_for('social.upload_listing_video', post_id=post.id) }}">
+            {% if multi %}
+            <select name="property_id" style="background:#17181a;color:var(--text);border:1px solid var(--line);border-radius:4px;padding:4px">
+              {% for p in properties %}<option value="{{ p.id }}">{{ p.ref }}</option>{% endfor %}
+            </select>
+            {% else %}<input type="hidden" name="property_id" value="{{ properties[0].id }}">{% endif %}
+            <label class="pk-add">+ Add a video of the listing (MP4 or MOV)
+              <input type="file" name="video" accept="video/mp4,video/quicktime,video/*" hidden
+                     onchange="this.form.querySelector('.upw').hidden=false; this.form.submit()"></label>
+            <span class="muted small upw" hidden>Uploading…</span>
+          </form>
+          {% endif %}
+          <div class="vprev">
+            <figure><canvas id="vFrame"></canvas><figcaption>During the video</figcaption></figure>
+            <figure><canvas id="vEnd"></canvas><figcaption>Closing card (3.5 s)</figcaption></figure>
+          </div>
+          <div class="actions" style="align-items:center">
+            <button type="button" class="save" id="makeVideo" {{ 'disabled' if not video_tool }}>Make the video</button>
+            <span class="small muted" id="videoState"></span>
+          </div>
+          <div class="bar" id="videoBar" hidden><i></i></div>
+          <div id="videoOut"></div>
+        </div>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -578,12 +713,15 @@ async function redraw() {
   canvases = out;
   holder.innerHTML = '';
   out.forEach(cv => holder.appendChild(cv));
+  storyStale = videoStale = true;
+  if (TAB === 'story') redrawStories();
+  if (TAB === 'video') redrawVideoPreview();
 }
 
-function downloadAll() {
-  canvases.forEach((c, i) => {
+function downloadAll(kind) {
+  (kind === 'story' ? storyCanvases : canvases).forEach((c, i) => {
     const a = document.createElement('a');
-    a.download = 'post-{{ post.id }}-' + (i + 1) + '.png';
+    a.download = (kind || 'post') + '-{{ post.id }}-' + (i + 1) + '.png';
     a.href = c.toDataURL('image/png');
     a.click();
   });
@@ -603,6 +741,7 @@ function paintPicker() {
 
 function setPhotosOk(ok) {
   PHOTOS_OK = ok;
+  if (typeof updateValBtn === 'function') setTimeout(updateValBtn);
   const s = document.getElementById('photoState');
   if (s) s.innerHTML = ok ? '<span style="color:#8fd1a6">✓ Approved</span>'
                           : '<span style="color:var(--flag)">Not approved yet</span>';
@@ -653,9 +792,216 @@ if (approveBtn) approveBtn.addEventListener('click', async () => {
   }
 });
 
+
+// ---- Story and Video tabs -------------------------------------------------
+// Same designs in 9:16. Stories are pictures; the video is made on the
+// server from a listing video or a photo slideshow, with a frame and a
+// closing card drawn here.
+let TAB = 'post', storyCanvases = [], storyStale = true, videoStale = true;
+const VIDEO_TOOL = {{ 'true' if video_tool else 'false' }};
+let VIDEO = {{ latest_video | tojson }};       // the last video made for this post
+let VPHOTOS = [];                              // slideshow photos, in order
+Object.values(CHOSEN).forEach(list => (list || []).forEach(u => { if (!VPHOTOS.includes(u)) VPHOTOS.push(u); }));
+const TAB_WHAT = { post: 'the post', story: 'the stories', video: 'the video' };
+
+function showTab(t) {
+  if (!document.getElementById('pane-' + t)) t = 'post';
+  TAB = t;
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  document.querySelectorAll('.pane').forEach(p => p.hidden = p.id !== 'pane-' + t);
+  document.getElementById('valWhat').textContent = TAB_WHAT[t];
+  document.getElementById('valAs').hidden = t !== 'video';
+  if (t === 'story' && storyStale) redrawStories();
+  if (t === 'video' && videoStale) redrawVideoPreview();
+  updateValBtn();
+}
+document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+
+let storySeq = 0;
+async function redrawStories() {
+  const seq = ++storySeq, out = [];
+  for (const c of CARDS) {
+    out.push(await PostCards.draw(Object.assign({}, c, { photos: CHOSEN[c.key] || [] }), null, 'story'));
+  }
+  if (seq !== storySeq) return;
+  storyCanvases = out; storyStale = false;
+  const box = document.getElementById('storyCards');
+  box.innerHTML = ''; out.forEach(cv => box.appendChild(cv));
+}
+
+function videoSource() {
+  const r = document.querySelector('input[name=vsrc]:checked');
+  if (!r) return null;
+  return r.value === 'photos' ? { photos: VPHOTOS.slice(0, 10) }
+                              : { video_id: +r.value.split(':')[1], url: r.dataset.url };
+}
+
+function paintVk() {
+  document.querySelectorAll('#vk .pk-i').forEach(b => {
+    const i = VPHOTOS.indexOf(b.dataset.url);
+    b.classList.toggle('on', i >= 0);
+    b.querySelector('b').textContent = i >= 0 ? (i + 1) : '';
+  });
+}
+document.getElementById('vk')?.addEventListener('click', e => {
+  const b = e.target.closest('.pk-i'); if (!b) return;
+  const i = VPHOTOS.indexOf(b.dataset.url);
+  if (i >= 0) VPHOTOS.splice(i, 1); else if (VPHOTOS.length < 10) VPHOTOS.push(b.dataset.url);
+  paintVk(); redrawVideoPreview();
+});
+document.querySelectorAll('input[name=vsrc]').forEach(r => r.addEventListener('change', () => {
+  document.getElementById('vphotos').hidden = r.value !== 'photos' || !r.checked;
+  redrawVideoPreview();
+}));
+
+function loadVideoFrame(url) {
+  return new Promise(res => {
+    const v = document.createElement('video');
+    v.muted = true; v.preload = 'auto'; v.src = url;
+    v.addEventListener('loadeddata', () => { v.currentTime = Math.min(1, (v.duration || 2) / 2); }, { once: true });
+    v.addEventListener('seeked', () => res(v), { once: true });
+    v.addEventListener('error', () => res(null), { once: true });
+    setTimeout(() => res(null), 8000);
+  });
+}
+
+let vSeq = 0, OVERLAY = null, ENDCARD = null;
+async function redrawVideoPreview() {
+  if (!document.getElementById('pane-video')) return;
+  const seq = ++vSeq, c0 = CARDS[0], src = videoSource();
+  const ov = await PostCards.draw(c0, null, 'overlay');
+  const end = await PostCards.draw(Object.assign({}, c0, { photos: CHOSEN[c0.key] || [] }), null, 'story');
+  let bg = null;
+  if (src && src.url) bg = await loadVideoFrame(src.url);
+  else if (src && src.photos && src.photos.length) {
+    bg = await new Promise(r => { const im = new Image(); im.onload = () => r(im); im.onerror = () => r(null); im.src = src.photos[0]; });
+  }
+  if (seq !== vSeq) return;
+  OVERLAY = ov; ENDCARD = end; videoStale = false;
+  const f = document.getElementById('vFrame');
+  f.width = 1080; f.height = 1920;
+  const x = f.getContext('2d');
+  x.fillStyle = '#222'; x.fillRect(0, 0, 1080, 1920);
+  if (bg) {
+    const w = bg.videoWidth || bg.width, h = bg.videoHeight || bg.height;
+    const sc = Math.max(1080 / w, 1920 / h);
+    x.drawImage(bg, (1080 - w * sc) / 2, (1920 - h * sc) / 2, w * sc, h * sc);
+  }
+  x.drawImage(ov, 0, 0);
+  const e = document.getElementById('vEnd');
+  e.width = 1080; e.height = 1920; e.getContext('2d').drawImage(end, 0, 0);
+}
+
+function blob(c, type, q) { return new Promise(res => c.toBlob(res, type, q)); }
+
+function showVideo(v) {
+  const out = document.getElementById('videoOut'), bar = document.getElementById('videoBar');
+  const state = document.getElementById('videoState');
+  if (!out || !bar || !state) return;          // no Video tab on this post
+  bar.hidden = !(v && v.status === 'rendering');
+  if (!v) { out.innerHTML = ''; state.textContent = ''; return; }
+  if (v.status === 'rendering') {
+    bar.querySelector('i').style.width = Math.round((v.progress || 0) * 100) + '%';
+    state.textContent = 'Making the video… ' + Math.round((v.progress || 0) * 100) +
+      '% (a minute or two; you can keep working)';
+  } else if (v.status === 'render_failed') {
+    state.textContent = ''; out.innerHTML = '<div class="alert bad">' + esc(v.error || 'The video failed.') + '</div>';
+  } else if (v.video_url) {
+    state.textContent = '✓ Video ready. Watch it, then validate it on the left.';
+    if (!out.querySelector('video') || out.dataset.src !== v.video_url) {
+      out.dataset.src = v.video_url;
+      out.innerHTML = '<video controls playsinline preload="metadata" src="' + esc(v.video_url) + '"></video>';
+    }
+  }
+  updateValBtn();
+}
+
+async function pollVideo() {
+  if (!VIDEO || VIDEO.status !== 'rendering') return;
+  try {
+    const d = await (await fetch('{{ url_for("social.index") }}queue/' + VIDEO.id + '.json', { credentials: 'same-origin' })).json();
+    VIDEO = { id: VIDEO.id, status: d.status, progress: d.progress, video_url: d.video_url, error: d.error };
+  } catch (e) { /* try again shortly */ }
+  showVideo(VIDEO);
+  if (VIDEO.status === 'rendering') setTimeout(pollVideo, 2500);
+}
+
+document.getElementById('makeVideo')?.addEventListener('click', async () => {
+  const btn = document.getElementById('makeVideo');
+  if (NEEDS_PHOTOS && !PHOTOS_OK) { alert('Approve the photos first (Step 1).'); return; }
+  const src = videoSource();
+  if (!src || (src.photos && !src.photos.length)) { alert('Pick a video, or click some photos for the slideshow.'); return; }
+  if (videoStale || !OVERLAY) await redrawVideoPreview();
+  btn.disabled = true;
+  try {
+    const fd = new FormData();
+    fd.append('source', JSON.stringify(src.photos ? { photos: src.photos } : { video_id: src.video_id }));
+    fd.append('overlay', await blob(OVERLAY, 'image/png'), 'overlay.png');
+    fd.append('endcard', await blob(ENDCARD, 'image/jpeg', 0.93), 'end.jpg');
+    const r = await fetch('{{ url_for("social.make_video", post_id=post.id) }}', { method: 'POST', body: fd, credentials: 'same-origin' });
+    const d = await r.json();
+    if (!d.ok) { alert(d.message); return; }
+    VIDEO = { id: d.id, status: 'rendering', progress: 0 };
+    showVideo(VIDEO); setTimeout(pollVideo, 2000);
+  } catch (e) {
+    alert('Could not reach the server. Try again.');
+  } finally { btn.disabled = !VIDEO_TOOL; }
+});
+
+// ---- Validate ----------------------------------------------------------
+function updateValBtn() {
+  const b = document.getElementById('valbtn'), note = document.getElementById('valNote');
+  let why = '';
+  if (NEEDS_PHOTOS && !PHOTOS_OK) why = 'Approve the photos first (Step 1).';
+  else if (TAB === 'video' && !(VIDEO && VIDEO.video_url && VIDEO.status !== 'rendering')) why = 'Make the video first.';
+  b.disabled = !!why; b.title = why; note.textContent = why ? '— ' + why : '';
+}
+
+document.getElementById('valbtn').addEventListener('click', async () => {
+  const b = document.getElementById('valbtn'), res = document.getElementById('valres');
+  const platforms = [...document.querySelectorAll('.vpl:checked')].map(i => i.value);
+  if (!platforms.length) { res.innerHTML = '<div class="alert bad">Tick Facebook, Instagram or both.</div>'; return; }
+  const fd = new FormData();
+  platforms.forEach(p => fd.append('platform', p));
+  fd.append('publish_at', document.getElementById('val_at').value);
+  fd.append('caption_en', document.getElementById('caption_en').value);
+  fd.append('caption_ar', document.getElementById('caption_ar').value);
+  fd.append('hashtags', document.getElementById('hashtags').value);
+  let url;
+  b.disabled = true; const label = b.textContent; b.textContent = 'Saving…';
+  try {
+    if (TAB === 'video') {
+      fd.append('format', document.querySelector('input[name=val_as]:checked').value);
+      url = '{{ url_for("social.index") }}queue/' + VIDEO.id + '/validate';
+    } else {
+      if (TAB === 'story' && storyStale) await redrawStories();
+      const list = TAB === 'story' ? storyCanvases : canvases;
+      if (!list.length) throw new Error('The design is still drawing. Try again in a second.');
+      fd.append('format', TAB);
+      for (let i = 0; i < list.length; i++) fd.append('image', await blob(list[i], 'image/jpeg', 0.92), 'img-' + (i + 1) + '.jpg');
+      url = '{{ url_for("social.queue_images", post_id=post.id) }}';
+    }
+    const r = await fetch(url, { method: 'POST', body: fd, credentials: 'same-origin' });
+    const d = await r.json();
+    res.innerHTML = '<div class="alert ' + (d.ok ? 'ok' : 'bad') + '">' + esc(d.message) +
+      (d.ok ? ' <a href="{{ url_for("social.schedule") }}">Open the schedule →</a>' : '') + '</div>';
+    if (d.ok) {
+      const what = TAB === 'video' ? (document.querySelector('input[name=val_as]:checked').value === 'reel' ? 'Reel' : 'Video story')
+                                   : (TAB === 'story' ? 'Story' : 'Post');
+      document.getElementById('qlist').insertAdjacentHTML('afterbegin',
+        '<div class="qi"><div style="flex:1"><b>' + what + '</b> · ' + esc(d.message) + '</div></div>');
+      document.getElementById('val_at').value = '';
+    }
+  } catch (e) {
+    res.innerHTML = '<div class="alert bad">' + esc(e.message || 'Could not reach the server. Try again.') + '</div>';
+  } finally { b.textContent = label; updateValBtn(); }
+});
+
 paintPicker();
 updatePostBtn();
-PostCards.ready('{{ url_for("static", filename="") }}').then(redraw);
+paintVk();
+showVideo(VIDEO); pollVideo();
+PostCards.ready('{{ url_for("static", filename="") }}').then(() => { redraw(); showTab({{ tab | tojson }}); });
 </script>
 </body>
 </html>

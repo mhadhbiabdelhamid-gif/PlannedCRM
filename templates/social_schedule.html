@@ -1,0 +1,192 @@
+{# The publishing schedule: validated posts, stories and reels, when each goes
+   out, and the next two weeks at a glance so empty days stand out. #}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Schedule &middot; Social &middot; Planned Real Estate</title>
+<style>
+  :root { --ink:#17181a; --panel:#1f2124; --line:#33363b; --gold:#c9a227;
+          --text:#e8e6e1; --muted:#9a9691; --flag:#d98324; --ok:#8fd1a6; --bad:#f0a59d; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:32px 20px; background:var(--ink); color:var(--text);
+         font:15px/1.55 "Segoe UI", system-ui, sans-serif; }
+  .wrap { max-width:1000px; margin:0 auto; }
+  a { color:var(--gold); }
+  a.back { color:var(--muted); font-size:13px; text-decoration:none; }
+  h1 { font-size:20px; font-weight:600; margin:10px 0 4px; }
+  .sub { color:var(--muted); font-size:13px; margin:0 0 20px; }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted);
+       font-weight:600; margin:32px 0 10px; display:flex; gap:10px; align-items:baseline; }
+  h2 .n { color:var(--gold); }
+  .alert { border-radius:6px; padding:12px 14px; font-size:13px; margin-bottom:14px; }
+  .alert.ok { background:#1b2620; border:1px solid #2f5a3f; }
+  .alert.bad { background:#2b1c1b; border:1px solid #6a2f2a; }
+  .alert.info, .alert.warn { background:#2a2318; border:1px solid #5a4a1e; }
+  /* two weeks */
+  .days { display:grid; grid-template-columns:repeat(7, 1fr); gap:6px; }
+  @media (max-width:700px) { .days { grid-template-columns:repeat(4, 1fr); } }
+  .day { background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:8px 9px;
+         min-height:78px; font-size:12px; }
+  .day.empty { border-style:dashed; border-color:#5a4a1e; background:#211f1a; }
+  .day.today { border-color:var(--gold); }
+  .day b { display:block; font-size:12px; color:var(--text); }
+  .day .wd { color:var(--muted); }
+  .day .none { color:var(--flag); margin-top:6px; }
+  .pill { display:inline-block; font-size:11px; padding:1px 7px; border-radius:999px; margin:4px 3px 0 0;
+          border:1px solid var(--line); color:var(--text); white-space:nowrap; }
+  .pill.post { border-color:#5a4a1e; color:#e6c27a; }
+  .pill.story { border-color:#2f4a5a; color:#9cc8e0; }
+  .pill.reel { border-color:#4a2f5a; color:#d0a8e6; }
+  /* rows */
+  .list { border:1px solid var(--line); border-radius:6px; overflow:hidden; }
+  .row { display:flex; align-items:center; gap:12px; padding:10px 12px; background:var(--panel);
+         border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  .row:last-child { border-bottom:0; }
+  .row input[type=checkbox] { accent-color:var(--gold); width:18px; height:18px; }
+  .th { width:48px; height:85px; border-radius:4px; background:#000 center/cover no-repeat; flex:none;
+        border:1px solid var(--line); }
+  .th.post { height:60px; }
+  .who { flex:1 1 220px; min-width:0; }
+  .who .t { font-weight:600; }
+  .who .m { color:var(--muted); font-size:12px; }
+  .err { color:var(--bad); font-size:12px; margin-top:2px; }
+  .links a { font-size:12px; margin-right:10px; }
+  form.inl { display:flex; gap:6px; align-items:center; margin:0; }
+  input[type=datetime-local], input[type=date], input[type=time] { background:#17181a; color:var(--text);
+         border:1px solid var(--line); border-radius:4px; padding:6px 8px; font:inherit; font-size:13px;
+         color-scheme:dark; }
+  button { border:0; border-radius:6px; padding:7px 12px; font:600 13px inherit; cursor:pointer;
+           background:var(--gold); color:#17181a; }
+  button.ghost { background:transparent; color:var(--muted); border:1px solid var(--line); }
+  button.ghost:hover { color:var(--text); border-color:var(--gold); }
+  button.drop:hover { color:#e0685f; border-color:#6a2f2a; }
+  .bulk { background:var(--panel); border:1px solid var(--line); border-top:3px solid var(--gold);
+          border-radius:6px; padding:14px 16px; margin-top:10px; display:flex; gap:14px; flex-wrap:wrap;
+          align-items:flex-end; }
+  .bulk label { display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  .bulk .chk { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--text); }
+  .empty { color:var(--muted); font-size:14px; }
+  .st { font-size:12px; padding:2px 8px; border-radius:999px; border:1px solid var(--line); white-space:nowrap; }
+  .st.posted { color:var(--ok); border-color:#2f5a3f; }
+  .st.failed, .st.render_failed { color:var(--bad); border-color:#6a2f2a; }
+  .st.partial { color:#e6c27a; border-color:#5a4a1e; }
+  .st.posting { color:var(--gold); border-color:var(--gold); }
+</style>
+</head>
+<body>
+{% include "_appbar.html" %}
+<div class="wrap">
+  <a class="back" href="{{ url_for('social.index') }}">&larr; Social posts</a>
+  <h1>Publishing schedule</h1>
+  <p class="sub">Posts, stories and reels you validated on a post's page. Give each a time, or tick
+    several and schedule them one a day. They go out by themselves at that time.</p>
+
+  {% for cat, msg in get_flashed_messages(with_categories=True) %}
+  <div class="alert {{ 'bad' if cat == 'error' else 'ok' }}">{{ msg }}</div>
+  {% endfor %}
+  {% if not can_publish %}
+  <div class="alert warn">Direct posting isn't set up, so nothing can go out yet.
+    <a href="{{ url_for('social.settings') }}">Social settings</a></div>
+  {% endif %}
+  {% if not scheduler_on %}
+  <div class="alert info">This copy of the CRM doesn't publish on schedule; the live server does.
+    Schedule from the live CRM (or use <b>Post now</b> here).</div>
+  {% endif %}
+
+  <h2>Next two weeks</h2>
+  <div class="days">
+    {% for d in days %}
+    <div class="day {{ 'empty' if not d['items'] }} {{ 'today' if loop.first }}">
+      <b>{{ d.date.strftime('%d %b') }}</b><span class="wd">{{ 'Today' if loop.first else d.date.strftime('%A') }}</span><br>
+      {% for f, label in formats.items() %}{% if d.counts[f] %}<span class="pill {{ f }}">{{ d.counts[f] }} {{ label|lower }}{{ 's' if d.counts[f] > 1 }}</span>{% endif %}{% endfor %}
+      {% if not d['items'] %}<div class="none">Nothing planned</div>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  <h2>Ready to schedule <span class="n">{{ ready|length }}</span></h2>
+  {% if ready %}
+  <form method="post" action="{{ url_for('social.bulk_schedule') }}" id="bulkform">
+    <div class="list">
+      {% for i in ready %}
+      <div class="row">
+        <input type="checkbox" name="ids" value="{{ i.id }}" aria-label="Select {{ i.title }}">
+        {% include "_queue_item.html" %}
+      </div>
+      {% endfor %}
+    </div>
+    <div class="bulk">
+      <div><label for="b_start">Start on</label><input type="date" id="b_start" name="start" value="{{ tomorrow }}" required></div>
+      <div><label for="b_time">At (Doha time)</label><input type="time" id="b_time" name="time" required></div>
+      <label class="chk"><input type="checkbox" name="skip_busy" value="1" checked>
+        Skip days that already have one of the same kind</label>
+      <div><button type="submit">Schedule one a day</button></div>
+      <div class="sub" style="margin:0;flex-basis:100%">In the order ticked: the first ticked goes on the start date,
+        the next one the day after, and so on. Posts, stories and reels each get their own run of days.</div>
+    </div>
+  </form>
+  {% else %}
+  <p class="empty">Nothing waiting. Open a post, pick Post, Story or Video, and click <b>Validate</b>.</p>
+  {% endif %}
+
+  <h2>Scheduled <span class="n">{{ scheduled|length }}</span></h2>
+  {% if scheduled %}
+  <div class="list">
+    {% for i in scheduled %}
+    <div class="row">{% include "_queue_item.html" %}</div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="empty">Nothing scheduled yet.</p>
+  {% endif %}
+
+  {% if drafts %}
+  <h2>Videos not validated yet <span class="n">{{ drafts|length }}</span></h2>
+  <div class="list">
+    {% for i in drafts %}
+    <div class="row">{% include "_queue_item.html" %}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <h2>Recent results</h2>
+  {% if done %}
+  <div class="list">
+    {% for i in done %}
+    <div class="row">{% include "_queue_item.html" %}</div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="empty">Nothing published from the schedule in the last two weeks.</p>
+  {% endif %}
+</div>
+{# The forms the item buttons submit (see _queue_item.html). #}
+{% for i in ready + scheduled + drafts + done %}
+<form id="q{{ i.id }}" method="post"><input type="hidden" name="next" value="{{ url_for('social.schedule') }}"></form>
+{% endfor %}
+<script>
+// Keep the order things are ticked in: the bulk schedule follows it.
+const bulk = document.getElementById('bulkform');
+if (bulk) {
+  const order = [];
+  bulk.addEventListener('change', e => {
+    if (e.target.name !== 'ids') return;
+    const i = order.indexOf(e.target.value);
+    if (e.target.checked && i < 0) order.push(e.target.value);
+    if (!e.target.checked && i >= 0) order.splice(i, 1);
+  });
+  bulk.addEventListener('submit', e => {
+    if (!order.length) { e.preventDefault(); alert('Tick the items to schedule first.'); return; }
+    bulk.querySelectorAll('input[name=ids]').forEach(b => b.removeAttribute('name'));
+    order.forEach(v => { const h = document.createElement('input');
+      h.type = 'hidden'; h.name = 'ids'; h.value = v; bulk.appendChild(h); });
+  });
+}
+document.querySelectorAll('button[data-confirm]').forEach(b => b.addEventListener('click', e => {
+  if (!confirm(b.dataset.confirm)) e.preventDefault();
+}));
+</script>
+</body>
+</html>

@@ -12,3 +12,6 @@ pywebpush>=2.0
 # logo still works without it. It has no prebuilt package for Python 3.14 yet
 # — if `pip install` fails to find a wheel on your machine, drop this line
 # locally (Render's build image runs an older Python that has one).
+# Makes the reel / video-story MP4s on the Social review page (social_video.py).
+# Brings its own copy of ffmpeg, so nothing else has to be installed.
+imageio-ffmpeg>=0.5

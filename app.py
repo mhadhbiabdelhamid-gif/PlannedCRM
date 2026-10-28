@@ -424,6 +424,13 @@ def create_app():
         import leases
         leases.start_scheduler(app)
 
+    # Publishes scheduled posts, stories and reels when their time comes.
+    # Runs on the live server only (see social_queue.scheduler_enabled), and
+    # never in a sandbox or test run.
+    if os.environ.get("BACKUP_DISABLED", "").lower() not in ("1", "true", "yes"):
+        import social_queue
+        social_queue.start_scheduler(app)
+
     # ---------------------------------------------------------- first-run admin
     with app.app_context():
         if query("SELECT COUNT(*) c FROM users", one=True)["c"] == 0:

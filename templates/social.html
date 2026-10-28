@@ -88,6 +88,20 @@
   <div class="warn" style="{{ 'background:#2b1c1b;border-color:#6a2f2a' if cat == 'error' else 'background:#1b2620;border-color:#2f5a3f' }}">{{ msg }}</div>
   {% endfor %}
 
+  {# Validated posts, stories and reels waiting for their time. #}
+  <div class="card" style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+    <div style="flex:1 1 300px">
+      <a href="{{ url_for('social.schedule') }}">Publishing schedule →</a>
+      <div class="meta">
+        {% if schedule_summary.scheduled %}{{ schedule_summary.scheduled }} scheduled · next
+          {{ schedule_summary.next.strftime('%a %d %b, %H:%M') }}{% else %}Nothing scheduled{% endif %}
+        {% if schedule_summary.ready %} · {{ schedule_summary.ready }} validated, waiting for a time{% endif %}
+      </div>
+    </div>
+    <div class="meta" style="flex:1 1 300px">Open a post, choose Post, Story or Video,
+      then <b>Validate</b>. Give them times here, one by one or one a day.</div>
+  </div>
+
   {# The content plan: listings sell, but tips, area guides and market updates
      are what make people follow the page between listings. Counts only posts
      that actually went out; drafts are shown alongside. #}
