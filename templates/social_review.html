@@ -343,6 +343,28 @@
         <div class="plat"><input type="checkbox" id="vpl_{{ key }}" class="vpl" value="{{ key }}" checked>
           <label for="vpl_{{ key }}" style="margin:0;text-transform:none;letter-spacing:0;color:var(--text);font-size:14px">{{ label }}</label></div>
         {% endfor %}
+        {% if tiktok_on %}
+        <div class="plat"><input type="checkbox" id="vpl_tiktok" class="vpl" value="tiktok">
+          <label for="vpl_tiktok" style="margin:0;text-transform:none;letter-spacing:0;color:var(--text);font-size:14px">TikTok
+            <span class="muted small" id="ttNoStory" hidden>(no stories on TikTok)</span></label></div>
+        {# What TikTok asks to be shown before posting: the account, a privacy
+           choice with no default, comments, and the content disclosures. #}
+        <div id="ttBox" hidden style="margin:6px 0 4px 26px;padding:10px 12px;border:1px solid var(--line);border-radius:6px;font-size:13px">
+          <div>Posting to <b id="ttUser">@{{ tiktok_user }}</b></div>
+          <div class="sched-row">
+            <label for="tt_privacy" style="margin:0">Who can see it</label>
+            <select id="tt_privacy" style="background:#17181a;color:var(--text);border:1px solid var(--line);border-radius:4px;padding:6px">
+              <option value="">Choose…</option>
+            </select>
+          </div>
+          <label class="vsrc"><input type="checkbox" id="tt_comments" checked> Allow comments</label>
+          <div class="muted small" style="margin-top:6px">Labelled as promotional content for our own business
+            ("Your brand"). By posting, you agree to TikTok's
+            <a href="{{ tiktok_terms[0] }}" target="_blank" rel="noopener" style="color:var(--gold)">Music Usage Confirmation</a>.
+            It can take a few minutes to appear on TikTok.</div>
+          <div class="small" id="ttErr" style="color:#f0a59d"></div>
+        </div>
+        {% endif %}
         <div class="sched-row">
           <label for="val_at" style="margin:0">Publish at (Doha time)</label>
           <input type="datetime-local" id="val_at" min="{{ now_local }}">
@@ -358,7 +380,7 @@
             <div class="th {{ q.format }}" style="background-image:url('{{ q.thumb_url or '' }}')"></div>
             <div style="flex:1"><b>{{ q.format_label }}</b> · {{ q.status_label }}
               {% if q.local_at %}· {{ q.local_at.strftime('%a %d %b, %H:%M') }}{% endif %}
-              {% for p, link in q.results.items() %} · <a href="{{ link }}" target="_blank" rel="noopener" style="color:var(--gold)">{{ platform_names.get(p, p) }}</a>{% endfor %}
+              {% for p, link in q.results.items() %} · <a href="{{ link }}" target="_blank" rel="noopener" style="color:var(--gold)">{{ queue_platform_names.get(p, p) }}</a>{% endfor %}
             </div>
           </div>
           {% endfor %}
@@ -815,6 +837,7 @@ function showTab(t) {
   document.querySelectorAll('.pane').forEach(p => p.hidden = p.id !== 'pane-' + t);
   document.getElementById('valWhat').textContent = TAB_WHAT[t];
   document.getElementById('valAs').hidden = t !== 'video';
+  updateTikTok();
   if (t === 'story' && storyStale) redrawStories();
   if (t === 'video' && videoStale) redrawVideoPreview();
   updateValBtn();
@@ -952,6 +975,39 @@ document.getElementById('makeVideo')?.addEventListener('click', async () => {
   } finally { btn.disabled = !VIDEO_TOOL; }
 });
 
+// ---- TikTok -------------------------------------------------------------
+// Shown only when TikTok is connected. No stories on TikTok; a video story
+// can't go there either.
+let TT_LOADED = false;
+function ttStory() {
+  return TAB === 'story' || (TAB === 'video' &&
+    (document.querySelector('input[name=val_as]:checked') || {}).value === 'story');
+}
+function updateTikTok() {
+  const box = document.getElementById('vpl_tiktok');
+  if (!box) return;
+  const story = ttStory();
+  box.disabled = story; if (story) box.checked = false;
+  document.getElementById('ttNoStory').hidden = !story;
+  document.getElementById('ttBox').hidden = !box.checked;
+  if (box.checked && !TT_LOADED) loadTikTok();
+}
+async function loadTikTok() {
+  TT_LOADED = true;
+  const err = document.getElementById('ttErr');
+  try {
+    const d = await (await fetch('{{ url_for("social.tiktok_creator") }}', { credentials: 'same-origin' })).json();
+    if (!d.ok) { err.textContent = d.error; TT_LOADED = false; return; }
+    document.getElementById('ttUser').textContent = '@' + d.username + (d.nickname ? ' (' + d.nickname + ')' : '');
+    const sel = document.getElementById('tt_privacy');
+    d.privacy.forEach(p => { const o = document.createElement('option'); o.value = p.value; o.textContent = p.label; sel.appendChild(o); });
+    const c = document.getElementById('tt_comments');
+    if (d.comment_disabled) { c.checked = false; c.disabled = true; c.parentElement.title = 'Comments are off on this TikTok account'; }
+  } catch (e) { err.textContent = 'Could not reach TikTok. Try again.'; TT_LOADED = false; }
+}
+document.getElementById('vpl_tiktok')?.addEventListener('change', updateTikTok);
+document.querySelectorAll('input[name=val_as]').forEach(r => r.addEventListener('change', updateTikTok));
+
 // ---- Validate ----------------------------------------------------------
 function updateValBtn() {
   const b = document.getElementById('valbtn'), note = document.getElementById('valNote');
@@ -964,9 +1020,16 @@ function updateValBtn() {
 document.getElementById('valbtn').addEventListener('click', async () => {
   const b = document.getElementById('valbtn'), res = document.getElementById('valres');
   const platforms = [...document.querySelectorAll('.vpl:checked')].map(i => i.value);
-  if (!platforms.length) { res.innerHTML = '<div class="alert bad">Tick Facebook, Instagram or both.</div>'; return; }
+  if (!platforms.length) { res.innerHTML = '<div class="alert bad">Tick at least one platform.</div>'; return; }
+  if (platforms.includes('tiktok') && !document.getElementById('tt_privacy').value) {
+    res.innerHTML = '<div class="alert bad">Choose who can see it on TikTok.</div>'; return;
+  }
   const fd = new FormData();
   platforms.forEach(p => fd.append('platform', p));
+  if (platforms.includes('tiktok')) {
+    fd.append('tt_privacy', document.getElementById('tt_privacy').value);
+    fd.append('tt_comments', document.getElementById('tt_comments').checked ? '1' : '0');
+  }
   fd.append('publish_at', document.getElementById('val_at').value);
   fd.append('caption_en', document.getElementById('caption_en').value);
   fd.append('caption_ar', document.getElementById('caption_ar').value);

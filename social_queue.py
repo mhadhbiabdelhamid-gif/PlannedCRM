@@ -43,6 +43,9 @@ from ai_social import social_bp, cfg, PLATFORM_NAMES
 from auth import admin_required
 
 FORMATS = {"post": "Post", "story": "Story", "reel": "Reel"}
+# Where a queue item can go. TikTok takes reels (as videos) and feed posts
+# (as photo posts); it has no stories. See social_tiktok.py.
+QUEUE_PLATFORMS = {**PLATFORM_NAMES, "tiktok": "TikTok"}
 STATUS_LABEL = {
     "rendering": "Making the video", "render_failed": "Video failed",
     "draft": "Video made, not validated", "ready": "Validated, no time yet",
@@ -77,6 +80,10 @@ def ensure_table(conn=None):
         " posted_at TEXT);"
         "CREATE INDEX IF NOT EXISTS ix_social_queue_due"
         " ON social_queue (status, publish_at);")
+    # Added later: per-item choices for TikTok (privacy, comments).
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(social_queue)")]
+    if "options" not in cols:
+        conn.execute("ALTER TABLE social_queue ADD COLUMN options TEXT")
     conn.commit()
     _TABLE_READY = True
 
@@ -138,6 +145,9 @@ def media_file(name):
     """Public, no sign-in: Facebook and Instagram download the stories, reels
     and post images from here. Random 32-hex names, like /social/card/."""
     if not MEDIA_NAME.match(name):
+        if name and name == cfg("tiktok_verify_name"):
+            import social_tiktok
+            return social_tiktok.serve_verify_file(name)
         return "Not found", 404
     return send_from_directory(media_folder(), name,
                                mimetype=MEDIA_TYPES[name.rsplit(".", 1)[1]],
@@ -182,7 +192,12 @@ def _post_row(pid):
 
 
 def _platforms():
-    return [p for p in request.form.getlist("platform") if p in PLATFORM_NAMES]
+    return [p for p in request.form.getlist("platform") if p in QUEUE_PLATFORMS]
+
+
+def _tiktok_options():
+    return {"privacy": request.form.get("tt_privacy", ""),
+            "comments": request.form.get("tt_comments") == "1"}
 
 
 def _caption_from_form(content):
@@ -199,7 +214,12 @@ def _check_ready_to_validate(post, fmt, platforms, caption):
     if sc.needs_photos(post) and not content.get("photos_ok"):
         return "Choose and approve the photos first (Step 1)."
     if not platforms:
-        return "Tick Facebook, Instagram or both."
+        return "Tick at least one: Facebook, Instagram or TikTok."
+    if "tiktok" in platforms:
+        import social_tiktok
+        problem = social_tiktok.check_options(_tiktok_options(), fmt)
+        if problem:
+            return problem
     if fmt in ("post", "reel") and "instagram" in platforms \
             and len(caption) > S.IG_CAPTION_LIMIT:
         return (f"The caption is {len(caption):,} characters; Instagram "
@@ -213,6 +233,11 @@ def item_view(row):
     d["media"] = json.loads(row["media"] or "[]")
     d["platforms"] = json.loads(row["platforms"] or "[]")
     d["results"] = json.loads(row["results"] or "{}")
+    try:
+        d["options"] = json.loads(row["options"] or "{}") \
+            if "options" in row.keys() else {}
+    except ValueError:
+        d["options"] = {}
     d["source"] = json.loads(row["source"] or "{}")
     d["format_label"] = FORMATS.get(row["format"], row["format"])
     if row["format"] == "story" and row["media_kind"] == "video":
@@ -276,6 +301,9 @@ def queue_images(post_id):
         (post_id, fmt, "image", json.dumps(names), names[0], caption,
          json.dumps(platforms), "scheduled" if when else "ready", when,
          _title(post, content), current_user_id(), now, current_user_id(), now))
+    if "tiktok" in platforms:
+        conn.execute("UPDATE social_queue SET options = ? WHERE id = ?",
+                     (json.dumps({"tiktok": _tiktok_options()}), cur.lastrowid))
     conn.commit()
     what = FORMATS[fmt] + ("s" if fmt == "story" and len(names) > 1 else "")
     return answer(True, f"{what} validated" + (
@@ -493,6 +521,9 @@ def validate_video(qid):
             (row["post_id"], fmt, "video", row["media"], row["thumb"], caption,
              json.dumps(platforms), status, when, row["source"], row["title"],
              me, now, me, now)).lastrowid
+    conn.execute("UPDATE social_queue SET options = ? WHERE id = ?",
+                 (json.dumps({"tiktok": _tiktok_options()})
+                  if "tiktok" in platforms else None, new_id))
     conn.commit()
     label = "Reel" if fmt == "reel" else "Video story"
     return answer(True, f"{label} validated" + (
@@ -582,7 +613,7 @@ def schedule():
     return render_template(
         "social_schedule.html", ready=ready, scheduled=scheduled,
         drafts=drafts, done=done, days=days, formats=FORMATS,
-        platform_names=PLATFORM_NAMES, can_publish=S.can_publish(),
+        platform_names=QUEUE_PLATFORMS, can_publish=S.can_publish(),
         scheduler_on=scheduler_enabled(),
         tomorrow=(today + timedelta(days=1)).isoformat(),
         now_local=(utc_now() + _offset()).strftime("%Y-%m-%dT%H:%M"))
@@ -662,10 +693,6 @@ def _drop_files(conn, row):
 def post_now(qid):
     """Publish straight away: due now, and the publisher is woken at once
     (it runs in the background, so this page doesn't wait on Meta)."""
-    if not S.can_publish():
-        flash("Direct posting isn't set up. Fill in Social settings first.",
-              "error")
-        return _back()
     conn = db()
     got = conn.execute(
         "UPDATE social_queue SET status = 'scheduled', publish_at = ?,"
@@ -823,13 +850,25 @@ def publish_item(item):
     results, errors = {}, {}
     if not urls:
         return results, {"all": "The pictures or video for this item are missing."}
-    problem = S.check_public_image(urls[0])
-    if problem:
-        return results, {"all": problem}
     video = item["media_kind"] == "video"
+    meta = [p for p in todo if p in PLATFORM_NAMES]
+    # Meta (and TikTok photo posts) download the files from the CRM, so the
+    # address has to work from outside; TikTok videos are uploaded directly.
+    if meta or ("tiktok" in todo and not video):
+        problem = S.check_public_image(urls[0])
+        if problem:
+            return results, {"all": problem}
+    if meta and not S.can_publish():
+        for p in meta:
+            errors[p] = "Direct posting to Meta isn't set up (Social settings)."
+        meta = []
     for p in todo:
+        if p in PLATFORM_NAMES and p not in meta:
+            continue
         try:
-            if item["format"] == "post":
+            if p == "tiktok":
+                results[p] = _publish_tiktok(item, urls, video)
+            elif item["format"] == "post":
                 results[p] = (S.publish_facebook if p == "facebook" else
                               S.publish_instagram)(item["caption"] or "", urls)
             elif item["format"] == "story":
@@ -838,8 +877,23 @@ def publish_item(item):
                 results[p] = (fb_reel if p == "facebook" else ig_reel)(
                     item["caption"] or "", urls[0])
         except (RuntimeError, KeyError, ValueError) as exc:
-            errors[p] = S._friendly_meta_error(str(exc))
+            errors[p] = (str(exc) if p == "tiktok"
+                         else S._friendly_meta_error(str(exc)))
     return results, errors
+
+
+def _publish_tiktok(item, urls, video):
+    import social_tiktok as tt
+    opts = (item.get("options") or {}).get("tiktok") or {}
+    if not opts.get("privacy"):
+        raise RuntimeError("No TikTok privacy was chosen for this item. Remove "
+                           "it and validate it again with TikTok ticked.")
+    if item["format"] == "story":
+        raise RuntimeError("TikTok has no stories.")
+    if video:
+        return tt.publish_video(os.path.join(media_folder(), item["media"][0]),
+                                item["caption"] or "", opts)
+    return tt.publish_photos(urls, item["caption"] or "", opts)
 
 
 # -------------------------------------------------------------- scheduler
@@ -922,14 +976,10 @@ def tick(app=None):
         if qid is False:
             continue                      # another worker took it
         item = item_view(_row(qid))
-        if not S.can_publish():
-            results, errors = {}, {"all": "Direct posting isn't set up "
-                                   "(Social settings)."}
-        else:
-            try:
-                results, errors = publish_item(item)
-            except Exception as exc:      # never leave it stuck in 'posting'
-                results, errors = {}, {"all": str(exc)[:500]}
+        try:
+            results, errors = publish_item(item)
+        except Exception as exc:          # never leave it stuck in 'posting'
+            results, errors = {}, {"all": str(exc)[:500]}
         merged = {**item["results"], **results}
         if all(p in merged for p in item["platforms"]):
             status = "posted"
@@ -941,7 +991,7 @@ def tick(app=None):
             "UPDATE social_queue SET status = ?, results = ?, error = ?,"
             " posted_at = ? WHERE id = ?",
             (status, json.dumps(merged),
-             "; ".join(f"{PLATFORM_NAMES.get(k, 'Post')}: {v}"
+             "; ".join(f"{QUEUE_PLATFORMS.get(k, 'Post')}: {v}"
                        for k, v in errors.items()) or None,
              utc_str(utc_now()), qid))
         conn.commit()

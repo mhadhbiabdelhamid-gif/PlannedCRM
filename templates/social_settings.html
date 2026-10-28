@@ -22,6 +22,7 @@
   label { display:block; font-size:12px; text-transform:uppercase;
           letter-spacing:.06em; color:var(--muted); margin:14px 0 4px; }
   label:first-of-type { margin-top:0; }
+  code { font-size:12px; color:var(--gold); }
   input { width:100%; padding:9px 10px; background:#17181a; color:var(--text);
           border:1px solid var(--line); border-radius:4px; font:inherit; }
   input:focus { outline:2px solid var(--gold); outline-offset:1px; }
@@ -41,6 +42,10 @@
 <div class="wrap">
   <a class="back" href="{{ url_for('social.index') }}">&larr; Back to social posts</a>
   <h1>Social settings</h1>
+
+  {% for cat, msg in flashes %}
+  <div class="status {{ 'off' if cat == 'error' else 'on' }}">{{ msg }}</div>
+  {% endfor %}
 
   <div class="status {{ 'on' if can_publish else 'off' }}">
     {% if can_publish %}
@@ -99,6 +104,59 @@
 
     <button type="submit">Save settings</button>
   </form>
+
+  {# TikTok has its own sign-in (the company account authorises the CRM's
+     TikTok app), so it's a separate form. See social_tiktok.py. #}
+  <form method="post" action="{{ url_for('social.tiktok_keys') }}" class="panel" id="tiktok" style="margin-top:24px">
+    <h2>TikTok publishing</h2>
+    <div class="status {{ 'on' if tiktok.connected else 'off' }}" style="margin-bottom:10px">
+      {% if tiktok.connected %}
+        Connected to <b>@{{ tiktok.username }}</b>{% if tiktok.nickname %} ({{ tiktok.nickname }}){% endif %}.
+        Reels go to TikTok as videos, feed posts as photo posts. TikTok has no stories.
+        {% if tiktok.days_left is not none and tiktok.days_left < 30 %}<br><b>Reconnect within {{ tiktok.days_left }} days</b>: TikTok's sign-in lasts a year.{% endif %}
+      {% elif tiktok.configured %}
+        App details saved. Click <b>Connect TikTok</b> and sign in with the company's TikTok account.
+      {% else %}
+        Not set up. Create an app on <a href="https://developers.tiktok.com/" target="_blank" rel="noopener" style="color:var(--gold)">developers.tiktok.com</a>
+        with <b>Login Kit</b> and <b>Content Posting API</b> (Direct Post on), scopes
+        <code>user.info.basic, video.publish, video.upload</code>, then paste its keys here.
+      {% endif %}
+    </div>
+
+    <label for="tiktok_client_key">Client key</label>
+    <input id="tiktok_client_key" name="tiktok_client_key" dir="ltr" value="{{ tiktok.client_key }}" autocomplete="off">
+    <label for="tiktok_client_secret">Client secret</label>
+    <input id="tiktok_client_secret" name="tiktok_client_secret" dir="ltr" value=""
+           placeholder="{{ 'saved — leave blank to keep it' if tiktok.has_secret else 'not set' }}" autocomplete="off">
+
+    <label>Redirect URI (add it to the TikTok app, under Login Kit)</label>
+    <input readonly dir="ltr" value="{{ tiktok.redirect_uri or 'Set the Public address above first' }}" onclick="this.select()">
+
+    <label>For photo posts: URL prefix to verify in the TikTok app (URL properties)</label>
+    <input readonly dir="ltr" value="{{ tiktok.photo_prefix or 'Set the Public address above first' }}" onclick="this.select()">
+    <div class="hint">TikTok downloads photo posts from this address, so it must be verified first. If TikTok
+      gives you a verification file, paste its file name and its content below; the CRM serves it at that
+      address. Videos are uploaded directly and don't need this.</div>
+    <label for="tiktok_verify_name">Verification file name</label>
+    <input id="tiktok_verify_name" name="tiktok_verify_name" dir="ltr" value="{{ tiktok.verify_name or '' }}" placeholder="tiktokXXXXXXXX.txt">
+    <label for="tiktok_verify_content">Verification file content</label>
+    <input id="tiktok_verify_content" name="tiktok_verify_content" dir="ltr" value="" placeholder="{{ 'saved — leave blank to keep it' if tiktok.verify_name else '' }}">
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <button type="submit">Save TikTok settings</button>
+      {% if tiktok.configured %}
+      <a href="{{ url_for('social.tiktok_connect') }}" style="margin-top:18px;color:#17181a;background:#e8e6e1;border-radius:6px;padding:11px 18px;text-decoration:none;font-weight:600;font-size:14px">
+        {{ 'Reconnect TikTok' if tiktok.connected else 'Connect TikTok' }}</a>
+      {% endif %}
+    </div>
+    <div class="hint" style="margin-top:12px">Until TikTok audits the app, it can only post as <b>Only me</b>
+      (visible to the account itself). Apply for the audit in the TikTok developer portal to post publicly.</div>
+  </form>
+  {% if tiktok.connected %}
+  <form method="post" action="{{ url_for('social.tiktok_disconnect') }}" onsubmit="return confirm('Disconnect TikTok?')">
+    <button type="submit" style="background:transparent;color:var(--muted);border:1px solid var(--line);margin-top:0">Disconnect TikTok</button>
+  </form>
+  {% endif %}
 </div>
 </body>
 </html>

@@ -603,8 +603,10 @@ def settings():
         raw = cfg(key)
         values[key] = ("•" * 12 + raw[-4:]) if (key in SECRET_KEYS and raw) \
             else raw
+    import social_tiktok as tt
     return render_template("social_settings.html", values=values,
-                           can_publish=can_publish(),
+                           can_publish=can_publish(), tiktok=tt.status(),
+                           flashes=get_flashed_messages(with_categories=True),
                            secret_keys=list(SECRET_KEYS))
 
 
@@ -680,8 +682,11 @@ def _format_context(row, options):
     latest = next((i for i in items if i["media_kind"] == "video" and i["status"]
                    in ("rendering", "draft", "ready", "scheduled", "posted",
                        "partial", "failed")), None)
+    import social_tiktok as tt
     return dict(
         queue_items=items, listing_videos=videos,
+        queue_platform_names=sq.QUEUE_PLATFORMS, tiktok_on=tt.connected(),
+        tiktok_user=cfg("tiktok_username"), tiktok_terms=(tt.MUSIC_TERMS, tt.BRAND_TERMS),
         can_video=bool(videos or any(options.values())),
         video_tool=sv.available(),
         latest_video={"id": latest["id"], "status": latest["status"],
@@ -1117,3 +1122,4 @@ def discard(post_id):
 # so do stories, reels and the publishing schedule.
 import social_cards  # noqa: E402,F401
 import social_queue  # noqa: E402,F401
+import social_tiktok  # noqa: E402,F401

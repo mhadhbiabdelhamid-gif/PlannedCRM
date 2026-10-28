@@ -104,3 +104,14 @@ Failures send a notification to whoever validated the item.
 Meta endpoints used: Instagram `media` with `media_type=STORIES` / `REELS`;
 Facebook `photo_stories`, `video_stories` and `video_reels` (video uploaded
 by link through `rupload.facebook.com`). Same permissions as feed posts.
+
+## TikTok
+
+See the top of `social_tiktok.py` for the full setup. In short: create an app
+on developers.tiktok.com with Login Kit + Content Posting API (Direct Post),
+scopes `user.info.basic, video.publish, video.upload`, add the redirect URI
+shown in Social settings, paste the Client key / secret there and click
+**Connect TikTok**. Reels go to TikTok as videos (uploaded directly), feed
+posts as photo posts (TikTok downloads them, so the URL prefix shown in
+settings must be verified in the TikTok app). No stories on TikTok. Until
+TikTok audits the app, posts can only be "Only me".
