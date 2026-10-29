@@ -5,12 +5,17 @@ here: a transparent frame (logo, series label and a details panel) laid over
 the moving part, and the story design used as the closing card. This module
 only puts pictures together; nothing about the design lives here.
 
-    render(out_path, overlay_png, end_jpg, photos=[...])   # photo slideshow
-    render(out_path, overlay_png, end_jpg, video=path)     # a listing video
+    render(out_path, overlay_png, end_jpg, items=[("photo", path),
+                                                   ("video", path), ...])
 
-Photos pan slowly across (wide photos side to side, tall ones up and down),
-dipping to the brand cream between them; a listing video is fitted on a
-blurred copy of itself. Either way the closing card follows for a few seconds.
+Any mix of photos and listing videos, in the order given. Photos pan slowly
+across (wide photos side to side, tall ones up and down); a video is fitted
+on a blurred copy of itself; every piece dips to the brand cream between
+them. The closing card follows for a few seconds.
+
+The length follows what was picked (see plan()): about 3 seconds a photo plus
+each video's own length, never under MIN_TOTAL and never over MAX_TOTAL
+(videos are shortened first when there is too much).
 
 Each piece is made by its own ffmpeg run and the pieces are then joined
 without re-encoding, which keeps memory low (see render()).
@@ -29,13 +34,54 @@ import tempfile
 # set REEL_SIZE=720x1280 (still accepted by both).
 SIZE_W, SIZE_H = (int(v) for v in os.environ.get("REEL_SIZE", "1080x1920").split("x"))
 FPS = 30
-PHOTO_SECONDS = 3.2        # each photo on screen
-FADE = 0.35                # each photo dips to the brand cream and back
+PHOTO_SECONDS = 3.2        # each photo on screen, normally
+MIN_PHOTO_SECONDS = 2.0    # when there are many photos and videos
+MAX_PHOTO_SECONDS = 6.5    # when one or two photos stretch to MIN_TOTAL
+MIN_CLIP_SECONDS = 3.0     # a video is never shortened below this
+FADE = 0.35                # each piece dips to the brand cream and back
 CREAM = "0xFAF8F4"
 END_SECONDS = 3.5          # the closing card
-MAX_PHOTOS = 10
-MAX_VIDEO_SECONDS = 55     # stories allow 60 s; the end card adds about 3 s
+MIN_TOTAL = 10.0           # the shortest reel or story we make
+MAX_TOTAL = 59.0           # stories allow 60 s
+MAX_ITEMS = 20             # photos + videos in one reel
+MAX_PHOTOS = MAX_ITEMS     # kept for older callers
 PAN_MAX = 640              # px a photo travels; more feels hurried
+
+
+def plan(kinds, video_lengths=()):
+    """Seconds for each piece and for the closing card.
+
+    kinds: "photo"/"video" per piece, in order; video_lengths: the real
+    length of each video, in the same order as the videos appear.
+    Returns ([seconds per piece], end_seconds)."""
+    n = kinds.count("photo")
+    vids = [max(float(v), 1.0) for v in video_lengths]
+    budget = MAX_TOTAL - END_SECONDS
+    pd = PHOTO_SECONDS
+    if n * pd + sum(vids) > budget:
+        # Too long: shorten the videos first (each keeps MIN_CLIP_SECONDS),
+        # then the photos.
+        floor = sum(min(v, MIN_CLIP_SECONDS) for v in vids)
+        if n * pd + floor > budget and n:
+            pd = max(MIN_PHOTO_SECONDS, (budget - floor) / n)
+        room = budget - n * pd
+        long_part = sum(v - min(v, MIN_CLIP_SECONDS) for v in vids)
+        spare = max(room - floor, 0)
+        scale = min(1.0, spare / long_part) if long_part else 1.0
+        vids = [min(v, MIN_CLIP_SECONDS) + (v - min(v, MIN_CLIP_SECONDS)) * scale
+                for v in vids]
+    end = END_SECONDS
+    short = MIN_TOTAL - (n * pd + sum(vids) + end)
+    if short > 0:
+        if n:                                   # photos stay a bit longer
+            pd = min(MAX_PHOTO_SECONDS, pd + short / n)
+            short = MIN_TOTAL - (n * pd + sum(vids) + end)
+        if short > 0:                           # the closing card holds on
+            end += short
+    out, vi = [], iter(vids)
+    for k in kinds:
+        out.append(round(pd if k == "photo" else next(vi), 2))
+    return out, round(end, 2)
 
 
 def ffmpeg_exe():
@@ -71,7 +117,7 @@ def probe(path):
     return duration, bool(re.search(r"Stream #.*Audio:", info))
 
 
-def _prepare_photo(src, dst, index):
+def _prepare_photo(src, dst, index, d=PHOTO_SECONDS):
     """Upright, sized so one side fits the frame exactly and the other is
     longer (that's the room to pan). Returns the crop expressions."""
     from PIL import Image, ImageOps
@@ -86,7 +132,6 @@ def _prepare_photo(src, dst, index):
             nh = max(round(SIZE_H * 1.12), round(h * nw / w))
         im = im.resize((nw, nh), Image.LANCZOS)
         im.save(dst, "JPEG", quality=92)
-    d = PHOTO_SECONDS
     def path(span):
         travel = min(span, PAN_MAX)
         a = (span - travel) / 2
@@ -138,71 +183,82 @@ def _run(cmd, seconds, on_seconds):
 
 
 def render(out_path, overlay_png, end_jpg, photos=None, video=None,
-           progress=None):
+           progress=None, items=None):
     """Build the MP4. progress(fraction 0..1) is called as it encodes.
     Returns the length in seconds.
 
-    Made one piece at a time (each photo, or the video, then the closing
+    items is the list of ("photo" | "video", path) pieces in order; the
+    older photos=[...] / video=path forms still work.
+
+    Made one piece at a time (each photo, each video, then the closing
     card), each by its own ffmpeg run, then joined without re-encoding. A
     single ffmpeg run with every piece in it held all the upcoming pictures
     in memory, over a gigabyte; the live server has 512 MB."""
-    if not photos and not video:
+    if items is None:
+        items = [("video", video)] if video else \
+            [("photo", p) for p in (photos or [])]
+    items = [(k, p) for k, p in items if k in ("photo", "video") and p][:MAX_ITEMS]
+    if not items:
         raise RuntimeError("Pick a video or at least one photo.")
     exe = ffmpeg_exe()
     work = tempfile.mkdtemp(prefix="reel-")
     try:
+        probed = {}
+        for k, path in items:
+            if k == "video" and path not in probed:
+                dur, has_audio = probe(path)
+                if dur < 1:
+                    raise RuntimeError("One of the videos is too short "
+                                       "(under a second).")
+                probed[path] = (dur, has_audio)
+        lengths, end_seconds = plan([k for k, _ in items],
+                                    [probed[p][0] for k, p in items if k == "video"])
         steps = []                  # (ffmpeg arguments, seconds)
         ovl = (f"[1:v]scale={SIZE_W}:{SIZE_H},format=rgba[ovl];[m][ovl]overlay=0:0:eof_action=repeat,"
                f"format=yuv420p")
-        if video:
-            dur, has_audio = probe(video)
-            if dur < 1:
-                raise RuntimeError("That video is too short.")
-            L = min(dur, MAX_VIDEO_SECONDS)
-            # A small blurred copy fills the frame behind the video, so a
-            # landscape clip isn't cropped to a sliver.
-            vf = (f"[0:v]fps={FPS},split[va][vb];"
-                  f"[va]scale=270:480:force_original_aspect_ratio=increase,"
-                  f"crop=270:480,boxblur=8:2,scale={SIZE_W}:{SIZE_H},setsar=1[bg];"
-                  f"[vb]scale={SIZE_W}:{SIZE_H}:force_original_aspect_ratio=decrease,"
-                  f"setsar=1[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1[m];"
-                  f"{ovl},fade=t=out:st={L - FADE:.2f}:d={FADE}:color={CREAM}[v]")
-            if has_audio:
-                vf += (f";[0:a]aresample=44100,aformat=channel_layouts=stereo,"
-                       f"afade=t=out:st={max(L - 1.2, 0):.2f}:d=1.2,"
-                       f"apad=whole_dur={L:.2f}[a]")
-                amap = "[a]"
-                extra = []
+        for i, ((kind, src), L) in enumerate(zip(items, lengths)):
+            fade_in = "" if i == 0 else f",fade=t=in:st=0:d={FADE}:color={CREAM}"
+            fade_out = f",fade=t=out:st={L - FADE:.2f}:d={FADE}:color={CREAM}"
+            if kind == "video":
+                has_audio = probed[src][1]
+                # A small blurred copy fills the frame behind the video, so a
+                # landscape clip isn't cropped to a sliver.
+                vf = (f"[0:v]fps={FPS},split[va][vb];"
+                      f"[va]scale=270:480:force_original_aspect_ratio=increase,"
+                      f"crop=270:480,boxblur=8:2,scale={SIZE_W}:{SIZE_H},setsar=1[bg];"
+                      f"[vb]scale={SIZE_W}:{SIZE_H}:force_original_aspect_ratio=decrease,"
+                      f"setsar=1[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1[m];"
+                      f"{ovl}{fade_in}{fade_out}[v]")
+                if has_audio:
+                    vf += (f";[0:a]aresample=44100,aformat=channel_layouts=stereo,"
+                           f"afade=t=in:st=0:d={FADE},"
+                           f"afade=t=out:st={max(L - 1.2, 0):.2f}:d=1.2,"
+                           f"apad=whole_dur={L:.2f}[a]")
+                    amap, extra = "[a]", []
+                else:
+                    amap, extra = "2:a", SILENCE
+                steps.append(([exe, "-t", f"{L:.2f}", "-i", src, "-i", overlay_png,
+                               *extra, "-filter_complex", vf, "-map", "[v]",
+                               "-map", amap, "-t", f"{L:.2f}"], L))
             else:
-                amap, extra = "2:a", SILENCE
-            steps.append(([exe, "-t", f"{L:.2f}", "-i", video, "-i", overlay_png,
-                           *extra, "-filter_complex", vf, "-map", "[v]",
-                           "-map", amap, "-t", f"{L:.2f}"], L))
-        else:
-            photos = photos[:MAX_PHOTOS]
-            for i, src in enumerate(photos):
                 dst = os.path.join(work, f"p{i}.jpg")
-                x, y = _prepare_photo(src, dst, i)
-                fades = "" if i == 0 else f",fade=t=in:st=0:d={FADE}:color={CREAM}"
-                fades += (f",fade=t=out:st={PHOTO_SECONDS - FADE}:d={FADE}"
-                          f":color={CREAM}")
+                x, y = _prepare_photo(src, dst, i, L)
                 # loop= repeats the one decoded picture (a looped input would
                 # decode it again for every frame and queue them up).
-                vf = (f"[0:v]{_still(PHOTO_SECONDS)},"
+                vf = (f"[0:v]{_still(L)},"
                       f"crop={SIZE_W}:{SIZE_H}:x='{x}':y='{y}',setsar=1[m];"
-                      f"{ovl}{fades}[v]")
+                      f"{ovl}{fade_in}{fade_out}[v]")
                 steps.append(([exe, "-i", dst,
                                "-i", overlay_png, *SILENCE,
                                "-filter_complex", vf, "-map", "[v]",
-                               "-map", "2:a", "-t", f"{PHOTO_SECONDS}"],
-                              PHOTO_SECONDS))
+                               "-map", "2:a", "-t", f"{L:.2f}"], L))
         steps.append(([exe, "-i", end_jpg, *SILENCE,
                        "-filter_complex",
-                       f"[0:v]{_still(END_SECONDS)},scale={SIZE_W}:{SIZE_H},"
+                       f"[0:v]{_still(end_seconds)},scale={SIZE_W}:{SIZE_H},"
                        f"setsar=1,format=yuv420p,"
                        f"fade=t=in:st=0:d={FADE}:color={CREAM}[v]",
-                       "-map", "[v]", "-map", "1:a", "-t", f"{END_SECONDS}"],
-                      END_SECONDS))
+                       "-map", "[v]", "-map", "1:a", "-t", f"{end_seconds}"],
+                      end_seconds))
 
         total = sum(sec for _, sec in steps)
         done_before = 0.0

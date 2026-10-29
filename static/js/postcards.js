@@ -731,5 +731,29 @@
     return c;
   }
 
-  window.PostCards = { ready, draw, FORMATS, W: 1080, H: 1350, setContact: (o) => Object.assign(CONTACT, o || {}) };
+  // An extra photo (4th and later) shown after the design: the photo fills
+  // the frame, with the logo on a cream tab and the usual contact footer.
+  async function photoSlide(url, canvas, format) {
+    const img = await loadImage(url);
+    F = FORMATS[format] || FORMATS.post; W = F.W; H = F.H;
+    const c = canvas || document.createElement("canvas");
+    c.width = W; c.height = H;
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = T.bg; ctx.fillRect(0, 0, W, H);
+    cover(ctx, img, 0, 0, W, F.foot, 0.5);
+    if (LOGO) {
+      const h = 104, w = h * LOGO.width / LOGO.height, pad = 22, top = format === "story" ? 120 : 44;
+      ctx.save();
+      ctx.shadowColor = "rgba(0,0,0,.18)"; ctx.shadowBlur = 18; ctx.shadowOffsetY = 4;
+      ctx.fillStyle = "rgba(250,248,244,.94)";
+      ctx.beginPath(); ctx.roundRect(44, top, w + pad * 2, h + pad * 2, 14); ctx.fill();
+      ctx.restore();
+      ctx.drawImage(LOGO, 44 + pad, top + pad, w, h);
+    }
+    ctx.fillStyle = goldGrad(ctx, 0, W); ctx.fillRect(0, F.foot - 6, W, 6);
+    footer(ctx);
+    return c;
+  }
+
+  window.PostCards = { ready, draw, photoSlide, FORMATS, W: 1080, H: 1350, setContact: (o) => Object.assign(CONTACT, o || {}) };
 })();

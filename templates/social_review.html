@@ -130,6 +130,13 @@
   .vsrc input { accent-color:var(--gold); }
   .vk { display:grid; grid-template-columns:repeat(5, 1fr); gap:6px; margin:8px 0; }
   .vk .pk-i b { display:none; }
+  .vk .pk-i.vid { overflow:hidden; background:#000; }
+  .vk .pk-i.vid video { width:100%; height:100%; object-fit:cover; display:block; pointer-events:none; border-radius:4px; }
+  .vk .vtag { position:absolute; left:4px; bottom:4px; font:600 11px/1 "Segoe UI", sans-serif; font-style:normal;
+              background:rgba(0,0,0,.7); color:#fff; padding:3px 5px; border-radius:3px; }
+  .vbar { display:flex; justify-content:space-between; align-items:center; margin:2px 0 4px; }
+  .ghost.mini { padding:4px 10px; font-size:12px; }
+  .vup { display:inline-block; margin-right:14px; }
   .vk .pk-i.on b { display:block; }
   .vprev { display:flex; gap:10px; align-items:flex-start; margin-top:10px; }
   .vprev figure { margin:0; flex:1; }
@@ -404,17 +411,19 @@
     <div>
       {% if needs_photos %}
       {# Step 1: the photos are chosen and approved before the design is made.
-         Click to pick: 1 = main photo, 2 and 3 = the two small photos. #}
+         Click to pick: 1 = main photo, 2 and 3 = the two small photos, 4+ = extra
+         slides after the design. #}
       <div class="panel" id="photos">
         <h2>Step 1 · Choose the photos</h2>
         <p class="muted small" style="margin:0 0 10px">
           {% if post.kind == 'area' %}Click the photo to use for this area.
-          {% else %}Click photos in order: <b>1</b> is the main photo, <b>2</b> and <b>3</b> are the small ones. Click again to remove.{% endif %}
+          {% else %}Click photos in order: <b>1</b> is the main photo, <b>2</b> and <b>3</b> are the small ones.
+          Photos <b>4</b> and after come after the design as extra slides and stories (up to 10). Click again to remove.{% endif %}
         </p>
         {% for key, urls in photo_options.items() %}
           {% set p = (properties | selectattr('id', 'equalto', key | int) | first) if key != 'main' else none %}
           {% if p and multi %}<div class="pk-ref">{{ p.ref }} · <span dir="auto">{{ p.card.titleAr }}</span></div>{% endif %}
-          <div class="pk" data-key="{{ key }}" data-max="{{ 1 if post.kind == 'area' else 3 }}">
+          <div class="pk" data-key="{{ key }}" data-max="{{ 1 if post.kind == 'area' else 10 }}">
             {% for u in urls %}
             <button type="button" class="pk-i" data-url="{{ u }}" style="background-image:url('{{ u }}')" aria-label="Photo {{ loop.index }}"><b></b></button>
             {% else %}
@@ -468,40 +477,53 @@
           <p class="muted small" style="margin:0 0 6px">A 1080×1920 video with the Planned frame and
             a closing card with the price and contact. The same video can be validated as a reel
             and as a story.</p>
-          <div id="vsrcs">
+          <p class="muted small" style="margin:6px 0 0">Click the videos and photos in the order they
+            should play; the number shows the order. Click again to remove. Mix as many as you like
+            (up to 20).</p>
+          <div class="vk" id="vk">
             {% for v in listing_videos %}
-            <label class="vsrc"><input type="radio" name="vsrc" value="video:{{ v.id }}" data-url="{{ v.url }}"
-              {{ 'checked' if loop.first }}> ▶ {{ v.name }}{% if multi %} <span class="muted">({{ v.ref }})</span>{% endif %}</label>
+            <button type="button" class="pk-i vid" data-vid="{{ v.id }}" data-url="{{ v.url }}"
+                    title="{{ v.name }}{% if multi %} ({{ v.ref }}){% endif %}" aria-label="Video {{ v.name }}">
+              <video muted playsinline preload="metadata" src="{{ v.url }}#t=1"></video>
+              <i class="vtag">▶ <span class="vlen"></span></i><b></b></button>
             {% endfor %}
-            <label class="vsrc"><input type="radio" name="vsrc" value="photos" {{ 'checked' if not listing_videos }}>
-              Photo slideshow</label>
+            {% for key, urls in photo_options.items() %}{% for u in urls %}
+            <button type="button" class="pk-i" data-url="{{ u }}" style="background-image:url('{{ u }}')"
+                    aria-label="Photo"><b></b></button>
+            {% endfor %}{% endfor %}
           </div>
-          <div id="vphotos" {{ 'hidden' if listing_videos }}>
-            <p class="muted small" style="margin:6px 0 0">Click photos in the order they should appear (up to 10).
-              About 3 seconds each.</p>
-            <div class="vk" id="vk">
-              {% for key, urls in photo_options.items() %}{% for u in urls %}
-              <button type="button" class="pk-i" data-url="{{ u }}" style="background-image:url('{{ u }}')"
-                      aria-label="Photo"><b></b></button>
-              {% endfor %}{% endfor %}
-            </div>
+          <div class="vbar">
+            <span class="small" id="vLen"></span>
+            <button type="button" class="ghost mini" id="vClear">Clear</button>
           </div>
           {% if properties %}
-          <form method="post" enctype="multipart/form-data" action="{{ url_for('social.upload_listing_video', post_id=post.id) }}">
+          <form method="post" enctype="multipart/form-data" action="{{ url_for('social.upload_listing_video', post_id=post.id) }}" class="vup">
             {% if multi %}
             <select name="property_id" style="background:#17181a;color:var(--text);border:1px solid var(--line);border-radius:4px;padding:4px">
               {% for p in properties %}<option value="{{ p.id }}">{{ p.ref }}</option>{% endfor %}
             </select>
             {% else %}<input type="hidden" name="property_id" value="{{ properties[0].id }}">{% endif %}
-            <label class="pk-add">+ Add a video of the listing (MP4 or MOV)
-              <input type="file" name="video" accept="video/mp4,video/quicktime,video/*" hidden
+            <label class="pk-add">+ Add videos (MP4 or MOV, several at once)
+              <input type="file" name="video" multiple accept="video/mp4,video/quicktime,video/*" hidden
+                     onchange="this.form.querySelector('.upw').hidden=false; this.form.submit()"></label>
+            <span class="muted small upw" hidden>Uploading…</span>
+          </form>
+          <form method="post" enctype="multipart/form-data" action="{{ url_for('social.upload_photo', post_id=post.id) }}" class="vup">
+            <input type="hidden" name="back" value="video">
+            {% if multi %}
+            <select name="property_id" style="background:#17181a;color:var(--text);border:1px solid var(--line);border-radius:4px;padding:4px">
+              {% for p in properties %}<option value="{{ p.id }}">{{ p.ref }}</option>{% endfor %}
+            </select>
+            {% else %}<input type="hidden" name="property_id" value="{{ properties[0].id }}">{% endif %}
+            <label class="pk-add">+ Add photos
+              <input type="file" name="photo" multiple accept="image/jpeg,image/png,image/webp" hidden
                      onchange="this.form.querySelector('.upw').hidden=false; this.form.submit()"></label>
             <span class="muted small upw" hidden>Uploading…</span>
           </form>
           {% endif %}
           <div class="vprev">
             <figure><canvas id="vFrame"></canvas><figcaption>During the video</figcaption></figure>
-            <figure><canvas id="vEnd"></canvas><figcaption>Closing card (3.5 s)</figcaption></figure>
+            <figure><canvas id="vEnd"></canvas><figcaption>Closing card</figcaption></figure>
           </div>
           <div class="actions" style="align-items:center">
             <button type="button" class="save" id="makeVideo" {{ 'disabled' if not video_tool }}>Make the video</button>
@@ -743,6 +765,7 @@ async function redraw() {
   for (const c of CARDS) {
     out.push(await PostCards.draw(Object.assign({}, c, { photos: CHOSEN[c.key] || [] })));
   }
+  for (const u of extraPhotos(out.length)) out.push(await PostCards.photoSlide(u, null, 'post'));
   if (seq !== drawSeq) return;            // a newer redraw has started
   canvases = out;
   holder.innerHTML = '';
@@ -750,6 +773,15 @@ async function redraw() {
   storyStale = videoStale = true;
   if (TAB === 'story') redrawStories();
   if (TAB === 'video') redrawVideoPreview();
+}
+
+// Photos 4 and after (Step 1) follow the design as extra slides / stories.
+// Facebook and Instagram take 10 pictures in one post.
+function extraPhotos(used) {
+  if (CARDS.some(c => c.type === 'area')) return [];
+  const extra = [];
+  CARDS.forEach(c => (CHOSEN[c.key] || []).slice(3).forEach(u => { if (!extra.includes(u)) extra.push(u); }));
+  return extra.slice(0, Math.max(10 - used, 0));
 }
 
 function downloadAll(kind) {
@@ -805,6 +837,7 @@ document.querySelectorAll('.pk').forEach(pk => pk.addEventListener('click', (e) 
   CHOSEN[key] = sel;
   setPhotosOk(false);
   paintPicker();
+  if (typeof syncVitems === 'function') syncVitems();
   redraw();
 }));
 
@@ -834,8 +867,23 @@ if (approveBtn) approveBtn.addEventListener('click', async () => {
 let TAB = 'post', storyCanvases = [], storyStale = true, videoStale = true;
 const VIDEO_TOOL = {{ 'true' if video_tool else 'false' }};
 let VIDEO = {{ latest_video | tojson }};       // the last video made for this post
-let VPHOTOS = [];                              // slideshow photos, in order
-Object.values(CHOSEN).forEach(list => (list || []).forEach(u => { if (!VPHOTOS.includes(u)) VPHOTOS.push(u); }));
+// The reel's pieces, in play order: { url, vid } for a video, { url } for a photo.
+// Starts with the listing videos, then the photos approved in Step 1.
+const VMAX = 20;
+let VITEMS = [];
+document.querySelectorAll('#vk .pk-i.vid').forEach(b => VITEMS.push({ url: b.dataset.url, vid: +b.dataset.vid }));
+Object.values(CHOSEN).forEach(list => (list || []).forEach(u => { if (!VITEMS.some(x => x.url === u)) VITEMS.push({ url: u }); }));
+VITEMS = VITEMS.slice(0, VMAX);
+// Until the reel picker is touched, it follows the photos chosen in Step 1.
+let VTOUCHED = false;
+function syncVitems() {
+  if (VTOUCHED) return;
+  const vids = VITEMS.filter(x => x.vid);
+  const photos = [];
+  Object.values(CHOSEN).forEach(list => (list || []).forEach(u => { if (!photos.includes(u)) photos.push(u); }));
+  VITEMS = vids.concat(photos.map(u => ({ url: u }))).slice(0, VMAX);
+  paintVk(); videoStale = true;
+}
 const TAB_WHAT = { post: 'the post', story: 'the stories', video: 'the video' };
 
 function showTab(t) {
@@ -858,6 +906,7 @@ async function redrawStories() {
   for (const c of CARDS) {
     out.push(await PostCards.draw(Object.assign({}, c, { photos: CHOSEN[c.key] || [] }), null, 'story'));
   }
+  for (const u of extraPhotos(out.length)) out.push(await PostCards.photoSlide(u, null, 'story'));
   if (seq !== storySeq) return;
   storyCanvases = out; storyStale = false;
   const box = document.getElementById('storyCards');
@@ -865,29 +914,69 @@ async function redrawStories() {
 }
 
 function videoSource() {
-  const r = document.querySelector('input[name=vsrc]:checked');
-  if (!r) return null;
-  return r.value === 'photos' ? { photos: VPHOTOS.slice(0, 10) }
-                              : { video_id: +r.value.split(':')[1], url: r.dataset.url };
+  if (!VITEMS.length) return null;
+  const first = VITEMS[0];
+  return { items: VITEMS.map(x => x.vid ? { video_id: x.vid } : { photo: x.url }),
+           url: first.vid ? first.url : null, photo: first.vid ? null : first.url };
 }
+
+// Same timing as social_video.plan(): about 3 s a photo plus each video's
+// length, never under 10 s, never over 59 s (videos are shortened first).
+const VT = { photo: 3.2, minPhoto: 2.0, maxPhoto: 6.5, minClip: 3.0, end: 3.5, min: 10, max: 59 };
+function vLength() {
+  const n = VITEMS.filter(x => !x.vid).length;
+  let vids = VITEMS.filter(x => x.vid).map(x => Math.max(VLEN[x.vid] || 0, 1));
+  const unknown = VITEMS.some(x => x.vid && !VLEN[x.vid]);
+  const budget = VT.max - VT.end;
+  let pd = VT.photo;
+  if (n * pd + vids.reduce((a, b) => a + b, 0) > budget) {
+    const floor = vids.reduce((a, v) => a + Math.min(v, VT.minClip), 0);
+    if (n * pd + floor > budget && n) pd = Math.max(VT.minPhoto, (budget - floor) / n);
+    const long = vids.reduce((a, v) => a + v - Math.min(v, VT.minClip), 0);
+    const scale = long ? Math.min(1, Math.max(budget - n * pd - floor, 0) / long) : 1;
+    vids = vids.map(v => Math.min(v, VT.minClip) + (v - Math.min(v, VT.minClip)) * scale);
+  }
+  let total = n * pd + vids.reduce((a, b) => a + b, 0) + VT.end;
+  if (total < VT.min && n) { pd = Math.min(VT.maxPhoto, pd + (VT.min - total) / n); total = n * pd + vids.reduce((a, b) => a + b, 0) + VT.end; }
+  return { total: Math.max(total, VT.min), unknown };
+}
+function showVLen() {
+  const el = document.getElementById('vLen'); if (!el) return;
+  if (!VITEMS.length) { el.textContent = 'Nothing picked yet.'; return; }
+  const v = VITEMS.filter(x => x.vid).length, p = VITEMS.length - v, L = vLength();
+  const parts = [];
+  if (v) parts.push(v + (v > 1 ? ' videos' : ' video'));
+  if (p) parts.push(p + (p > 1 ? ' photos' : ' photo'));
+  el.textContent = parts.join(' + ') + ' · about ' + Math.round(L.total) + ' seconds with the closing card' +
+    (L.total >= VT.max - 0.5 ? ' (the most a story allows, so the videos are shortened)' : '');
+}
+
+// Video lengths, read from the small previews.
+const VLEN = {};
+document.querySelectorAll('#vk .pk-i.vid video').forEach(v => v.addEventListener('loadedmetadata', () => {
+  const b = v.closest('.pk-i'); VLEN[+b.dataset.vid] = v.duration;
+  const s = Math.round(v.duration); b.querySelector('.vlen').textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  showVLen();
+}));
 
 function paintVk() {
   document.querySelectorAll('#vk .pk-i').forEach(b => {
-    const i = VPHOTOS.indexOf(b.dataset.url);
+    const i = VITEMS.findIndex(x => x.url === b.dataset.url);
     b.classList.toggle('on', i >= 0);
     b.querySelector('b').textContent = i >= 0 ? (i + 1) : '';
   });
+  showVLen();
 }
 document.getElementById('vk')?.addEventListener('click', e => {
   const b = e.target.closest('.pk-i'); if (!b) return;
-  const i = VPHOTOS.indexOf(b.dataset.url);
-  if (i >= 0) VPHOTOS.splice(i, 1); else if (VPHOTOS.length < 10) VPHOTOS.push(b.dataset.url);
+  const i = VITEMS.findIndex(x => x.url === b.dataset.url);
+  VTOUCHED = true;
+  if (i >= 0) VITEMS.splice(i, 1);
+  else if (VITEMS.length < VMAX) VITEMS.push(b.dataset.vid ? { url: b.dataset.url, vid: +b.dataset.vid } : { url: b.dataset.url });
+  else { alert('Up to ' + VMAX + ' videos and photos in one reel.'); return; }
   paintVk(); redrawVideoPreview();
 });
-document.querySelectorAll('input[name=vsrc]').forEach(r => r.addEventListener('change', () => {
-  document.getElementById('vphotos').hidden = r.value !== 'photos' || !r.checked;
-  redrawVideoPreview();
-}));
+document.getElementById('vClear')?.addEventListener('click', () => { VTOUCHED = true; VITEMS = []; paintVk(); redrawVideoPreview(); });
 
 function loadVideoFrame(url) {
   return new Promise(res => {
@@ -908,8 +997,8 @@ async function redrawVideoPreview() {
   const end = await PostCards.draw(Object.assign({}, c0, { photos: CHOSEN[c0.key] || [] }), null, 'story');
   let bg = null;
   if (src && src.url) bg = await loadVideoFrame(src.url);
-  else if (src && src.photos && src.photos.length) {
-    bg = await new Promise(r => { const im = new Image(); im.onload = () => r(im); im.onerror = () => r(null); im.src = src.photos[0]; });
+  else if (src && src.photo) {
+    bg = await new Promise(r => { const im = new Image(); im.onload = () => r(im); im.onerror = () => r(null); im.src = src.photo; });
   }
   if (seq !== vSeq) return;
   OVERLAY = ov; ENDCARD = end; videoStale = false;
@@ -965,12 +1054,12 @@ document.getElementById('makeVideo')?.addEventListener('click', async () => {
   const btn = document.getElementById('makeVideo');
   if (NEEDS_PHOTOS && !PHOTOS_OK) { alert('Approve the photos first (Step 1).'); return; }
   const src = videoSource();
-  if (!src || (src.photos && !src.photos.length)) { alert('Pick a video, or click some photos for the slideshow.'); return; }
+  if (!src) { alert('Click the videos and photos to use, in order.'); return; }
   if (videoStale || !OVERLAY) await redrawVideoPreview();
   btn.disabled = true;
   try {
     const fd = new FormData();
-    fd.append('source', JSON.stringify(src.photos ? { photos: src.photos } : { video_id: src.video_id }));
+    fd.append('source', JSON.stringify({ items: src.items }));
     fd.append('overlay', await blob(OVERLAY, 'image/png'), 'overlay.png');
     fd.append('endcard', await blob(ENDCARD, 'image/jpeg', 0.93), 'end.jpg');
     const r = await fetch('{{ url_for("social.make_video", post_id=post.id) }}', { method: 'POST', body: fd, credentials: 'same-origin' });

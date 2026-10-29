@@ -356,7 +356,7 @@ class _RenderSlot:
             pass
 
 
-def _render_in_background(app, qid, job_dir, overlay, endcard, photos, video):
+def _render_in_background(app, qid, job_dir, overlay, endcard, items):
     def run():
         with app.app_context():
             conn = db()
@@ -370,7 +370,7 @@ def _render_in_background(app, qid, job_dir, overlay, endcard, photos, video):
                     progress(0.01)
                     name = uuid.uuid4().hex + ".mp4"
                     out = os.path.join(media_folder(), name)
-                    sv.render(out, overlay, endcard, photos=photos, video=video,
+                    sv.render(out, overlay, endcard, items=items,
                               progress=progress)
                     thumb = uuid.uuid4().hex + ".jpg"
                     if not sv.poster(out, os.path.join(media_folder(), thumb), 1.2):
@@ -410,24 +410,38 @@ def make_video(post_id):
         source = json.loads(request.form.get("source") or "{}")
     except ValueError:
         source = {}
-    photos, video = [], None
-    if source.get("video_id"):
-        ids = json.loads(post["property_ids"] or "[]")
-        row = db().execute(
-            "SELECT * FROM property_videos WHERE id = ?",
-            (int(source["video_id"]),)).fetchone()
-        if not row or row["property_id"] not in ids:
-            return answer(False, "That video isn't one of this listing's.", 400)
-        video = os.path.join(current_app.config["UPLOAD_FOLDER"], "videos",
-                             row["filename"])
-        if not os.path.isfile(video):
-            return answer(False, "That video file is missing on the server.", 400)
-    else:
-        photos = [p for p in (_upload_path(u, "images") for u in
-                              (source.get("photos") or [])[:sv.MAX_PHOTOS]) if p]
-        if not photos:
-            return answer(False, "Pick a listing video or some photos for the "
-                          "slideshow.", 400)
+    # The pieces, in order: {"items": [{"photo": url} | {"video_id": id}]}.
+    # Older pages sent {"photos": [...]} or {"video_id": id}.
+    wanted = source.get("items")
+    if not isinstance(wanted, list):
+        wanted = ([{"video_id": source["video_id"]}] if source.get("video_id")
+                  else [{"photo": u} for u in (source.get("photos") or [])])
+    ids = json.loads(post["property_ids"] or "[]")
+    items, kept = [], []
+    for piece in wanted[:sv.MAX_ITEMS]:
+        if not isinstance(piece, dict):
+            continue
+        if piece.get("video_id"):
+            try:
+                vid = int(piece["video_id"])
+            except (TypeError, ValueError):
+                continue
+            row = db().execute("SELECT * FROM property_videos WHERE id = ?",
+                               (vid,)).fetchone()
+            if not row or row["property_id"] not in ids:
+                return answer(False, "One of the videos isn't this listing's.", 400)
+            path = os.path.join(current_app.config["UPLOAD_FOLDER"], "videos",
+                                row["filename"])
+            if not os.path.isfile(path):
+                return answer(False, "A video file is missing on the server: "
+                              + (row["original_name"] or row["filename"]), 400)
+            items.append(("video", path)); kept.append({"video_id": vid})
+        elif piece.get("photo"):
+            path = _upload_path(piece["photo"], "images")
+            if path:
+                items.append(("photo", path)); kept.append({"photo": piece["photo"]})
+    if not items:
+        return answer(False, "Click the photos and videos to use, in order.", 400)
     job_dir = tempfile.mkdtemp(prefix="reeljob-")
     overlay = os.path.join(job_dir, "overlay.png")
     endcard = os.path.join(job_dir, "end.jpg")
@@ -445,13 +459,12 @@ def make_video(post_id):
         " progress, source, title, created_by, created_at) VALUES"
         " (?,?,?,?,?,?,?,?,?)",
         (post_id, "reel", "video", "rendering", 0,
-         json.dumps({"video_id": source.get("video_id")} if video else
-                    {"photos": source.get("photos")[:sv.MAX_PHOTOS]}),
+         json.dumps({"items": kept}),
          _title(post, content), current_user_id(), now))
     conn.commit()
     qid = cur.lastrowid
     _render_in_background(current_app._get_current_object(), qid, job_dir,
-                          overlay, endcard, photos, video)
+                          overlay, endcard, items)
     return answer(True, "Making the video…", id=qid)
 
 
@@ -538,10 +551,10 @@ ALLOWED_VIDEOS = {".mp4", ".mov", ".m4v", ".webm", ".3gp"}
 @social_bp.route("/post/<int:post_id>/listing-video", methods=["POST"])
 @admin_required
 def upload_listing_video(post_id):
-    """Add a video to the listing (it stays on the listing too)."""
+    """Add one or more videos to the listing (they stay on the listing too)."""
     back = url_for("social.review", post_id=post_id, tab="video") + "#design"
     post = _post_row(post_id)
-    f = request.files.get("video")
+    files = [f for f in request.files.getlist("video") if f and f.filename]
     try:
         pid = int(request.form.get("property_id", ""))
     except ValueError:
@@ -549,24 +562,28 @@ def upload_listing_video(post_id):
     if not post or pid not in json.loads(post["property_ids"] or "[]"):
         flash("Pick the listing the video belongs to.", "error")
         return redirect(back)
-    if not f or not f.filename or \
-            os.path.splitext(f.filename)[1].lower() not in ALLOWED_VIDEOS:
+    good = [f for f in files
+            if os.path.splitext(f.filename)[1].lower() in ALLOWED_VIDEOS]
+    if not good:
         flash("Choose a video file: MP4 or MOV.", "error")
         return redirect(back)
     from werkzeug.utils import secure_filename
     from db import now as db_now
-    ext = os.path.splitext(f.filename)[1].lower()
-    name = f"{uuid.uuid4().hex}{ext}"
     folder = os.path.join(current_app.config["UPLOAD_FOLDER"], "videos")
     os.makedirs(folder, exist_ok=True)
-    f.save(os.path.join(folder, name))
     conn = db()
-    conn.execute("INSERT INTO property_videos (property_id, filename,"
-                 " original_name, created_at) VALUES (?,?,?,?)",
-                 (pid, name, secure_filename(f.filename), db_now()))
+    for f in good:
+        name = f"{uuid.uuid4().hex}{os.path.splitext(f.filename)[1].lower()}"
+        f.save(os.path.join(folder, name))
+        conn.execute("INSERT INTO property_videos (property_id, filename,"
+                     " original_name, created_at) VALUES (?,?,?,?)",
+                     (pid, name, secure_filename(f.filename), db_now()))
     conn.commit()
-    flash("Video added to the listing. Pick it below and make the video.",
-          "success")
+    skipped = len(files) - len(good)
+    flash((f"{len(good)} videos added" if len(good) > 1 else "Video added")
+          + " to the listing. Click them below, with any photos, in the order"
+          " they should play." + (f" {skipped} file(s) skipped: not MP4 or MOV."
+                                  if skipped else ""), "success")
     return redirect(back)
 
 

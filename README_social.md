@@ -74,12 +74,20 @@ add a rule there rather than editing captions by hand every time.
 
 On a post's page, **Step 2 · The design** has three tabs:
 
-* **Post** — the feed picture(s), 1080×1350.
-* **Story** — the same design in 1080×1920, one story per picture. Everything
+* **Post** — the feed picture(s), 1080×1350. Step 1 takes up to 10 photos per
+  listing: 1 is the main photo of the design, 2 and 3 the small ones, and 4
+  onwards follow the design as extra slides (photo, logo tab, contact footer),
+  up to 10 pictures in the post.
+* **Story** — the same design in 1080×1920, one story per picture (extra
+  photos become extra stories). Everything
   that matters sits between y=250 and y=1670, clear of Instagram's bars.
-* **Video** — a 1080×1920 MP4 for a **reel** or a **video story**: a listing
-  video (or a slideshow of photos you click in order) with the Planned frame
-  on top and a 3.5-second closing card with the price and contact. Made on
+* **Video** — a 1080×1920 MP4 for a **reel** or a **video story**: any mix of
+  listing videos and photos (up to 20), clicked in the order they play, with
+  the Planned frame on top and a closing card with the price and contact.
+  Several videos can be uploaded at once. The length follows what was picked
+  (`social_video.plan()`): about 3.2 s a photo plus each video's length, never
+  under 10 s (one or two photos stay longer) and never over 59 s (videos are
+  shortened first, then photos). Made on
   the server by `social_video.py` with ffmpeg from the `imageio-ffmpeg`
   package (no separate install). One video at a time; it uses ~250 MB while
   it runs. On a smaller server set `REEL_SIZE=720x1280`.

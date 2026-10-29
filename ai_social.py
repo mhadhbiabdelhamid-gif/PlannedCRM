@@ -1045,6 +1045,8 @@ def upload_photo(post_id):
     the pictures too. For an area guide the photo becomes the area's cover.
     """
     back = url_for("social.review", post_id=post_id) + "#photos"
+    if request.form.get("back") == "video":       # added from the Video tab
+        back = url_for("social.review", post_id=post_id, tab="video") + "#design"
     uploads = [u for u in request.files.getlist("photo") if u and u.filename]
     if not uploads:
         flash("Choose an image file first.", "error")

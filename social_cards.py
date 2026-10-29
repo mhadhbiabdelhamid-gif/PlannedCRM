@@ -167,6 +167,10 @@ def card_contact():
 
 
 # ------------------------------------------------------------ photo choice
+# Photo 1 is the main photo of the design, 2 and 3 the small ones; any more
+# follow the design as extra slides (a carousel) and extra stories.
+# Facebook and Instagram take 10 pictures in one post.
+MAX_POST_PHOTOS = 10
 
 def photo_options(conn, row, content, properties):
     """{key: [urls]} - the photos each part of a post may use. A key is a
@@ -211,7 +215,8 @@ def save_photos(post_id):
     wanted = (request.get_json(silent=True) or {}).get("photos") or {}
     clean = {}
     for key, opts in options.items():
-        pick = [u for u in wanted.get(key, []) if u in opts][:3]
+        limit = 1 if row["kind"] == "area" else MAX_POST_PHOTOS
+        pick = [u for u in wanted.get(key, []) if u in opts][:limit]
         if not pick:
             return jsonify({"error": "Choose at least one photo for every listing."}), 400
         clean[key] = pick
