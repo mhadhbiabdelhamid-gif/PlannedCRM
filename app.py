@@ -147,7 +147,7 @@ def create_app():
     if os.environ.get("HTTPS_ONLY", "").lower() in ("1", "true", "yes"):
         app.config["SESSION_COOKIE_SECURE"] = True
 
-    for sub in ("images", "docs", "videos"):
+    for sub in ("images", "docs", "videos", "music"):
         os.makedirs(os.path.join(app.config["UPLOAD_FOLDER"], sub), exist_ok=True)
 
     init_db(app)

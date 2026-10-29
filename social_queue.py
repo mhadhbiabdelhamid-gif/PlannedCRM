@@ -356,7 +356,8 @@ class _RenderSlot:
             pass
 
 
-def _render_in_background(app, qid, job_dir, overlay, endcard, items):
+def _render_in_background(app, qid, job_dir, overlay, endcard, items,
+                          music=None, keep_sound=False):
     def run():
         with app.app_context():
             conn = db()
@@ -371,6 +372,7 @@ def _render_in_background(app, qid, job_dir, overlay, endcard, items):
                     name = uuid.uuid4().hex + ".mp4"
                     out = os.path.join(media_folder(), name)
                     sv.render(out, overlay, endcard, items=items,
+                              music=music, keep_sound=keep_sound,
                               progress=progress)
                     thumb = uuid.uuid4().hex + ".jpg"
                     if not sv.poster(out, os.path.join(media_folder(), thumb), 1.2):
@@ -442,6 +444,12 @@ def make_video(post_id):
                 items.append(("photo", path)); kept.append({"photo": piece["photo"]})
     if not items:
         return answer(False, "Click the photos and videos to use, in order.", 400)
+    music_id = str(source.get("music") or "")
+    music = sv.music_path(music_id, current_app.static_folder,
+                          current_app.config["UPLOAD_FOLDER"])
+    if music_id and not music:
+        return answer(False, "That music track is missing. Pick another one.", 400)
+    keep_sound = bool(source.get("keep_sound"))
     job_dir = tempfile.mkdtemp(prefix="reeljob-")
     overlay = os.path.join(job_dir, "overlay.png")
     endcard = os.path.join(job_dir, "end.jpg")
@@ -459,12 +467,13 @@ def make_video(post_id):
         " progress, source, title, created_by, created_at) VALUES"
         " (?,?,?,?,?,?,?,?,?)",
         (post_id, "reel", "video", "rendering", 0,
-         json.dumps({"items": kept}),
+         json.dumps({"items": kept, "music": music_id if music else "",
+                     "keep_sound": keep_sound}),
          _title(post, content), current_user_id(), now))
     conn.commit()
     qid = cur.lastrowid
     _render_in_background(current_app._get_current_object(), qid, job_dir,
-                          overlay, endcard, items)
+                          overlay, endcard, items, music, keep_sound)
     return answer(True, "Making the video…", id=qid)
 
 
@@ -585,6 +594,33 @@ def upload_listing_video(post_id):
           " they should play." + (f" {skipped} file(s) skipped: not MP4 or MOV."
                                   if skipped else ""), "success")
     return redirect(back)
+
+
+@social_bp.route("/post/<int:post_id>/music", methods=["POST"])
+@admin_required
+def upload_music(post_id):
+    """Add a music track for videos (kept for every post after)."""
+    back = url_for("social.review", post_id=post_id, tab="video") + "#design"
+    f = request.files.get("music")
+    ext = os.path.splitext(f.filename)[1].lower() if f and f.filename else ""
+    if ext not in sv.MUSIC_EXT:
+        flash("Choose a music file: MP3, M4A, WAV or OGG.", "error")
+        return redirect(back)
+    from werkzeug.utils import secure_filename
+    label = secure_filename(os.path.splitext(f.filename)[0])[:60] or "track"
+    name = f"{uuid.uuid4().hex[:8]}__{label}{ext}"
+    folder = os.path.join(current_app.config["UPLOAD_FOLDER"], "music")
+    os.makedirs(folder, exist_ok=True)
+    f.save(os.path.join(folder, name))
+    try:
+        sv.probe_audio(os.path.join(folder, name))
+    except RuntimeError as exc:
+        os.remove(os.path.join(folder, name))
+        flash(str(exc), "error")
+        return redirect(back)
+    flash("Music added. It's now in the Music list for every video.", "success")
+    return redirect(url_for("social.review", post_id=post_id, tab="video",
+                            music="u:" + name) + "#design")
 
 
 def listing_videos(post_row):

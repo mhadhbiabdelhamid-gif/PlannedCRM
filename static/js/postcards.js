@@ -755,5 +755,42 @@
     return c;
   }
 
-  window.PostCards = { ready, draw, photoSlide, FORMATS, W: 1080, H: 1350, setContact: (o) => Object.assign(CONTACT, o || {}) };
+  // Carousel marks on slide i of n (feed posts): dots above the footer, a
+  // "2/6" counter on the photo slides and a gold arrow saying "swipe" on all
+  // but the last slide.
+  function carouselMarks(canvas, i, n) {
+    if (n < 2) return canvas;
+    F = FORMATS.post; W = F.W; H = F.H;
+    const ctx = canvas.getContext("2d");
+    ctx.save();
+    // dots
+    const r = 6, gap = 22, y = F.foot - 22, x0 = W / 2 - ((n - 1) * gap) / 2;
+    for (let k = 0; k < n; k++) {
+      ctx.beginPath(); ctx.arc(x0 + k * gap, y, k === i ? r + 1.5 : r, 0, Math.PI * 2);
+      ctx.fillStyle = k === i ? T.gold : "rgba(255,255,255,.92)"; ctx.fill();
+      ctx.lineWidth = 1.5; ctx.strokeStyle = k === i ? T.goldD : "rgba(20,18,15,.35)"; ctx.stroke();
+    }
+    // counter on photo slides
+    if (i > 0) {
+      font(ctx, 700, 26, "Montserrat"); const label = `${i + 1}/${n}`;
+      const w = textW(ctx, label) + 36, x = W - 44 - w, top = 44;
+      ctx.fillStyle = "rgba(20,18,15,.72)";
+      ctx.beginPath(); ctx.roundRect(x, top, w, 50, 25); ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.textBaseline = "middle"; ctx.textAlign = "center";
+      ctx.fillText(label, x + w / 2, top + 26);
+    }
+    // swipe arrow
+    if (i < n - 1) {
+      const cx = W - 52, cy = i === 0 ? 600 : F.foot / 2;
+      ctx.shadowColor = "rgba(0,0,0,.25)"; ctx.shadowBlur = 12;
+      ctx.beginPath(); ctx.arc(cx, cy, 30, 0, Math.PI * 2); ctx.fillStyle = goldGrad(ctx, cx - 30, cx + 30); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = "#fff"; ctx.lineWidth = 5; ctx.lineCap = "round"; ctx.lineJoin = "round";
+      ctx.beginPath(); ctx.moveTo(cx - 6, cy - 12); ctx.lineTo(cx + 7, cy); ctx.lineTo(cx - 6, cy + 12); ctx.stroke();
+    }
+    ctx.restore();
+    return canvas;
+  }
+
+  window.PostCards = { ready, draw, photoSlide, carouselMarks, FORMATS, W: 1080, H: 1350, setContact: (o) => Object.assign(CONTACT, o || {}) };
 })();

@@ -75,11 +75,13 @@ add a rule there rather than editing captions by hand every time.
 On a post's page, **Step 2 · The design** has three tabs:
 
 * **Post** — the feed picture(s), 1080×1350. Step 1 takes up to 10 photos per
-  listing: 1 is the main photo of the design, 2 and 3 the small ones, and 4
-  onwards follow the design as extra slides (photo, logo tab, contact footer),
+  listing: 1 is the main photo of the design, 2 and 3 the small ones. With
+  more than one photo the post is a **carousel** (switch on the Post tab):
+  the design, then every photo after the main one as its own slide (photo,
+  logo tab, contact footer), with dots, a "2/6" counter and a swipe arrow;
   up to 10 pictures in the post.
-* **Story** — the same design in 1080×1920, one story per picture (extra
-  photos become extra stories). Everything
+* **Story** — the same design in 1080×1920, one story per picture (with the
+  carousel on, each photo is its own story too). Everything
   that matters sits between y=250 and y=1670, clear of Instagram's bars.
 * **Video** — a 1080×1920 MP4 for a **reel** or a **video story**: any mix of
   listing videos and photos (up to 20), clicked in the order they play, with
@@ -87,7 +89,12 @@ On a post's page, **Step 2 · The design** has three tabs:
   Several videos can be uploaded at once. The length follows what was picked
   (`social_video.plan()`): about 3.2 s a photo plus each video's length, never
   under 10 s (one or two photos stay longer) and never over 59 s (videos are
-  shortened first, then photos). Made on
+  shortened first, then photos). **Music**: a built-in track
+  (`static/audio/open-house.mp3`, original, royalty-free) or one the team
+  uploads (kept in `uploads/music/`), cut to the video's length with a 1 s
+  fade-in and 2.5 s fade-out; it replaces the videos' own sound unless "keep
+  the videos' own sound" is ticked. Picture posts and picture stories can't
+  carry music through Meta's API, so music goes on reels and video stories. Made on
   the server by `social_video.py` with ffmpeg from the `imageio-ffmpeg`
   package (no separate install). One video at a time; it uses ~250 MB while
   it runs. On a smaller server set `REEL_SIZE=720x1280`.

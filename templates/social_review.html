@@ -137,6 +137,10 @@
   .vbar { display:flex; justify-content:space-between; align-items:center; margin:2px 0 4px; }
   .ghost.mini { padding:4px 10px; font-size:12px; }
   .vup { display:inline-block; margin-right:14px; }
+  .music { border:1px solid var(--line); border-radius:6px; padding:10px 12px; margin:10px 0 4px; }
+  .music .mlabel { font-size:13px; color:var(--text); text-transform:none; letter-spacing:0; margin-right:6px; }
+  .music select { background:#17181a; color:var(--text); border:1px solid var(--line); border-radius:4px; padding:6px; font:inherit; font-size:13px; }
+  .vsrc.small { font-size:13px; }
   .vk .pk-i.on b { display:block; }
   .vprev { display:flex; gap:10px; align-items:flex-start; margin-top:10px; }
   .vprev figure { margin:0; flex:1; }
@@ -411,14 +415,14 @@
     <div>
       {% if needs_photos %}
       {# Step 1: the photos are chosen and approved before the design is made.
-         Click to pick: 1 = main photo, 2 and 3 = the two small photos, 4+ = extra
-         slides after the design. #}
+         Click to pick: 1 = main photo, 2 and 3 = the two small photos; with more
+         than one photo, the carousel adds every photo after 1 as its own slide. #}
       <div class="panel" id="photos">
         <h2>Step 1 · Choose the photos</h2>
         <p class="muted small" style="margin:0 0 10px">
           {% if post.kind == 'area' %}Click the photo to use for this area.
           {% else %}Click photos in order: <b>1</b> is the main photo, <b>2</b> and <b>3</b> are the small ones.
-          Photos <b>4</b> and after come after the design as extra slides and stories (up to 10). Click again to remove.{% endif %}
+          With more than one photo the post becomes a <b>carousel</b>: the design first, then each photo as its own slide (up to 10). Click again to remove.{% endif %}
         </p>
         {% for key, urls in photo_options.items() %}
           {% set p = (properties | selectattr('id', 'equalto', key | int) | first) if key != 'main' else none %}
@@ -457,13 +461,15 @@
         </div>
 
         <div class="pane" id="pane-post">
+          <label class="vsrc" id="carouselRow" hidden><input type="checkbox" id="carouselOn" checked>
+            Carousel: the design, then each photo as its own slide <span class="muted small" id="carouselCount"></span></label>
           <div id="cards"><p class="muted small">Drawing…</p></div>
           <button type="button" class="ghost" onclick="downloadAll()">Download images</button>
         </div>
 
         <div class="pane" id="pane-story" hidden>
           <p class="muted small" style="margin:0 0 10px">One story per picture, 1080×1920. Stories carry
-            no caption, so everything is on the picture.</p>
+            no caption, so everything is on the picture. With the carousel on, each photo is its own story too.</p>
           <div id="storyCards"><p class="muted small">Drawing…</p></div>
           <button type="button" class="ghost" onclick="downloadAll('story')">Download stories</button>
         </div>
@@ -521,6 +527,24 @@
             <span class="muted small upw" hidden>Uploading…</span>
           </form>
           {% endif %}
+          <div class="music">
+            <label class="mlabel" for="vMusic">♪ Music</label>
+            <select id="vMusic">
+              {% for t in music_tracks %}<option value="{{ t.id }}" data-url="{{ t.url }}"
+                {{ 'selected' if request.args.get('music') == t.id }}>{{ t.name }}</option>{% endfor %}
+              <option value="">No music</option>
+            </select>
+            <button type="button" class="ghost mini" id="mPlay" title="Listen">▶ Listen</button>
+            <audio id="mAudio" preload="none"></audio>
+            <label class="vsrc small"><input type="checkbox" id="keepSound"> Keep the videos' own sound under the music</label>
+            <p class="muted small" style="margin:2px 0 0">Cut to the video's length, fading in at the start and out at the end.</p>
+            <form method="post" enctype="multipart/form-data" action="{{ url_for('social.upload_music', post_id=post.id) }}" class="vup">
+              <label class="pk-add">+ Add your own music (MP3)
+                <input type="file" name="music" accept="audio/*,.mp3,.m4a,.wav,.ogg" hidden
+                       onchange="this.form.querySelector('.upw').hidden=false; this.form.submit()"></label>
+              <span class="muted small upw" hidden>Uploading…</span>
+            </form>
+          </div>
           <div class="vprev">
             <figure><canvas id="vFrame"></canvas><figcaption>During the video</figcaption></figure>
             <figure><canvas id="vEnd"></canvas><figcaption>Closing card</figcaption></figure>
@@ -767,6 +791,9 @@ async function redraw() {
   }
   for (const u of extraPhotos(out.length)) out.push(await PostCards.photoSlide(u, null, 'post'));
   if (seq !== drawSeq) return;            // a newer redraw has started
+  out.forEach((cv, i) => PostCards.carouselMarks(cv, i, out.length));
+  const cc = document.getElementById('carouselCount');
+  if (cc) cc.textContent = out.length > 1 ? '(' + out.length + ' slides)' : '';
   canvases = out;
   holder.innerHTML = '';
   out.forEach(cv => holder.appendChild(cv));
@@ -775,14 +802,20 @@ async function redraw() {
   if (TAB === 'video') redrawVideoPreview();
 }
 
-// Photos 4 and after (Step 1) follow the design as extra slides / stories.
-// Facebook and Instagram take 10 pictures in one post.
-function extraPhotos(used) {
+// Carousel: with more than one photo, the design is followed by each photo
+// after the main one as its own slide (and story). Facebook and Instagram
+// take 10 pictures in one post.
+function carouselPhotos(used) {
+  const box = document.getElementById('carouselOn');
   if (CARDS.some(c => c.type === 'area')) return [];
   const extra = [];
-  CARDS.forEach(c => (CHOSEN[c.key] || []).slice(3).forEach(u => { if (!extra.includes(u)) extra.push(u); }));
+  CARDS.forEach(c => (CHOSEN[c.key] || []).slice(1).forEach(u => { if (!extra.includes(u)) extra.push(u); }));
+  const row = document.getElementById('carouselRow');
+  if (row) row.hidden = !extra.length;
+  if (!extra.length || (box && !box.checked)) return [];
   return extra.slice(0, Math.max(10 - used, 0));
 }
+function extraPhotos(used) { return carouselPhotos(used); }
 
 function downloadAll(kind) {
   (kind === 'story' ? storyCanvases : canvases).forEach((c, i) => {
@@ -899,6 +932,8 @@ function showTab(t) {
   updateValBtn();
 }
 document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+document.getElementById('carouselOn')?.addEventListener('change', () => { try { localStorage.setItem('pcrm.carousel', document.getElementById('carouselOn').checked ? '1' : '0'); } catch (e) {} redraw(); });
+try { if (localStorage.getItem('pcrm.carousel') === '0') document.getElementById('carouselOn').checked = false; } catch (e) {}
 
 let storySeq = 0;
 async function redrawStories() {
@@ -913,10 +948,31 @@ async function redrawStories() {
   box.innerHTML = ''; out.forEach(cv => box.appendChild(cv));
 }
 
+// Music: remembered on this browser; a new upload arrives pre-selected.
+const mSel = document.getElementById('vMusic'), mAudio = document.getElementById('mAudio');
+try {
+  const saved = localStorage.getItem('pcrm.music');
+  if (mSel && !new URLSearchParams(location.search).get('music') && saved !== null &&
+      [...mSel.options].some(o => o.value === saved)) mSel.value = saved;
+  if (localStorage.getItem('pcrm.keepSound') === '1') document.getElementById('keepSound').checked = true;
+} catch (e) {}
+mSel?.addEventListener('change', () => { try { localStorage.setItem('pcrm.music', mSel.value); } catch (e) {} mAudio.pause(); setPlay(false); });
+document.getElementById('keepSound')?.addEventListener('change', e => { try { localStorage.setItem('pcrm.keepSound', e.target.checked ? '1' : '0'); } catch (x) {} });
+function setPlay(on) { const b = document.getElementById('mPlay'); if (b) b.textContent = on ? '❚❚ Stop' : '▶ Listen'; }
+document.getElementById('mPlay')?.addEventListener('click', () => {
+  const o = mSel.selectedOptions[0];
+  if (!o || !o.value) return;
+  if (!mAudio.paused) { mAudio.pause(); setPlay(false); return; }
+  if (mAudio.dataset.src !== o.dataset.url) { mAudio.src = o.dataset.url; mAudio.dataset.src = o.dataset.url; }
+  mAudio.play().then(() => setPlay(true)).catch(() => setPlay(false));
+});
+mAudio?.addEventListener('ended', () => setPlay(false));
+
 function videoSource() {
   if (!VITEMS.length) return null;
   const first = VITEMS[0];
   return { items: VITEMS.map(x => x.vid ? { video_id: x.vid } : { photo: x.url }),
+           music: mSel ? mSel.value : '', keep_sound: !!document.getElementById('keepSound')?.checked,
            url: first.vid ? first.url : null, photo: first.vid ? null : first.url };
 }
 
@@ -1059,7 +1115,7 @@ document.getElementById('makeVideo')?.addEventListener('click', async () => {
   btn.disabled = true;
   try {
     const fd = new FormData();
-    fd.append('source', JSON.stringify({ items: src.items }));
+    fd.append('source', JSON.stringify({ items: src.items, music: src.music, keep_sound: src.keep_sound }));
     fd.append('overlay', await blob(OVERLAY, 'image/png'), 'overlay.png');
     fd.append('endcard', await blob(ENDCARD, 'image/jpeg', 0.93), 'end.jpg');
     const r = await fetch('{{ url_for("social.make_video", post_id=post.id) }}', { method: 'POST', body: fd, credentials: 'same-origin' });

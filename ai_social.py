@@ -689,6 +689,8 @@ def _format_context(row, options):
         tiktok_user=cfg("tiktok_username"), tiktok_terms=(tt.MUSIC_TERMS, tt.BRAND_TERMS),
         can_video=bool(videos or any(options.values())),
         video_tool=sv.available(),
+        music_tracks=sv.music_tracks(current_app.static_folder,
+                                     current_app.config["UPLOAD_FOLDER"]),
         latest_video={"id": latest["id"], "status": latest["status"],
                       "video_url": latest["video_url"],
                       "progress": latest["progress"] or 0} if latest else None,

@@ -84,6 +84,67 @@ def plan(kinds, video_lengths=()):
     return out, round(end, 2)
 
 
+# Background music. Built-in tracks live in static/audio; tracks the team adds
+# go to the uploads folder (music/). The music is cut to the video's length,
+# fades in and out, and replaces the videos' own sound unless keep_sound.
+MUSIC_FADE_IN = 1.0
+MUSIC_FADE_OUT = 2.5
+MUSIC_LEVEL = 0.9          # music alone
+MUSIC_UNDER = 0.35         # music under the videos' own sound
+BUILTIN_MUSIC = {"open-house": "Open House (corporate, upbeat)"}
+MUSIC_EXT = {".mp3", ".m4a", ".aac", ".wav", ".ogg"}
+
+
+def music_tracks(static_folder, upload_folder):
+    """[{id, name, url}] - the built-in tracks, then the team's own."""
+    out = [{"id": k, "name": v, "url": f"/static/audio/{k}.mp3"}
+           for k, v in BUILTIN_MUSIC.items()
+           if os.path.isfile(os.path.join(static_folder, "audio", k + ".mp3"))]
+    folder = os.path.join(upload_folder, "music")
+    if os.path.isdir(folder):
+        for name in sorted(os.listdir(folder)):
+            if os.path.splitext(name)[1].lower() in MUSIC_EXT:
+                label = os.path.splitext(name)[0].split("__", 1)[-1].replace("_", " ")
+                out.append({"id": "u:" + name, "name": label,
+                            "url": "/uploads/music/" + name})
+    return out
+
+
+def music_path(track_id, static_folder, upload_folder):
+    """The file for a track id, or None (no music / unknown)."""
+    if not track_id:
+        return None
+    if track_id.startswith("u:"):
+        name = os.path.basename(track_id[2:])
+        path = os.path.join(upload_folder, "music", name)
+    elif track_id in BUILTIN_MUSIC:
+        path = os.path.join(static_folder, "audio", track_id + ".mp3")
+    else:
+        return None
+    return path if os.path.isfile(path) else None
+
+
+def add_music(video_in, out_path, music, seconds, keep_sound=False):
+    """Lay `music` under the finished video: cut to `seconds`, faded in and
+    out. The picture is copied as it is, so this takes a few seconds."""
+    out_fade = max(seconds - MUSIC_FADE_OUT, 0)
+    m = (f"[1:a]atrim=0:{seconds:.2f},asetpts=PTS-STARTPTS,"
+         f"aresample=44100,aformat=channel_layouts=stereo,"
+         f"afade=t=in:st=0:d={MUSIC_FADE_IN},"
+         f"afade=t=out:st={out_fade:.2f}:d={MUSIC_FADE_OUT},"
+         f"volume={MUSIC_UNDER if keep_sound else MUSIC_LEVEL}")
+    if keep_sound:
+        fc = (m + "[m];[0:a][m]amix=inputs=2:duration=first:normalize=0,"
+              "alimiter=limit=0.95[a]")
+    else:
+        fc = m + f",apad=whole_dur={seconds:.2f}[a]"
+    _run([ffmpeg_exe(), "-i", video_in, "-stream_loop", "-1", "-i", music,
+          "-filter_complex", fc, "-map", "0:v", "-map", "[a]",
+          "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-ar", "44100",
+          "-t", f"{seconds:.2f}", "-movflags", "+faststart", out_path],
+         seconds, lambda d: None)
+
+
 def ffmpeg_exe():
     try:
         import imageio_ffmpeg
@@ -94,6 +155,16 @@ def ffmpeg_exe():
             return found
     raise RuntimeError("The video maker (ffmpeg) isn't installed on this "
                        "server. Run: pip install imageio-ffmpeg")
+
+
+def probe_audio(path):
+    """Check a music file can be read; returns its length in seconds."""
+    proc = subprocess.run([ffmpeg_exe(), "-hide_banner", "-i", path],
+                          capture_output=True, text=True, errors="replace")
+    if not re.search(r"Stream #.*Audio:", proc.stderr):
+        raise RuntimeError("That file isn't music the video maker can read.")
+    m = re.search(r"Duration:\s*(\d+):(\d+):([\d.]+)", proc.stderr)
+    return (int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))) if m else 0.0
 
 
 def available():
@@ -183,12 +254,13 @@ def _run(cmd, seconds, on_seconds):
 
 
 def render(out_path, overlay_png, end_jpg, photos=None, video=None,
-           progress=None, items=None):
+           progress=None, items=None, music=None, keep_sound=False):
     """Build the MP4. progress(fraction 0..1) is called as it encodes.
     Returns the length in seconds.
 
     items is the list of ("photo" | "video", path) pieces in order; the
-    older photos=[...] / video=path forms still work.
+    older photos=[...] / video=path forms still work. music is an audio file
+    to lay under the whole video (see add_music).
 
     Made one piece at a time (each photo, each video, then the closing
     card), each by its own ffmpeg run, then joined without re-encoding. A
@@ -277,8 +349,11 @@ def render(out_path, overlay_png, end_jpg, photos=None, video=None,
                 # forward slashes: the list treats \ as an escape (Windows)
                 f.write("file '" + part.replace("\\", "/") + "'\n")
         tmp_out = out_path + ".part.mp4"
+        joined = os.path.join(work, "joined.mp4") if music else tmp_out
         _run([exe, "-f", "concat", "-safe", "0", "-i", listing, "-c", "copy",
-              "-movflags", "+faststart", tmp_out], total, lambda d: None)
+              "-movflags", "+faststart", joined], total, lambda d: None)
+        if music:
+            add_music(joined, tmp_out, music, total, keep_sound)
         os.replace(tmp_out, out_path)
         if progress:
             progress(1.0)

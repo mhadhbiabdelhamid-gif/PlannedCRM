@@ -387,7 +387,7 @@ def activity():
 @bp.route("/uploads/<path:kind>/<path:filename>")
 @login_required
 def uploaded_file(kind, filename):
-    if kind not in ("images", "docs", "avatars", "contacts", "videos"):
+    if kind not in ("images", "docs", "avatars", "contacts", "videos", "music"):
         return redirect(url_for("main.dashboard"))
     folder = os.path.join(current_app.config["UPLOAD_FOLDER"], kind)
     return send_from_directory(folder, filename)
