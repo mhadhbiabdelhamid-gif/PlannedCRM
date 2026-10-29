@@ -15,7 +15,8 @@
   <div class="links">
     {% for p, link in i.results.items() %}<a href="{{ link }}" target="_blank" rel="noopener">✓ {{ platform_names.get(p, p) }}</a>{% endfor %}
     {% if i.video_url %}<a href="{{ i.video_url }}" target="_blank" rel="noopener">Watch the video</a>{% endif %}
-    {% if i.review_url %}<a href="{{ i.review_url }}">Open the post</a>{% endif %}
+    {% if i.review_url and i.status == 'draft' %}<a href="{{ i.review_url }}?tab=video#valpanel"><b>Validate this video →</b></a>
+    {% elif i.review_url %}<a href="{{ i.review_url }}{{ '?tab=video' if i.media_kind == 'video' else ('?tab=story' if i.format == 'story' else '') }}">Open the post</a>{% endif %}
   </div>
 </div>
 {% if i.status in ('ready', 'scheduled', 'failed', 'partial') %}
