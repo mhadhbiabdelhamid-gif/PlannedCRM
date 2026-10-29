@@ -351,6 +351,13 @@
            choice with no default, comments, and the content disclosures. #}
         <div id="ttBox" hidden style="margin:6px 0 4px 26px;padding:10px 12px;border:1px solid var(--line);border-radius:6px;font-size:13px">
           <div>Posting to <b id="ttUser">@{{ tiktok_user }}</b></div>
+          {# Draft: lands in the TikTok app's inbox and is finished there.
+             Works before TikTok has approved the app, on the business account. #}
+          <label class="vsrc"><input type="radio" name="tt_mode" value="draft" checked>
+            Send to TikTok drafts: you finish and post it in the TikTok app</label>
+          <label class="vsrc"><input type="radio" name="tt_mode" value="direct">
+            Post directly (after TikTok approves the app)</label>
+          <div id="ttDirect" hidden>
           <div class="sched-row">
             <label for="tt_privacy" style="margin:0">Who can see it</label>
             <select id="tt_privacy" style="background:#17181a;color:var(--text);border:1px solid var(--line);border-radius:4px;padding:6px">
@@ -358,6 +365,7 @@
             </select>
           </div>
           <label class="vsrc"><input type="checkbox" id="tt_comments" checked> Allow comments</label>
+          </div>
           <div class="muted small" style="margin-top:6px">Labelled as promotional content for our own business
             ("Your brand"). By posting, you agree to TikTok's
             <a href="{{ tiktok_terms[0] }}" target="_blank" rel="noopener" style="color:var(--gold)">Music Usage Confirmation</a>.
@@ -1006,6 +1014,9 @@ async function loadTikTok() {
   } catch (e) { err.textContent = 'Could not reach TikTok. Try again.'; TT_LOADED = false; }
 }
 document.getElementById('vpl_tiktok')?.addEventListener('change', updateTikTok);
+document.querySelectorAll('input[name=tt_mode]').forEach(r => r.addEventListener('change', () => {
+  document.getElementById('ttDirect').hidden = r.value !== 'direct' || !r.checked;
+}));
 document.querySelectorAll('input[name=val_as]').forEach(r => r.addEventListener('change', updateTikTok));
 
 // ---- Validate ----------------------------------------------------------
@@ -1021,12 +1032,14 @@ document.getElementById('valbtn').addEventListener('click', async () => {
   const b = document.getElementById('valbtn'), res = document.getElementById('valres');
   const platforms = [...document.querySelectorAll('.vpl:checked')].map(i => i.value);
   if (!platforms.length) { res.innerHTML = '<div class="alert bad">Tick at least one platform.</div>'; return; }
-  if (platforms.includes('tiktok') && !document.getElementById('tt_privacy').value) {
+  const ttMode = (document.querySelector('input[name=tt_mode]:checked') || {}).value || 'draft';
+  if (platforms.includes('tiktok') && ttMode === 'direct' && !document.getElementById('tt_privacy').value) {
     res.innerHTML = '<div class="alert bad">Choose who can see it on TikTok.</div>'; return;
   }
   const fd = new FormData();
   platforms.forEach(p => fd.append('platform', p));
   if (platforms.includes('tiktok')) {
+    fd.append('tt_mode', ttMode);
     fd.append('tt_privacy', document.getElementById('tt_privacy').value);
     fd.append('tt_comments', document.getElementById('tt_comments').checked ? '1' : '0');
   }

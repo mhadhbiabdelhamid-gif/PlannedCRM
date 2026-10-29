@@ -196,7 +196,8 @@ def _platforms():
 
 
 def _tiktok_options():
-    return {"privacy": request.form.get("tt_privacy", ""),
+    return {"mode": "draft" if request.form.get("tt_mode") == "draft" else "direct",
+            "privacy": request.form.get("tt_privacy", ""),
             "comments": request.form.get("tt_comments") == "1"}
 
 
@@ -885,7 +886,7 @@ def publish_item(item):
 def _publish_tiktok(item, urls, video):
     import social_tiktok as tt
     opts = (item.get("options") or {}).get("tiktok") or {}
-    if not opts.get("privacy"):
+    if opts.get("mode") != "draft" and not opts.get("privacy"):
         raise RuntimeError("No TikTok privacy was chosen for this item. Remove "
                            "it and validate it again with TikTok ticked.")
     if item["format"] == "story":

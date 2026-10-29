@@ -339,6 +339,8 @@ def check_options(opts, fmt):
         return "TikTok has no stories. Untick TikTok for stories."
     if not connected():
         return "TikTok isn't connected (Social settings → TikTok)."
+    if opts.get("mode") == "draft":
+        return None                       # finished in the TikTok app
     if not opts.get("privacy"):
         return "Choose who can see it on TikTok."
     try:
@@ -379,6 +381,9 @@ def _wait(publish_id):
         if s == "FAILED":
             raise RuntimeError("TikTok couldn't publish it: "
                                f"{st.get('fail_reason') or 'unknown reason'}")
+        if s == "SEND_TO_USER_INBOX":
+            # Draft mode: it's waiting in the TikTok app's inbox.
+            return profile
         if s == "PUBLISH_COMPLETE":
             ids = st.get("publicaly_available_post_id") or \
                 st.get("publicly_available_post_id") or []
@@ -395,10 +400,15 @@ def publish_video(path, caption, opts):
     else:
         chunk = CHUNK
         count = max(1, size // chunk)
-    data = _api("/post/publish/video/init/", {
-        "post_info": _post_info(caption, opts, True),
-        "source_info": {"source": "FILE_UPLOAD", "video_size": size,
-                        "chunk_size": chunk, "total_chunk_count": count}})
+    source = {"source": "FILE_UPLOAD", "video_size": size,
+              "chunk_size": chunk, "total_chunk_count": count}
+    if opts.get("mode") == "draft":
+        # Sent to the account's TikTok inbox; someone finishes it in the app
+        # (caption, sound, Post). Works before TikTok's audit, on any account.
+        data = _api("/post/publish/inbox/video/init/", {"source_info": source})
+    else:
+        data = _api("/post/publish/video/init/", {
+            "post_info": _post_info(caption, opts, True), "source_info": source})
     with open(path, "rb") as f:
         for i in range(count):
             start = i * chunk
@@ -419,9 +429,14 @@ def publish_video(path, caption, opts):
 
 
 def publish_photos(urls, caption, opts):
+    draft = opts.get("mode") == "draft"
+    info = {"title": (caption.strip().splitlines() or [""])[0][:90],
+            "description": caption[:4000]} if draft else \
+        _post_info(caption, opts, False)
     data = _api("/post/publish/content/init/", {
-        "post_info": _post_info(caption, opts, False),
+        "post_info": info,
         "source_info": {"source": "PULL_FROM_URL", "photo_cover_index": 0,
                         "photo_images": urls[:35]},
-        "post_mode": "DIRECT_POST", "media_type": "PHOTO"})
+        "post_mode": "MEDIA_UPLOAD" if draft else "DIRECT_POST",
+        "media_type": "PHOTO"})
     return _wait(data["publish_id"])
