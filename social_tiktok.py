@@ -414,7 +414,10 @@ def _wait(publish_id):
             if ids and user:
                 return f"https://www.tiktok.com/@{user}/video/{ids[0]}"
             return profile                # private ("Only me") posts: no link
-    return profile                        # still processing; it carries on
+    # Never call it posted without TikTok saying so.
+    raise RuntimeError("TikTok was still processing it after 4 minutes "
+                       f"(publish id {publish_id}). Check the TikTok app before "
+                       "trying again, so it doesn't go out twice.")
 
 
 def publish_video(path, caption, opts):
