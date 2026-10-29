@@ -145,8 +145,8 @@ def media_file(name):
     """Public, no sign-in: Facebook and Instagram download the stories, reels
     and post images from here. Random 32-hex names, like /social/card/."""
     if not MEDIA_NAME.match(name):
-        if name and name == cfg("tiktok_verify_name"):
-            import social_tiktok
+        import social_tiktok
+        if name and name in social_tiktok.verify_files():
             return social_tiktok.serve_verify_file(name)
         return "Not found", 404
     return send_from_directory(media_folder(), name,

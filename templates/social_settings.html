@@ -137,10 +137,17 @@
     <div class="hint">TikTok downloads photo posts from this address, so it must be verified first. If TikTok
       gives you a verification file, paste its file name and its content below; the CRM serves it at that
       address. Videos are uploaded directly and don't need this.</div>
-    <label for="tiktok_verify_name">Verification file name</label>
-    <input id="tiktok_verify_name" name="tiktok_verify_name" dir="ltr" value="{{ tiktok.verify_name or '' }}" placeholder="tiktokXXXXXXXX.txt">
-    <label for="tiktok_verify_content">Verification file content</label>
-    <input id="tiktok_verify_content" name="tiktok_verify_content" dir="ltr" value="" placeholder="{{ 'saved — leave blank to keep it' if tiktok.verify_name else '' }}">
+    {% if tiktok.verify_files %}
+    <div class="hint" style="margin-top:10px">Verification files the CRM serves now (Production and Sandbox
+      each have their own; keep both):
+      {% for n in tiktok.verify_files %}<br><label style="display:inline;text-transform:none;letter-spacing:0;color:var(--text)">
+        <input type="checkbox" name="tiktok_verify_remove" value="{{ n }}" style="width:auto"> {{ n }}</label>
+        <span style="font-size:11px">(tick to remove)</span>{% endfor %}</div>
+    {% endif %}
+    <label for="tiktok_verify_name">Add a verification file: name</label>
+    <input id="tiktok_verify_name" name="tiktok_verify_name" dir="ltr" value="" placeholder="tiktokXXXXXXXX.txt">
+    <label for="tiktok_verify_content">Its content</label>
+    <input id="tiktok_verify_content" name="tiktok_verify_content" dir="ltr" value="" placeholder="tiktok-developers-site-verification=…">
 
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
       <button type="submit">Save TikTok settings</button>

@@ -92,6 +92,7 @@ def status():
             "redirect_uri": redirect_uri() if S.public_base() else "",
             "photo_prefix": photo_prefix() if S.public_base() else "",
             "verify_name": cfg("tiktok_verify_name"),
+            "verify_files": sorted(verify_files()),
             "days_left": left}
 
 
@@ -202,9 +203,20 @@ def tiktok_keys():
     if f.get("tiktok_client_secret", "").strip():
         set_cfg("tiktok_client_secret", f["tiktok_client_secret"].strip())
     name = os.path.basename(f.get("tiktok_verify_name", "").strip())
-    set_cfg("tiktok_verify_name", name)
-    if f.get("tiktok_verify_content", "").strip() or not name:
-        set_cfg("tiktok_verify_content", f.get("tiktok_verify_content", "").strip())
+    content = f.get("tiktok_verify_content", "").strip()
+    files = verify_files()
+    if name and content:
+        # Kept alongside earlier ones: Production and Sandbox each verify
+        # with their own file, and TikTok may check them again later.
+        files[name] = content
+        set_cfg("tiktok_verify_files", json.dumps(files))
+    for gone in f.getlist("tiktok_verify_remove"):
+        files.pop(gone, None)
+        set_cfg("tiktok_verify_files", json.dumps(files))
+    if name:
+        set_cfg("tiktok_verify_name", name)
+        if content:
+            set_cfg("tiktok_verify_content", content)
     flash("TikTok settings saved.", "success")
     return redirect(url_for("social.settings") + "#tiktok")
 
@@ -291,11 +303,23 @@ def tiktok_creator():
                    max_seconds=info.get("max_video_post_duration_sec"))
 
 
+def verify_files():
+    """{file name: content} of every TikTok verification file to serve."""
+    try:
+        files = json.loads(cfg("tiktok_verify_files") or "{}")
+    except ValueError:
+        files = {}
+    old = cfg("tiktok_verify_name")
+    if old and cfg("tiktok_verify_content") and old not in files:
+        files[old] = cfg("tiktok_verify_content")
+    return files
+
+
 def _verify_file(name):
-    if not name or name != cfg("tiktok_verify_name") or \
-            not cfg("tiktok_verify_content"):
+    content = verify_files().get(name or "")
+    if not content:
         abort(404)
-    return Response(cfg("tiktok_verify_content"), mimetype="text/plain")
+    return Response(content, mimetype="text/plain")
 
 
 @social_bp.record_once
