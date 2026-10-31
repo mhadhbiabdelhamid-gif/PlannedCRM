@@ -137,6 +137,10 @@
   .vbar { display:flex; justify-content:space-between; align-items:center; margin:2px 0 4px; }
   .ghost.mini { padding:4px 10px; font-size:12px; }
   .vup { display:inline-block; margin-right:14px; }
+  .lay { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:0 0 10px; }
+  .lay button { background:transparent; color:var(--muted); border:1px solid var(--line); border-radius:999px;
+                padding:5px 12px; font-size:12px; }
+  .lay button.on { color:#17181a; background:var(--gold); border-color:var(--gold); }
   .music { border:1px solid var(--line); border-radius:6px; padding:10px 12px; margin:10px 0 4px; }
   .music .mlabel { font-size:13px; color:var(--text); text-transform:none; letter-spacing:0; margin-right:6px; }
   .music select { background:#17181a; color:var(--text); border:1px solid var(--line); border-radius:4px; padding:6px; font:inherit; font-size:13px; }
@@ -461,6 +465,15 @@
         </div>
 
         <div class="pane" id="pane-post">
+          <div class="lay" id="layRow" hidden>
+            <span class="small muted">Layout</span>
+            <button type="button" data-l="auto">Auto</button>
+            <button type="button" data-l="classic">1 · Classic</button>
+            <button type="button" data-l="split">2 · Split</button>
+            <button type="button" data-l="panel">3 · Panel</button>
+            <button type="button" data-l="mosaic">4 · Mosaic</button>
+            <span class="small muted" id="layNote"></span>
+          </div>
           <label class="vsrc" id="carouselRow" hidden><input type="checkbox" id="carouselOn" checked>
             Carousel: the design, then each photo as its own slide <span class="muted small" id="carouselCount"></span></label>
           <div id="cards"><p class="muted small">Drawing…</p></div>
@@ -776,6 +789,14 @@ if (pubform) pubform.addEventListener('submit', async (ev) => {
 // one that gets posted. It is redrawn whenever the chosen photos change.
 const CARDS = {{ cards | tojson }};
 let CHOSEN = {{ chosen_photos | tojson }};
+// Feed layout: "auto" turns through the layouts by post number (and by
+// listing inside a multi-listing post), so posts in a row don't repeat.
+let LAYOUT = {{ (content.get('layout') or 'auto') | tojson }};
+const POST_NO = {{ post.id }};
+function layoutFor(i) {
+  const L = ['classic', 'split', 'panel', 'mosaic'];
+  return LAYOUT === 'auto' ? L[(POST_NO + i) % L.length] : LAYOUT;
+}
 let PHOTOS_OK = {{ 'true' if photos_ok else 'false' }};
 const NEEDS_PHOTOS = {{ 'true' if needs_photos else 'false' }};
 PostCards.setContact({{ card_contact | tojson }});
@@ -786,8 +807,8 @@ let drawSeq = 0;
 async function redraw() {
   const seq = ++drawSeq;
   const out = [];
-  for (const c of CARDS) {
-    out.push(await PostCards.draw(Object.assign({}, c, { photos: CHOSEN[c.key] || [] })));
+  for (const [i, c] of CARDS.entries()) {
+    out.push(await PostCards.draw(Object.assign({}, c, { photos: CHOSEN[c.key] || [], layout: layoutFor(i) })));
   }
   for (const u of extraPhotos(out.length)) out.push(await PostCards.photoSlide(u, null, 'post'));
   if (seq !== drawSeq) return;            // a newer redraw has started
@@ -932,6 +953,22 @@ function showTab(t) {
   updateValBtn();
 }
 document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+// Layout picker: only for listing designs (tips, news etc. have their own).
+function paintLayout() {
+  const row = document.getElementById('layRow'); if (!row) return;
+  row.hidden = !CARDS.some(c => !c.type || ['rent', 'sale', 'rented', 'sold'].includes(c.type));
+  row.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.l === LAYOUT));
+  document.getElementById('layNote').textContent = LAYOUT === 'auto' ? '(this post: ' + layoutFor(0) + ')' : '';
+}
+document.getElementById('layRow')?.addEventListener('click', async e => {
+  const b = e.target.closest('button'); if (!b) return;
+  LAYOUT = b.dataset.l; paintLayout(); redraw();
+  try {
+    await fetch('{{ url_for("social.save_layout", post_id=post.id) }}', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ layout: LAYOUT }) });
+  } catch (x) { /* the picture still uses it; it just isn't remembered */ }
+});
+paintLayout();
 document.getElementById('carouselOn')?.addEventListener('change', () => { try { localStorage.setItem('pcrm.carousel', document.getElementById('carouselOn').checked ? '1' : '0'); } catch (e) {} redraw(); });
 try { if (localStorage.getItem('pcrm.carousel') === '0') document.getElementById('carouselOn').checked = false; } catch (e) {}
 

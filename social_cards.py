@@ -228,6 +228,30 @@ def save_photos(post_id):
     return jsonify({"ok": True})
 
 
+# Feed layouts drawn by static/js/postcards.js. "auto" rotates them by post
+# number so consecutive posts never share a layout.
+LAYOUTS = ("auto", "classic", "split", "panel", "mosaic")
+
+
+@social_bp.route("/post/<int:post_id>/layout", methods=["POST"])
+@admin_required
+def save_layout(post_id):
+    """Remember the layout picked on the Post tab."""
+    layout = (request.get_json(silent=True) or {}).get("layout", "auto")
+    if layout not in LAYOUTS:
+        return jsonify({"error": "Unknown layout."}), 400
+    conn = db()
+    row = conn.execute("SELECT * FROM social_posts WHERE id = ?", (post_id,)).fetchone()
+    if not row:
+        return jsonify({"error": "Post not found."}), 404
+    content = json.loads(row["content_json"])
+    content["layout"] = layout
+    conn.execute("UPDATE social_posts SET content_json = ? WHERE id = ?",
+                 (json.dumps(content, ensure_ascii=False), post_id))
+    conn.commit()
+    return jsonify({"ok": True})
+
+
 # ----------------------------------------------------------------- areas
 
 AREA_COVER_KEY = "area_cover:"

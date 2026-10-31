@@ -74,7 +74,12 @@ add a rule there rather than editing captions by hand every time.
 
 On a post's page, **Step 2 · The design** has three tabs:
 
-* **Post** — the feed picture(s), 1080×1350. Step 1 takes up to 10 photos per
+* **Post** — the feed picture(s), 1080×1350. Listing posts come in four
+  layouts with the same identity: **Classic**, **Split** (photo on top,
+  details centred below), **Panel** (full photo, details on a floating cream
+  card) and **Mosaic** (photo grid, details below). "Auto" (the default)
+  turns through them by post number, so consecutive posts never look alike;
+  the choice can be fixed per post on the Post tab. Step 1 takes up to 10 photos per
   listing: 1 is the main photo of the design, 2 and 3 the small ones. With
   more than one photo the post is a **carousel** (switch on the Post tab):
   the design, then every photo after the main one as its own slide (photo,

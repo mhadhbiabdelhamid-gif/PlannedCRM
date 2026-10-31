@@ -339,6 +339,184 @@
     footer(ctx);
   }
 
+  // ------------------------------------------ listing layouts (feed posts)
+  // Same identity everywhere (header, roof, gold price, facts, footer); the
+  // composition changes so a run of posts doesn't look like one slide
+  // repeated. c.layout: "classic" (above) | "split" | "panel" | "mosaic".
+  const LAYOUTS = ["classic", "split", "panel", "mosaic"];
+
+  function roundPhoto(ctx, img, x, y, w, h, r, posX) {
+    ctx.save();
+    ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.clip();
+    ctx.filter = "brightness(1.08) contrast(1.04)";
+    cover(ctx, img, x, y, w, h, posX); ctx.restore();
+  }
+
+  function specsRow(ctx, c, x0, y0, w, h, card) {
+    const specs = (c.specs || []).slice(0, 4);
+    if (!specs.length) return 0;
+    const cw = w / specs.length, big = h > 160;
+    if (card) whiteCard(ctx, x0, y0, w, h);
+    specs.forEach((s, i) => {
+      const cx = x0 + w - cw * (i + 0.5);
+      if (i) { ctx.fillStyle = T.line; ctx.fillRect(x0 + w - cw * i, y0 + 14, 1, h - 28); }
+      const is = big ? 46 : 40;
+      icon(ctx, s.icon, cx - is / 2, y0 + (big ? 18 : 12), is, T.goldD);
+      ctx.save(); ctx.textAlign = "center"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = T.ink;
+      let vs = big ? 33 : 30; font(ctx, 800, vs, "Montserrat");
+      while (textW(ctx, s.value) > cw - 20 && vs > 18) { vs -= 2; font(ctx, 800, vs, "Montserrat"); }
+      if (/[؀-ۿ]/.test(s.value)) { font(ctx, 800, vs - 4, "Cairo"); ctx.direction = "rtl"; }
+      ctx.fillText(s.value, cx, y0 + (big ? 102 : 86));
+      ctx.direction = "rtl"; font(ctx, 700, big ? 24 : 22, "Cairo"); ctx.fillText(s.ar, cx, y0 + (big ? 136 : 117));
+      ctx.direction = "ltr"; font(ctx, 600, big ? 14 : 12, "Montserrat"); spacing(ctx, 1.5); ctx.fillStyle = T.sub;
+      ctx.fillText(String(s.en).toUpperCase(), cx + .75, y0 + (big ? 160 : 137)); ctx.restore();
+    });
+    return h;
+  }
+
+  // Title (up to 2 lines) + English line, centred on cx. Returns its height.
+  function titleCentered(ctx, c, cx, y, maxW, max, min, draw) {
+    ctx.save(); ctx.direction = "rtl"; ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+    const fit = fitLines(ctx, c.titleAr || "", 900, max, min, "Cairo", maxW, 2);
+    let es = Math.round(max * .32), yy = y;
+    for (; es >= 14; es--) { font(ctx, 600, es, "Montserrat"); spacing(ctx, es * .26); if (textW(ctx, c.titleEn || "") <= maxW) break; }
+    spacing(ctx, 0);
+    font(ctx, 900, fit.size, "Cairo"); ctx.fillStyle = T.ink;
+    for (const l of fit.lines) { yy += fit.size; if (draw) ctx.fillText(l, cx, yy); yy += Math.round(fit.size * .16); }
+    if (c.titleEn) {
+      yy += es + 18;
+      if (draw) { ctx.direction = "ltr"; font(ctx, 600, es, "Montserrat"); spacing(ctx, es * .26); ctx.fillStyle = T.sub; ctx.fillText(c.titleEn, cx + es * .13, yy); }
+    }
+    ctx.restore();
+    return yy - y;
+  }
+
+  function areaCentered(ctx, c, cx, y, size) {
+    if (!(c.areaAr || c.areaEn)) return 0;
+    ctx.save(); ctx.direction = "rtl"; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+    font(ctx, 700, size, "Cairo");
+    const t = c.areaAr || c.areaEn, tw = textW(ctx, t), iw = size * 1.25, gap = 10;
+    let en = "", ew = 0;
+    if (c.areaAr && c.areaEn) { font(ctx, 600, Math.round(size * .6), "Montserrat"); en = " · " + c.areaEn; ew = textW(ctx, en); }
+    const total = iw + gap + tw + ew, x0 = cx - total / 2;
+    // Reads right to left: pin, Arabic name, then the English.
+    icon(ctx, "pin", x0 + total - iw, y - size * .95, iw, T.goldD, 1.8);
+    font(ctx, 700, size, "Cairo"); ctx.fillStyle = T.ink; ctx.direction = "rtl"; ctx.textAlign = "right";
+    ctx.fillText(t, x0 + total - iw - gap, y);
+    if (en) { ctx.direction = "ltr"; ctx.textAlign = "right"; font(ctx, 600, Math.round(size * .6), "Montserrat"); ctx.fillStyle = T.sub;
+      ctx.fillText(en, x0 + total - iw - gap - tw - 4, y); }
+    ctx.restore();
+    return size + 6;
+  }
+
+  function tagOf(c) {
+    return { rent: ["للإيجار", "FOR RENT"], sale: ["للبيع", "FOR SALE"],
+             rented: ["تم التأجير", "RENTED"], sold: ["تم البيع", "SOLD"] }[c.type] || ["للإيجار", "FOR RENT"];
+  }
+
+  function washTop(ctx, h) {
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, "rgba(250,248,244,.95)"); g.addColorStop(.55, "rgba(250,248,244,.75)"); g.addColorStop(1, "rgba(250,248,244,0)");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, h);
+  }
+
+  // 2 · Split: big photo on top, details centred on calm ground below.
+  function listingSplit(ctx, c, photos) {
+    ctx.fillStyle = T.bg; ctx.fillRect(0, 0, W, H);
+    const tag = tagOf(c), specsH = 150, specsY = F.foot - 24 - specsH;
+    const th = titleCentered(ctx, c, W / 2, 0, W - 140, 72, 48, false);
+    const pb = priceBox(ctx, c, 0, 0, 58, true);
+    const rowH = Math.max(pb.h, 46);
+    const textTop = specsY - 26 - rowH - 22 - 40 - th - 52;   // roof starts here
+    const heroH = Math.max(520, Math.min(textTop + 40, 780));
+    if (photos[0]) { ctx.save(); ctx.filter = "brightness(1.1) contrast(1.04)"; cover(ctx, photos[0], 0, 0, W, heroH, c.photoPos == null ? .5 : c.photoPos); ctx.restore(); }
+    washTop(ctx, 250);
+    const g = ctx.createLinearGradient(0, heroH - 200, 0, heroH);
+    g.addColorStop(0, "rgba(250,248,244,0)"); g.addColorStop(1, T.bg); ctx.fillStyle = g; ctx.fillRect(0, heroH - 200, W, 201);
+    if (photos[1]) framedPhoto(ctx, photos[1], W - 330, heroH - 330, 270, 190, 3);
+    if (photos[2]) framedPhoto(ctx, photos[2], W - 250, heroH - 200, 210, 150, -2.5);
+    header(ctx, tag[0], tag[1]);
+    let y = Math.max(textTop, heroH - 60);
+    roof(ctx, W / 2 - 80, y, 160, 48, 7); y += 52;
+    y += titleCentered(ctx, c, W / 2, y, W - 140, 72, 48, true);
+    y += 22;
+    // area (right) and price (left) on one row
+    const ah = areaLine(ctx, c, W - 66, y, 32);
+    if (pb.w) priceBox(ctx, c, 66, y + Math.max(0, (ah - pb.h) / 2), 58);
+    specsRow(ctx, c, 52, specsY, W - 104, specsH, true);
+    if (c.type === "rented" || c.type === "sold") stampAt(ctx, tag[0], tag[1], 330, heroH - 220);
+    footer(ctx);
+  }
+
+  // 3 · Panel: full-bleed photo, details on a floating cream card.
+  function listingPanel(ctx, c, photos) {
+    ctx.fillStyle = T.bg; ctx.fillRect(0, 0, W, H);
+    if (photos[0]) { ctx.save(); ctx.filter = "brightness(1.1) contrast(1.04)"; cover(ctx, photos[0], 0, 0, W, F.foot, c.photoPos == null ? .5 : c.photoPos); ctx.restore(); }
+    washTop(ctx, 280);
+    const tag = tagOf(c);
+    if (photos[1]) framedPhoto(ctx, photos[1], 60, 270, 290, 205, -3);
+    if (photos[2]) framedPhoto(ctx, photos[2], 120, 440, 240, 170, 2.5);
+    header(ctx, tag[0], tag[1]);
+    // the card, anchored to the footer
+    const x = 44, w = W - 88, pad = 40, R = x + w - pad;
+    const th = titleBlock(ctx, c, R, 0, w - 2 * pad, 64, 44, false);
+    const pb = priceBox(ctx, c, 0, 0, 54, true);
+    const ahM = c.areaAr || c.areaEn ? (c.areaAr && c.areaEn ? 64 : 40) : 0;
+    const specsH = (c.specs || []).length ? 140 : 0;
+    const cardH = pad + 46 + th + 22 + Math.max(ahM, pb.h) + 26 + (specsH ? specsH + 6 : 0) + 18;
+    const y0 = F.foot - 30 - cardH;
+    ctx.save();
+    ctx.shadowColor = "rgba(20,18,15,.28)"; ctx.shadowBlur = 40; ctx.shadowOffsetY = 16;
+    ctx.fillStyle = "rgba(250,248,244,.97)"; ctx.beginPath(); ctx.roundRect(x, y0, w, cardH, 26); ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = goldGrad(ctx, x, x + w); ctx.beginPath(); ctx.roundRect(x, y0, w, 8, [26, 26, 0, 0]); ctx.fill();
+    let y = y0 + pad - 4;
+    roof(ctx, R - 150, y, 150, 44, 6); y += 46;
+    y += titleBlock(ctx, c, R, y, w - 2 * pad, 64, 44, true);
+    y += 22;
+    const ah = areaLine(ctx, c, R, y, 30);
+    if (pb.w) priceBox(ctx, c, x + pad, y + Math.max(0, (ah - pb.h) / 2), 54);
+    y += Math.max(ah, pb.h) + 26;
+    if (specsH) { ctx.fillStyle = T.line; ctx.fillRect(x + pad, y - 8, w - 2 * pad, 1); specsRow(ctx, c, x + 10, y, w - 20, specsH, false); }
+    if (c.type === "rented" || c.type === "sold") stampAt(ctx, tag[0], tag[1], W - 300, 420);
+    footer(ctx);
+  }
+
+  // 4 · Mosaic: photo grid (main on the right), details below.
+  function listingMosaic(ctx, c, photos) {
+    ctx.fillStyle = T.bg; ctx.fillRect(0, 0, W, H);
+    accent(ctx, -60, 300, 700, 360, -10);
+    const tag = tagOf(c);
+    header(ctx, tag[0], tag[1]);
+    const specsH = 150, specsY = F.foot - 24 - specsH, R = W - 60;
+    const pb = priceBox(ctx, c, 0, 0, 60, true);
+    const tw = Math.max(380, Math.min(560, R - 60 - pb.w - 36));   // title never runs into the price
+    const th = titleBlock(ctx, c, R, 0, tw, 64, 44, false);
+    const ahM = c.areaAr || c.areaEn ? (c.areaAr && c.areaEn ? 64 : 40) : 0;
+    const textH = 46 + th + 18 + ahM;
+    const gy = 236, gBottom = specsY - 34 - textH - 30, gh = Math.max(380, gBottom - gy);
+    const side = photos.filter(Boolean).length > 1;
+    const mainW = side ? 640 : W - 104, mx = W - 52 - mainW;
+    roundPhoto(ctx, photos[0], mx, gy, mainW, gh, 22, c.photoPos == null ? .5 : c.photoPos);
+    if (side) {
+      const sw = mainW === 640 ? W - 104 - 640 - 16 : 0, sx = 52;
+      const small = [photos[1], photos[2]].filter(Boolean);
+      const sh = small.length === 2 ? (gh - 16) / 2 : gh;
+      small.forEach((im, i) => roundPhoto(ctx, im, sx, gy + i * (sh + 16), sw, sh, 22, .5));
+    }
+    // gold corner tick on the main photo
+    ctx.fillStyle = goldGrad(ctx, mx, mx + 160); ctx.fillRect(mx + mainW - 150, gy - 10, 150, 6); ctx.fillRect(mx + mainW + 4, gy - 10, 6, 110);
+    let y = gy + gh + 34;
+    roof(ctx, R - 150, y, 150, 44, 6); y += 46;
+    y += titleBlock(ctx, c, R, y, tw, 64, 44, true);
+    y += 18; areaLine(ctx, c, R, y, 30);
+    // price on the left, level with the title block
+    if (pb.w) priceBox(ctx, c, 60, gy + gh + 34 + (textH - pb.h) / 2, 60);
+    specsRow(ctx, c, 52, specsY, W - 104, specsH, true);
+    if (c.type === "rented" || c.type === "sold") stampAt(ctx, tag[0], tag[1], mx + mainW / 2, gy + gh / 2);
+    footer(ctx);
+  }
+
   function stamp(ctx, ar, en) {
     ctx.save();
     font(ctx, 900, 84, "Cairo"); const wa = textW(ctx, ar);
@@ -726,7 +904,9 @@
       case "area": area(ctx, card, photos); break;
       case "market": market(ctx, card); break;
       case "news": news(ctx, card); break;
-      default: (story ? listingStory : listing)(ctx, card, photos);
+      default:
+        if (story) listingStory(ctx, card, photos);
+        else ({ split: listingSplit, panel: listingPanel, mosaic: listingMosaic }[card.layout] || listing)(ctx, card, photos);
     }
     return c;
   }
@@ -792,5 +972,5 @@
     return canvas;
   }
 
-  window.PostCards = { ready, draw, photoSlide, carouselMarks, FORMATS, W: 1080, H: 1350, setContact: (o) => Object.assign(CONTACT, o || {}) };
+  window.PostCards = { ready, draw, photoSlide, carouselMarks, LAYOUTS, FORMATS, W: 1080, H: 1350, setContact: (o) => Object.assign(CONTACT, o || {}) };
 })();
