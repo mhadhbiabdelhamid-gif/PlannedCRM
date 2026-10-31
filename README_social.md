@@ -101,7 +101,7 @@ On a post's page, **Step 2 · The design** has three tabs:
   the videos' own sound" is ticked. Picture posts and picture stories can't
   carry music through Meta's API, so music goes on reels and video stories.
   Every post has the Video tab: **the design itself** is a piece too (the
-  9:16 story picture, shown whole and slowly zooming in), so a tip or a
+  9:16 story picture, shown whole and held still), so a tip or a
   market post becomes a reel; those start with the design and without the
   closing card. **Length**: Auto (as above) or **Exactly** 5-90 s: photos
   and designs share the time the videos leave, a video that's too short

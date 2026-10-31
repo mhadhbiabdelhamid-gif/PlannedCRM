@@ -520,7 +520,7 @@
             and as a story.</p>
           <p class="muted small" style="margin:6px 0 0">Click the design, videos and photos in the order they
             should play; the number shows the order. Click again to remove. Mix as many as you like
-            (up to 20). The design is shown whole, slowly zooming in.</p>
+            (up to 20). The design is shown whole and still.</p>
           <div class="vk" id="vk">
             {% for c in cards %}
             <button type="button" class="pk-i des" data-design="{{ loop.index0 }}" data-url="design:{{ loop.index0 }}"
@@ -1195,9 +1195,9 @@ function placeMusic() {
   note.hidden = !withMusic.checked;
   const o = mSel && mSel.selectedOptions[0];
   note.textContent = TAB === 'story'
-    ? 'The picture zooms in slowly while the music plays; the music carries on from one story to the next. Stories have no caption'
+    ? 'The picture stays still while the music plays; the music carries on from one story to the next. Stories have no caption'
       + (o && o.dataset.credit ? ', so this track\'s credit can\'t be shown: pick a CC0 track for stories.' : '.')
-    : (n > 1 ? 'The ' + n + ' slides play one after another, each zooming in slowly. ' : 'The picture zooms in slowly while the music plays. ')
+    : (n > 1 ? 'The ' + n + ' slides play one after another, each held still. ' : 'The picture stays still while the music plays. ')
       + 'Instagram doesn\'t allow music on a swipe carousel through its API, so this is the way to have both.';
 }
 withMusic?.addEventListener('change', placeMusic);

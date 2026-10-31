@@ -52,7 +52,6 @@ STORY_MAX = 60             # Instagram / Facebook video stories
 MAX_ITEMS = 20             # pieces in one reel
 MAX_PHOTOS = MAX_ITEMS     # kept for older callers
 PAN_MAX = 640              # px a photo travels; more feels hurried
-ZOOM = 0.06                # the design grows this much while on screen
 STILLS = ("photo", "design")
 
 
@@ -302,6 +301,12 @@ ENCODE = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "22",
           "-r", str(FPS), "-g", str(FPS * 2), "-video_track_timescale", "15360",
           "-c:a", "aac", "-b:a", "128k", "-ar", "44100", "-ac", "2",
           "-threads", "2", "-filter_complex_threads", "1"]
+# Pictures held still (posts and stories with music): sharper, tuned for a
+# picture that doesn't move, and a keyframe only every 10 s, so the text
+# doesn't "breathe" each time the encoder refreshes the picture.
+ENCODE_STILL = [("20" if v == "22" else v) for v in ENCODE]
+ENCODE_STILL = ENCODE_STILL[:ENCODE_STILL.index("-g")] + ["-g", str(FPS * 10)] + \
+    ENCODE_STILL[ENCODE_STILL.index("-g") + 2:] + ["-tune", "stillimage"]
 SILENCE = ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"]
 
 
@@ -336,15 +341,11 @@ def _run(cmd, seconds, on_seconds):
 
 
 def _zoom_still(exe, src, L, w, h, fade_in="", fade_out=""):
-    """ffmpeg arguments: one picture shown whole for L seconds at w x h,
-    growing by ZOOM. Drawn at twice the size first so the slow zoom doesn't
-    shimmer."""
-    frames = max(round(L * FPS), 1)
-    vf = (f"[0:v]scale={w * 2}:{h * 2},setsar=1,"
-          f"zoompan=z='1+{ZOOM}*on/{frames}':"
-          f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
-          f"d={frames}:s={w}x{h}:fps={FPS},"
-          f"setsar=1,format=yuv420p{fade_in}{fade_out}[v]")
+    """ffmpeg arguments: one picture shown whole and perfectly still for L
+    seconds at w x h. (A slow zoom was tried: ffmpeg moves the picture in
+    whole pixels, so text on it visibly shook.)"""
+    vf = (f"[0:v]scale={w}:{h}:flags=lanczos,setsar=1,{_still(L)},"
+          f"format=yuv420p{fade_in}{fade_out}[v]")
     return [exe, "-i", src, *SILENCE, "-filter_complex", vf, "-map", "[v]",
             "-map", "1:a", "-t", f"{L:.2f}"]
 
@@ -366,7 +367,7 @@ def picture_videos(out_paths, pictures, seconds, music, music_start=0.0,
                    one_video=True, progress=None):
     """Feed posts and picture stories with music: Meta's API takes music
     only on videos, so the pictures become videos of the same size, each
-    picture shown whole and slowly zooming in, with the music under it.
+    picture shown whole and still, with the music under it.
 
     one_video=True (a feed post): all the pictures in one video of
     `seconds`, dipping to cream between slides; out_paths has one path.
@@ -394,7 +395,7 @@ def picture_videos(out_paths, pictures, seconds, music, music_start=0.0,
                 fo = ("" if i == len(pictures) - 1 else
                       f",fade=t=out:st={each - FADE:.2f}:d={FADE}:color={CREAM}")
                 part = os.path.join(work, f"s{i}.mp4")
-                _run(_zoom_still(exe, src, each, w, h, fi, fo) + ENCODE + [part],
+                _run(_zoom_still(exe, src, each, w, h, fi, fo) + ENCODE_STILL + [part],
                      each, lambda d, i=i: progress and progress(
                          min((i * each + d) / seconds, 0.95)))
                 parts.append(part)
@@ -405,7 +406,7 @@ def picture_videos(out_paths, pictures, seconds, music, music_start=0.0,
         lengths = []
         for i, (src, out) in enumerate(zip(pictures, out_paths)):
             part = os.path.join(work, f"s{i}.mp4")
-            _run(_zoom_still(exe, src, seconds, w, h) + ENCODE + [part], seconds,
+            _run(_zoom_still(exe, src, seconds, w, h) + ENCODE_STILL + [part], seconds,
                  lambda d, i=i: progress and progress(
                      min((i * seconds + d) / (seconds * len(pictures)), 0.95)))
             add_music(part, out, music, seconds, False,
@@ -424,7 +425,7 @@ def render(out_path, overlay_png, end_jpg, photos=None, video=None,
 
     items is the list of ("photo" | "design" | "video", path) pieces in
     order; the older photos=[...] / video=path forms still work. A design is
-    the 9:16 picture drawn in the browser: shown whole, growing slightly,
+    the 9:16 picture drawn in the browser: shown whole and still,
     without the frame (it has its own header). target is the length wanted
     in seconds (None = Auto, see plan()); end_card=False leaves out the
     closing card. music is an audio file to lay under the whole video,
@@ -491,7 +492,7 @@ def render(out_path, overlay_png, end_jpg, photos=None, video=None,
                                *extra, "-filter_complex", vf, "-map", "[v]",
                                "-map", amap, "-t", f"{L:.2f}"], L))
             elif kind == "design":
-                # The whole design, growing by ZOOM over its time.
+                # The whole design, held still.
                 steps.append((_zoom_still(exe, src, L, SIZE_W, SIZE_H,
                                           fade_in, fade_out), L))
             else:
