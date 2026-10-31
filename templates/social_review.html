@@ -154,6 +154,9 @@
   .lres .tr .t b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .lic { display:inline-block; font-size:11px; padding:1px 6px; border-radius:8px; border:1px solid var(--line); color:var(--muted); }
   .lic.free { color:#8fd1a6; border-color:#2f5a3e; }
+  #musicBox.pic .vonly { display:none; }
+  #musicBox.pic.off #musicBody { display:none; }
+  #musicBox.vid .ponly { display:none; }
   .mcredit { font-size:12px; color:var(--muted); margin:4px 0 0; }
   .vup { display:inline-block; margin-right:14px; }
   .lay { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:0 0 10px; }
@@ -582,7 +585,32 @@
             <span class="muted small upw" hidden>Uploading…</span>
           </form>
           {% endif %}
-          <div class="music">
+          <div class="vprev">
+            <figure><canvas id="vFrame"></canvas><figcaption>During the video</figcaption></figure>
+            <figure><canvas id="vEnd"></canvas><figcaption>Closing card</figcaption></figure>
+          </div>
+          <div class="actions" style="align-items:center">
+            <button type="button" class="save" id="makeVideo" {{ 'disabled' if not video_tool }}>Make the video</button>
+            <span class="small muted" id="videoState"></span>
+          </div>
+          <div class="bar" id="videoBar" hidden><i></i></div>
+          <div id="videoOut"></div>
+        </div>
+        {% endif %}
+          <div class="music" id="musicBox">
+            {# Post and Story tabs: music is optional. With it, the pictures are
+               published as videos (Meta takes music only on videos). #}
+            <div class="ponly">
+              <label class="vsrc" style="margin:0"><input type="checkbox" id="withMusic">
+                <b>♪ Add music</b>&nbsp;<span class="muted small" id="withMusicWhat"></span></label>
+              <div class="row" id="picLenRow" hidden>
+                <span class="small" id="picLenLabel">Video length</span>
+                <input type="number" id="picSeconds" min="5" max="90" step="1" value="15" aria-label="Seconds">
+                <span class="small muted">seconds</span>
+              </div>
+              <p class="muted small" id="picMusicNote" hidden style="margin:2px 0 6px"></p>
+            </div>
+            <div id="musicBody">
             <label class="mlabel" for="vMusic">♪ Music</label>
             <select id="vMusic">
               {% for t in music_tracks %}<option value="{{ t.id }}" data-url="{{ t.url }}" data-credit="{{ t.credit }}"
@@ -598,7 +626,7 @@
               <input type="number" id="mStart" min="0" step="1" value="0" aria-label="Music start (seconds)">
               <span class="small muted">seconds into the track (skip a slow intro)</span>
             </div>
-            <label class="vsrc small"><input type="checkbox" id="keepSound"> Keep the videos' own sound under the music</label>
+            <label class="vsrc small vonly"><input type="checkbox" id="keepSound"> Keep the videos' own sound under the music</label>
             <p class="muted small" style="margin:2px 0 0">Cut to the video's length, fading in at the start and out at the end.</p>
             <p class="mcredit" id="mCredit" hidden></p>
             <form method="post" enctype="multipart/form-data" action="{{ url_for('social.upload_music', post_id=post.id) }}" class="vup">
@@ -637,18 +665,8 @@
               <button type="button" class="ghost mini" id="libMore" hidden>More results</button>
             </div>
           </div>
-          <div class="vprev">
-            <figure><canvas id="vFrame"></canvas><figcaption>During the video</figcaption></figure>
-            <figure><canvas id="vEnd"></canvas><figcaption>Closing card</figcaption></figure>
           </div>
-          <div class="actions" style="align-items:center">
-            <button type="button" class="save" id="makeVideo" {{ 'disabled' if not video_tool }}>Make the video</button>
-            <span class="small muted" id="videoState"></span>
-          </div>
-          <div class="bar" id="videoBar" hidden><i></i></div>
-          <div id="videoOut"></div>
-        </div>
-        {% endif %}
+
       </div>
     </div>
   </div>
@@ -810,6 +828,34 @@ if (pubform) pubform.addEventListener('submit', async (ev) => {
     return;
   }
   const where = ticked.map(p => p === 'facebook' ? 'Facebook' : 'Instagram');
+  if (musicOn()) {
+    // With music the post goes out as a video, made on the server first;
+    // it then publishes by itself.
+    if (!mSel.value) { showResult({status: 'failed', message: 'Pick a track in the Music box, or untick Add music.'}); return; }
+    const secs = picSecs('post');
+    if (!secs) { showResult({status: 'failed', message: 'Choose a video length from 5 to 90 seconds.'}); return; }
+    if (!confirm('Post this now to ' + where.join(' and ') + ' with music?\nIt goes out as a ' + secs +
+                 '-second video (a reel in the Instagram feed, a video post on Facebook).')) return;
+    publishing = true; btn.disabled = true;
+    try {
+      const fd = new FormData();
+      ticked.forEach(p => fd.append('platform', p));
+      fd.append('format', 'post'); fd.append('post_now', '1');
+      appendMusic(fd, 'post');
+      fd.append('caption_en', document.getElementById('caption_en').value);
+      fd.append('caption_ar', document.getElementById('caption_ar').value);
+      fd.append('hashtags', document.getElementById('hashtags').value);
+      for (let i = 0; i < canvases.length; i++) fd.append('image', await blob(canvases[i], 'image/jpeg', 0.92), 'img-' + (i + 1) + '.jpg');
+      const r = await fetch('{{ url_for("social.queue_images", post_id=post.id) }}', { method: 'POST', body: fd, credentials: 'same-origin' });
+      const d = await r.json();
+      showResult({status: d.ok ? 'posted' : 'failed', message: d.message});
+      if (d.ok) btn.textContent = 'Sent ✓ (making the video)';
+      else btn.disabled = false;
+    } catch (e) {
+      showResult({status: 'failed', message: 'Could not reach the server. Try again.'}); btn.disabled = false;
+    } finally { publishing = false; }
+    return;
+  }
   if (!confirm('Post this now to ' + where.join(' and ') + '?')) return;
 
   publishing = true;
@@ -1029,6 +1075,7 @@ function showTab(t) {
   document.querySelectorAll('.pane').forEach(p => p.hidden = p.id !== 'pane-' + t);
   document.getElementById('valWhat').textContent = TAB_WHAT[t];
   document.getElementById('valAs').hidden = t !== 'video';
+  placeMusic();
   updateTikTok();
   if (t === 'story' && storyStale) redrawStories();
   if (t === 'video' && videoStale) redrawVideoPreview();
@@ -1110,6 +1157,52 @@ document.querySelectorAll('.vlenbox .chips button').forEach(b => b.addEventListe
 }));
 document.getElementById('endCard')?.addEventListener('change', lenChanged);
 
+// Music on the Post and Story tabs. The same box sits under whichever tab
+// is open. Meta takes music only on videos, so with "Add music" the post
+// goes out as a video (a reel in the Instagram feed, a video post on
+// Facebook) and each story picture as a video story.
+const withMusic = document.getElementById('withMusic'), picSecsBox = document.getElementById('picSeconds');
+const PIC_LEN = { post: 15, story: 10 };
+try { const v = JSON.parse(localStorage.getItem('pcrm.picLen') || 'null'); if (v) Object.assign(PIC_LEN, v); } catch (e) {}
+function musicOn() { return TAB !== 'video' && !!withMusic && withMusic.checked; }
+function picSecs(t) {
+  const n = Math.round(+picSecsBox.value), top = t === 'story' ? 60 : 90;
+  return n >= 5 && n <= top ? n : null;
+}
+function appendMusic(fd, t) {
+  fd.append('music', mSel.value);
+  fd.append('music_start', Math.max(0, +(document.getElementById('mStart') || {}).value || 0));
+  fd.append('seconds', picSecs(t));
+}
+function placeMusic() {
+  const mb = document.getElementById('musicBox'); if (!mb) return;
+  if (TAB === 'video') {
+    const pv = document.getElementById('pane-video');
+    pv.insertBefore(mb, pv.querySelector('.vprev'));
+    mb.className = 'music vid'; return;
+  }
+  document.getElementById('pane-' + TAB).appendChild(mb);
+  mb.className = 'music pic' + (withMusic.checked ? '' : ' off');
+  picSecsBox.max = TAB === 'story' ? 60 : 90;
+  picSecsBox.value = PIC_LEN[TAB];
+  document.getElementById('picLenRow').hidden = !withMusic.checked;
+  document.getElementById('picLenLabel').textContent = TAB === 'story' ? 'Each story' : 'Video length';
+  const n = TAB === 'story' ? (storyCanvases.length || CARDS.length) : canvases.length;
+  document.getElementById('withMusicWhat').textContent = TAB === 'story'
+    ? '(each story picture goes out as a video story)'
+    : '(goes out as a video: a reel in the Instagram feed, a video post on Facebook)';
+  const note = document.getElementById('picMusicNote');
+  note.hidden = !withMusic.checked;
+  const o = mSel && mSel.selectedOptions[0];
+  note.textContent = TAB === 'story'
+    ? 'The picture zooms in slowly while the music plays; the music carries on from one story to the next. Stories have no caption'
+      + (o && o.dataset.credit ? ', so this track\'s credit can\'t be shown: pick a CC0 track for stories.' : '.')
+    : (n > 1 ? 'The ' + n + ' slides play one after another, each zooming in slowly. ' : 'The picture zooms in slowly while the music plays. ')
+      + 'Instagram doesn\'t allow music on a swipe carousel through its API, so this is the way to have both.';
+}
+withMusic?.addEventListener('change', placeMusic);
+picSecsBox?.addEventListener('input', () => { if (TAB !== 'video') { PIC_LEN[TAB] = +picSecsBox.value || PIC_LEN[TAB]; try { localStorage.setItem('pcrm.picLen', JSON.stringify(PIC_LEN)); } catch (e) {} } });
+
 // Music: remembered on this browser; a new upload arrives pre-selected.
 const mSel = document.getElementById('vMusic'), mAudio = document.getElementById('mAudio');
 try {
@@ -1124,8 +1217,9 @@ function musicInfo() {
   if (rm) rm.hidden = !(o && o.dataset.removable);
   if (credit) {
     credit.hidden = !(o && o.dataset.credit);
-    credit.textContent = o && o.dataset.credit ? 'Added to the end of the reel\'s caption: ' + o.dataset.credit : '';
+    credit.textContent = o && o.dataset.credit ? 'Added to the end of the caption: ' + o.dataset.credit : '';
   }
+  if (TAB !== 'video') placeMusic();
 }
 mSel?.addEventListener('change', () => { try { localStorage.setItem('pcrm.music', mSel.value); } catch (e) {} mAudio.pause(); setPlay(false); musicInfo(); });
 function addTrackOption(t) {
@@ -1506,6 +1600,11 @@ document.getElementById('valbtn').addEventListener('click', async () => {
       const list = TAB === 'story' ? storyCanvases : canvases;
       if (!list.length) throw new Error('The design is still drawing. Try again in a second.');
       fd.append('format', TAB);
+      if (musicOn()) {
+        if (!mSel.value) throw new Error('Pick a track in the Music box, or untick Add music.');
+        if (!picSecs(TAB)) throw new Error('Choose a length from 5 to ' + (TAB === 'story' ? 60 : 90) + ' seconds.');
+        appendMusic(fd, TAB);
+      }
       for (let i = 0; i < list.length; i++) fd.append('image', await blob(list[i], 'image/jpeg', 0.92), 'img-' + (i + 1) + '.jpg');
       url = '{{ url_for("social.queue_images", post_id=post.id) }}';
     }

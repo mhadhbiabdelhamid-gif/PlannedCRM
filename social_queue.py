@@ -242,7 +242,10 @@ def item_view(row):
     d["source"] = json.loads(row["source"] or "{}")
     d["format_label"] = FORMATS.get(row["format"], row["format"])
     if row["format"] == "story" and row["media_kind"] == "video":
-        d["format_label"] = "Video story"
+        d["format_label"] = ("Story with music" if d["source"].get("pictures")
+                             else "Video story")
+    elif row["format"] == "post" and row["media_kind"] == "video":
+        d["format_label"] = "Post with music"
     d["status_label"] = STATUS_LABEL.get(row["status"], row["status"])
     d["local_at"] = to_local(row["publish_at"])
     d["thumb_url"] = media_url(row["thumb"]) if row["thumb"] else None
@@ -287,13 +290,73 @@ def queue_images(post_id):
         return answer(False, str(exc), 400)
     if when and when < utc_str(utc_now()):
         return answer(False, "That time has already passed.", 400)
+    # With music: the pictures are turned into videos in the background
+    # (Meta takes music only on videos), then the item becomes ready or
+    # scheduled by itself. post_now: publish as soon as the video is made.
+    music_id = (request.form.get("music") or "").strip()
+    music = None
+    if music_id:
+        music = sv.music_path(music_id, current_app.static_folder,
+                              current_app.config["UPLOAD_FOLDER"])
+        if not music:
+            return answer(False, "That music track is missing. Pick another one.", 400)
+        top = sv.MAX_TARGET if fmt == "post" else sv.STORY_MAX
+        try:
+            seconds = int(request.form.get("seconds") or 0)
+        except ValueError:
+            seconds = 0
+        if not sv.MIN_TARGET <= seconds <= top:
+            return answer(False, f"Choose a length from {sv.MIN_TARGET} to "
+                          f"{top} seconds.", 400)
+        try:
+            music_start = max(float(request.form.get("music_start") or 0), 0.0)
+        except ValueError:
+            music_start = 0.0
+        if request.form.get("post_now"):
+            when = utc_str(utc_now())
     names = [n for n in (_store(f, "jpg") for f in
                          request.files.getlist("image")[:10]) if n]
     if not names:
         return answer(False, "The pictures didn't come through. Wait for the "
                       "design to finish drawing, then try again.", 400)
+    if music and fmt == "post" and len(names) * sv.PICTURE_MIN_SLIDE > seconds:
+        return answer(False, f"{len(names)} slides need at least "
+                      f"{round(len(names) * sv.PICTURE_MIN_SLIDE)} seconds with "
+                      "music. Make it longer.", 400)
     now = utc_str(utc_now())
     conn = db()
+    if music:
+        credit = sv.music_credit(music_id, current_app.config["UPLOAD_FOLDER"])
+        if caption and credit and credit not in caption:
+            caption = caption + "\n\n" + credit
+        cur = conn.execute(
+            "INSERT INTO social_queue (post_id, format, media_kind, media, thumb,"
+            " caption, platforms, status, progress, publish_at, source, title,"
+            " created_by, created_at, validated_by, validated_at) VALUES"
+            " (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (post_id, fmt, "video", "[]", names[0], caption,
+             json.dumps(platforms), "rendering", 0, when,
+             json.dumps({"pictures": names, "music": music_id,
+                         "music_start": music_start, "seconds": seconds,
+                         "credit": credit}),
+             _title(post, content), current_user_id(), now, current_user_id(),
+             now))
+        qid = cur.lastrowid
+        if "tiktok" in platforms:
+            conn.execute("UPDATE social_queue SET options = ? WHERE id = ?",
+                         (json.dumps({"tiktok": _tiktok_options()}), qid))
+        conn.commit()
+        _pictures_in_background(current_app._get_current_object(), qid, fmt,
+                                names, music, music_start, seconds)
+        what = "Post" if fmt == "post" else ("Stories" if len(names) > 1 else "Story")
+        if request.form.get("post_now"):
+            msg = (f"{what} with music: making the video now, then it posts by "
+                   "itself (about a minute). The links appear on the Schedule page.")
+        else:
+            msg = (f"{what} validated with music. The video is being made now"
+                   + (f"; it's scheduled for {to_local(when):%a %d %b, %H:%M}."
+                      if when else "; give it a time on the Schedule page."))
+        return answer(True, msg, id=qid, rendering=True)
     cur = conn.execute(
         "INSERT INTO social_queue (post_id, format, media_kind, media, thumb,"
         " caption, platforms, status, publish_at, title, created_by,"
@@ -404,6 +467,52 @@ def _render_in_background(app, qid, job_dir, overlay, endcard, items,
                 shutil.rmtree(job_dir, ignore_errors=True)
                 conn.close()
     threading.Thread(target=run, daemon=True, name=f"reel-{qid}").start()
+
+
+def _pictures_in_background(app, qid, fmt, names, music, music_start, seconds):
+    """Turn validated pictures into videos with music, then hand the item to
+    the schedule: 'scheduled' if it has a time (or Post now), else 'ready'."""
+    def run():
+        with app.app_context():
+            conn = db()
+
+            def progress(frac):
+                conn.execute("UPDATE social_queue SET progress = ? WHERE id = ?",
+                             (round(frac, 3), qid))
+                conn.commit()
+            try:
+                with _RENDER_LOCK, _RenderSlot(media_folder()):
+                    progress(0.01)
+                    pics = [os.path.join(media_folder(), n) for n in names]
+                    one = fmt == "post"
+                    outs = [uuid.uuid4().hex + ".mp4"
+                            for _ in (pics[:1] if one else pics)]
+                    sv.picture_videos([os.path.join(media_folder(), o) for o in outs],
+                                      pics, seconds, music, music_start,
+                                      one_video=one, progress=progress)
+                row = conn.execute("SELECT publish_at FROM social_queue WHERE id = ?",
+                                   (qid,)).fetchone()
+                conn.execute(
+                    "UPDATE social_queue SET media = ?, progress = 1, error = NULL,"
+                    " status = ? WHERE id = ? AND status = 'rendering'",
+                    (json.dumps(outs), "scheduled" if row["publish_at"] else "ready",
+                     qid))
+                conn.commit()
+                if row["publish_at"] and row["publish_at"] <= utc_str(utc_now()):
+                    _tick_safely(app)          # Post now: publish straight away
+            except Exception as exc:          # report it on the page
+                conn.execute(
+                    "UPDATE social_queue SET status = 'render_failed',"
+                    " error = ? WHERE id = ?", (str(exc)[:900], qid))
+                conn.commit()
+                try:
+                    _notify(item_view(_row(qid)), "The music video for a "
+                            f"{FORMATS.get(fmt, fmt).lower()} couldn't be made.")
+                except Exception:
+                    pass
+            finally:
+                conn.close()
+    threading.Thread(target=run, daemon=True, name=f"picvid-{qid}").start()
 
 
 @social_bp.route("/post/<int:post_id>/video", methods=["POST"])
@@ -710,7 +819,7 @@ def schedule():
     conn = db()
     rows = conn.execute(
         "SELECT * FROM social_queue WHERE status IN ('ready','scheduled',"
-        "'posting','draft','render_failed') OR (status IN ('posted','partial',"
+        "'posting','draft','render_failed','rendering') OR (status IN ('posted','partial',"
         "'failed') AND COALESCE(posted_at, created_at) > ?)"
         " ORDER BY publish_at IS NULL, publish_at, id",
         (utc_str(utc_now() - timedelta(days=14)),)).fetchall()
@@ -947,6 +1056,18 @@ def fb_story(urls, video):
     return f"https://www.facebook.com/stories/{page}"
 
 
+def fb_video_post(caption, url):
+    """A feed post with music on the Page: a video post (Facebook fetches
+    the file). Reels need 9:16; feed videos take the 4:5 post as it is."""
+    page = cfg("fb_page_id")
+    res = S._graph(f"{page}/videos", {"file_url": url, "description": caption,
+                                      "published": "true",
+                                      "access_token": _token()})
+    vid = res.get("id", "")
+    return f"https://www.facebook.com/{page}/videos/{vid}" if vid else \
+        f"https://www.facebook.com/{page}"
+
+
 def fb_reel(caption, url):
     page = cfg("fb_page_id")
     start = S._graph(f"{page}/video_reels",
@@ -988,6 +1109,11 @@ def publish_item(item):
         try:
             if p == "tiktok":
                 results[p] = _publish_tiktok(item, urls, video)
+            elif item["format"] == "post" and video:
+                # A feed post with music: on Instagram a reel shown in the
+                # feed, on Facebook a video post.
+                results[p] = (fb_video_post if p == "facebook" else ig_reel)(
+                    item["caption"] or "", urls[0])
             elif item["format"] == "post":
                 results[p] = (S.publish_facebook if p == "facebook" else
                               S.publish_instagram)(item["caption"] or "", urls)

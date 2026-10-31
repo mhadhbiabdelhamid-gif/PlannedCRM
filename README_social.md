@@ -113,7 +113,17 @@ On a post's page, **Step 2 · The design** has three tabs:
   ccMixter), music only, licences CC0 / Public Domain / CC BY (BY-SA is left
   out: it would bind the reel to the same licence). CC BY needs a credit: it
   is saved next to the track (`<file>.json`) and added to the end of the
-  reel's caption on validation. Tracks the team added can be removed. Made on
+  reel's caption on validation. Tracks the team added can be removed.
+  **Music on the Post and Story tabs**: tick "Add music" (same Music box).
+  Meta's API takes music only on videos, so on validation (or Post now) the
+  pictures are made into videos in the background
+  (`social_video.picture_videos`): a feed post becomes one 4:5 video of the
+  chosen length (carousel slides one after another), published as a reel
+  shown in the Instagram feed and as a video post on the Facebook Page
+  (`/{page}/videos`); each story picture becomes its own video story of the
+  chosen length, the music carrying on from one to the next. The item shows
+  "Making the video" and then turns ready or scheduled by itself; with Post
+  now it publishes as soon as the video is made. Made on
   the server by `social_video.py` with ffmpeg from the `imageio-ffmpeg`
   package (no separate install). One video at a time; it uses ~250 MB while
   it runs. On a smaller server set `REEL_SIZE=720x1280`.

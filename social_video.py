@@ -335,6 +335,87 @@ def _run(cmd, seconds, on_seconds):
         raise RuntimeError("The video couldn't be made. " + tail)
 
 
+def _zoom_still(exe, src, L, w, h, fade_in="", fade_out=""):
+    """ffmpeg arguments: one picture shown whole for L seconds at w x h,
+    growing by ZOOM. Drawn at twice the size first so the slow zoom doesn't
+    shimmer."""
+    frames = max(round(L * FPS), 1)
+    vf = (f"[0:v]scale={w * 2}:{h * 2},setsar=1,"
+          f"zoompan=z='1+{ZOOM}*on/{frames}':"
+          f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
+          f"d={frames}:s={w}x{h}:fps={FPS},"
+          f"setsar=1,format=yuv420p{fade_in}{fade_out}[v]")
+    return [exe, "-i", src, *SILENCE, "-filter_complex", vf, "-map", "[v]",
+            "-map", "1:a", "-t", f"{L:.2f}"]
+
+
+def _join(exe, parts, out, total, work):
+    listing = os.path.join(work, "parts.txt")
+    with open(listing, "w") as f:
+        for part in parts:
+            # forward slashes: the list treats \ as an escape (Windows)
+            f.write("file '" + part.replace("\\", "/") + "'\n")
+    _run([exe, "-f", "concat", "-safe", "0", "-i", listing, "-c", "copy",
+          "-movflags", "+faststart", out], total, lambda d: None)
+
+
+PICTURE_MIN_SLIDE = 1.5     # seconds each carousel slide gets at least
+
+
+def picture_videos(out_paths, pictures, seconds, music, music_start=0.0,
+                   one_video=True, progress=None):
+    """Feed posts and picture stories with music: Meta's API takes music
+    only on videos, so the pictures become videos of the same size, each
+    picture shown whole and slowly zooming in, with the music under it.
+
+    one_video=True (a feed post): all the pictures in one video of
+    `seconds`, dipping to cream between slides; out_paths has one path.
+    one_video=False (stories): one video of `seconds` per picture; the
+    music carries on from one story to the next.
+    Returns the length of each video."""
+    if not pictures:
+        raise RuntimeError("The pictures didn't come through.")
+    exe = ffmpeg_exe()
+    from PIL import Image
+    with Image.open(pictures[0]) as im:
+        w, h = im.size
+    w, h = w - w % 2, h - h % 2
+    work = tempfile.mkdtemp(prefix="picvid-")
+    try:
+        if one_video:
+            each = seconds / len(pictures)
+            if each < PICTURE_MIN_SLIDE:
+                raise RuntimeError(f"{len(pictures)} slides need at least "
+                                   f"{round(len(pictures) * PICTURE_MIN_SLIDE)}"
+                                   " seconds. Make the video longer.")
+            parts = []
+            for i, src in enumerate(pictures):
+                fi = "" if i == 0 else f",fade=t=in:st=0:d={FADE}:color={CREAM}"
+                fo = ("" if i == len(pictures) - 1 else
+                      f",fade=t=out:st={each - FADE:.2f}:d={FADE}:color={CREAM}")
+                part = os.path.join(work, f"s{i}.mp4")
+                _run(_zoom_still(exe, src, each, w, h, fi, fo) + ENCODE + [part],
+                     each, lambda d, i=i: progress and progress(
+                         min((i * each + d) / seconds, 0.95)))
+                parts.append(part)
+            joined = os.path.join(work, "joined.mp4")
+            _join(exe, parts, joined, seconds, work)
+            add_music(joined, out_paths[0], music, seconds, False, music_start)
+            return [seconds]
+        lengths = []
+        for i, (src, out) in enumerate(zip(pictures, out_paths)):
+            part = os.path.join(work, f"s{i}.mp4")
+            _run(_zoom_still(exe, src, seconds, w, h) + ENCODE + [part], seconds,
+                 lambda d, i=i: progress and progress(
+                     min((i * seconds + d) / (seconds * len(pictures)), 0.95)))
+            add_music(part, out, music, seconds, False,
+                      float(music_start or 0) + i * seconds)
+            lengths.append(seconds)
+        return lengths
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
 def render(out_path, overlay_png, end_jpg, photos=None, video=None,
            progress=None, items=None, music=None, keep_sound=False,
            target=None, end_card=True, music_start=0.0):
@@ -410,17 +491,9 @@ def render(out_path, overlay_png, end_jpg, photos=None, video=None,
                                *extra, "-filter_complex", vf, "-map", "[v]",
                                "-map", amap, "-t", f"{L:.2f}"], L))
             elif kind == "design":
-                # The whole design, growing by ZOOM over its time. Drawn at
-                # twice the size first so the slow zoom doesn't shimmer.
-                frames = max(round(L * FPS), 1)
-                vf = (f"[0:v]scale={SIZE_W * 2}:{SIZE_H * 2},setsar=1,"
-                      f"zoompan=z='1+{ZOOM}*on/{frames}':"
-                      f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
-                      f"d={frames}:s={SIZE_W}x{SIZE_H}:fps={FPS},"
-                      f"setsar=1,format=yuv420p{fade_in}{fade_out}[v]")
-                steps.append(([exe, "-i", src, *SILENCE,
-                               "-filter_complex", vf, "-map", "[v]",
-                               "-map", "1:a", "-t", f"{L:.2f}"], L))
+                # The whole design, growing by ZOOM over its time.
+                steps.append((_zoom_still(exe, src, L, SIZE_W, SIZE_H,
+                                          fade_in, fade_out), L))
             else:
                 dst = os.path.join(work, f"p{i}.jpg")
                 x, y = _prepare_photo(src, dst, i, L)
