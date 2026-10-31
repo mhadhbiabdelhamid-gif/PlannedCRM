@@ -357,7 +357,8 @@ class _RenderSlot:
 
 
 def _render_in_background(app, qid, job_dir, overlay, endcard, items,
-                          music=None, keep_sound=False):
+                          music=None, keep_sound=False, target=None,
+                          end_card=True, music_start=0.0):
     def run():
         with app.app_context():
             conn = db()
@@ -371,16 +372,28 @@ def _render_in_background(app, qid, job_dir, overlay, endcard, items,
                     progress(0.01)
                     name = uuid.uuid4().hex + ".mp4"
                     out = os.path.join(media_folder(), name)
-                    sv.render(out, overlay, endcard, items=items,
-                              music=music, keep_sound=keep_sound,
-                              progress=progress)
+                    seconds = sv.render(
+                        out, overlay, endcard, items=items, music=music,
+                        keep_sound=keep_sound, target=target,
+                        end_card=end_card, music_start=music_start,
+                        progress=progress)
                     thumb = uuid.uuid4().hex + ".jpg"
                     if not sv.poster(out, os.path.join(media_folder(), thumb), 1.2):
                         thumb = None
+                # The real length goes with the source: a video story
+                # can't be over a minute (checked when it is validated).
+                src = conn.execute("SELECT source FROM social_queue WHERE id = ?",
+                                   (qid,)).fetchone()
+                try:
+                    srcd = json.loads((src and src["source"]) or "{}")
+                except ValueError:
+                    srcd = {}
+                srcd["seconds"] = round(seconds, 1)
                 conn.execute(
                     "UPDATE social_queue SET status = 'draft', media = ?,"
-                    " thumb = ?, progress = 1, error = NULL WHERE id = ?",
-                    (json.dumps([name]), thumb, qid))
+                    " thumb = ?, progress = 1, error = NULL, source = ?"
+                    " WHERE id = ?",
+                    (json.dumps([name]), thumb, json.dumps(srcd), qid))
                 conn.commit()
             except Exception as exc:          # report it on the page
                 conn.execute(
@@ -412,7 +425,8 @@ def make_video(post_id):
         source = json.loads(request.form.get("source") or "{}")
     except ValueError:
         source = {}
-    # The pieces, in order: {"items": [{"photo": url} | {"video_id": id}]}.
+    # The pieces, in order: {"items": [{"photo": url} | {"video_id": id} |
+    # {"design": n}]}; a design's picture comes as the file "design_<n>".
     # Older pages sent {"photos": [...]} or {"video_id": id}.
     wanted = source.get("items")
     if not isinstance(wanted, list):
@@ -420,10 +434,27 @@ def make_video(post_id):
                   else [{"photo": u} for u in (source.get("photos") or [])])
     ids = json.loads(post["property_ids"] or "[]")
     items, kept = [], []
+    job_dir = tempfile.mkdtemp(prefix="reeljob-")
+
+    def fail(message, code=400):
+        shutil.rmtree(job_dir, ignore_errors=True)
+        return answer(False, message, code)
     for piece in wanted[:sv.MAX_ITEMS]:
         if not isinstance(piece, dict):
             continue
-        if piece.get("video_id"):
+        if "design" in piece:
+            try:
+                n = int(piece["design"])
+            except (TypeError, ValueError):
+                continue
+            f = request.files.get(f"design_{n}")
+            if not f:
+                return fail("The design didn't come through. Wait for it to "
+                            "finish drawing, then try again.")
+            path = os.path.join(job_dir, f"design{n}.png")
+            f.save(path)
+            items.append(("design", path)); kept.append({"design": n})
+        elif piece.get("video_id"):
             try:
                 vid = int(piece["video_id"])
             except (TypeError, ValueError):
@@ -431,26 +462,44 @@ def make_video(post_id):
             row = db().execute("SELECT * FROM property_videos WHERE id = ?",
                                (vid,)).fetchone()
             if not row or row["property_id"] not in ids:
-                return answer(False, "One of the videos isn't this listing's.", 400)
+                return fail("One of the videos isn't this listing's.")
             path = os.path.join(current_app.config["UPLOAD_FOLDER"], "videos",
                                 row["filename"])
             if not os.path.isfile(path):
-                return answer(False, "A video file is missing on the server: "
-                              + (row["original_name"] or row["filename"]), 400)
+                return fail("A video file is missing on the server: "
+                            + (row["original_name"] or row["filename"]))
             items.append(("video", path)); kept.append({"video_id": vid})
         elif piece.get("photo"):
             path = _upload_path(piece["photo"], "images")
             if path:
                 items.append(("photo", path)); kept.append({"photo": piece["photo"]})
     if not items:
-        return answer(False, "Click the photos and videos to use, in order.", 400)
+        return fail("Click the design, photos and videos to use, in order.")
     music_id = str(source.get("music") or "")
     music = sv.music_path(music_id, current_app.static_folder,
                           current_app.config["UPLOAD_FOLDER"])
     if music_id and not music:
-        return answer(False, "That music track is missing. Pick another one.", 400)
+        return fail("That music track is missing. Pick another one.")
     keep_sound = bool(source.get("keep_sound"))
-    job_dir = tempfile.mkdtemp(prefix="reeljob-")
+    # Length: None = Auto, otherwise the seconds asked for.
+    try:
+        target = int(source.get("seconds") or 0) or None
+    except (TypeError, ValueError):
+        target = None
+    if target and not sv.MIN_TARGET <= target <= sv.MAX_TARGET:
+        return fail(f"Choose a length from {sv.MIN_TARGET} to "
+                    f"{sv.MAX_TARGET} seconds.")
+    end_card = source.get("end_card", True) is not False
+    try:
+        music_start = max(float(source.get("music_start") or 0), 0.0)
+    except (TypeError, ValueError):
+        music_start = 0.0
+    try:                                  # catch "too many pieces" now
+        sv.plan([k for k, _ in items],
+                [sv.MIN_CLIP_SECONDS for k, _ in items if k == "video"],
+                target=target, end_card=end_card)
+    except ValueError as exc:
+        return fail(str(exc))
     overlay = os.path.join(job_dir, "overlay.png")
     endcard = os.path.join(job_dir, "end.jpg")
     for field, path in (("overlay", overlay), ("endcard", endcard)):
@@ -468,12 +517,17 @@ def make_video(post_id):
         " (?,?,?,?,?,?,?,?,?)",
         (post_id, "reel", "video", "rendering", 0,
          json.dumps({"items": kept, "music": music_id if music else "",
-                     "keep_sound": keep_sound}),
+                     "keep_sound": keep_sound, "target": target,
+                     "end_card": end_card, "music_start": music_start,
+                     "credit": sv.music_credit(
+                         music_id, current_app.config["UPLOAD_FOLDER"])
+                     if music else ""}),
          _title(post, content), current_user_id(), now))
     conn.commit()
     qid = cur.lastrowid
     _render_in_background(current_app._get_current_object(), qid, job_dir,
-                          overlay, endcard, items, music, keep_sound)
+                          overlay, endcard, items, music, keep_sound,
+                          target, end_card, music_start)
     return answer(True, "Making the video…", id=qid)
 
 
@@ -515,7 +569,19 @@ def validate_video(qid):
         return answer(False, "Unknown format.", 400)
     content = json.loads(post["content_json"])
     platforms = _platforms()
+    try:
+        made = json.loads(row["source"] or "{}")
+    except ValueError:
+        made = {}
+    if fmt == "story" and (made.get("seconds") or 0) > sv.STORY_MAX + 0.5:
+        return answer(False, f"This video is {made['seconds']:g} seconds; a "
+                      f"video story can be {sv.STORY_MAX} at most. Validate it "
+                      "as a reel, or make a shorter one for the story.", 400)
     caption = _caption_from_form(content) if fmt == "reel" else ""
+    # Free-library music asks for a credit: it goes at the end of the caption.
+    credit = made.get("credit") or ""
+    if caption and credit and credit not in caption:
+        caption = caption + "\n\n" + credit
     problem = _check_ready_to_validate(post, fmt, platforms, caption)
     if problem:
         return answer(False, problem, 400)

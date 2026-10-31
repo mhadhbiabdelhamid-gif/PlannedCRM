@@ -136,6 +136,25 @@
               background:rgba(0,0,0,.7); color:#fff; padding:3px 5px; border-radius:3px; }
   .vbar { display:flex; justify-content:space-between; align-items:center; margin:2px 0 4px; }
   .ghost.mini { padding:4px 10px; font-size:12px; }
+  .vk .pk-i.des { overflow:hidden; background:#FAF8F4; }
+  .vk .pk-i.des canvas { width:100%; height:100%; object-fit:cover; display:block; pointer-events:none; border-radius:4px; }
+  .vlenbox, .vlib { border:1px solid var(--line); border-radius:6px; padding:10px 12px; margin:10px 0 4px; }
+  .vlenbox .row, .music .row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:4px 0; }
+  .vlenbox input[type=number], .music input[type=number], .vlib input[type=text], .music input[type=url], .music input[type=text] {
+    background:#17181a; color:var(--text); border:1px solid var(--line); border-radius:4px; padding:6px; font:inherit; font-size:13px; }
+  .vlenbox input[type=number], .music input[type=number] { width:70px; }
+  .vlib input[type=text] { flex:1; min-width:180px; }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; margin:6px 0; }
+  .chips button { background:transparent; border:1px solid var(--line); color:var(--muted); border-radius:14px; padding:3px 10px; font-size:12px; }
+  .chips button:hover { border-color:var(--gold); color:var(--text); }
+  .lres { max-height:320px; overflow:auto; margin-top:6px; }
+  .lres .tr { display:flex; align-items:center; gap:8px; padding:7px 0; border-top:1px solid var(--line); font-size:13px; }
+  .lres .tr:first-child { border-top:0; }
+  .lres .tr .t { flex:1; min-width:0; }
+  .lres .tr .t b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .lic { display:inline-block; font-size:11px; padding:1px 6px; border-radius:8px; border:1px solid var(--line); color:var(--muted); }
+  .lic.free { color:#8fd1a6; border-color:#2f5a3e; }
+  .mcredit { font-size:12px; color:var(--muted); margin:4px 0 0; }
   .vup { display:inline-block; margin-right:14px; }
   .lay { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:0 0 10px; }
   .lay button { background:transparent; color:var(--muted); border:1px solid var(--line); border-radius:999px;
@@ -496,10 +515,16 @@
           <p class="muted small" style="margin:0 0 6px">A 1080×1920 video with the Planned frame and
             a closing card with the price and contact. The same video can be validated as a reel
             and as a story.</p>
-          <p class="muted small" style="margin:6px 0 0">Click the videos and photos in the order they
+          <p class="muted small" style="margin:6px 0 0">Click the design, videos and photos in the order they
             should play; the number shows the order. Click again to remove. Mix as many as you like
-            (up to 20).</p>
+            (up to 20). The design is shown whole, slowly zooming in.</p>
           <div class="vk" id="vk">
+            {% for c in cards %}
+            <button type="button" class="pk-i des" data-design="{{ loop.index0 }}" data-url="design:{{ loop.index0 }}"
+                    title="The design{% if cards|length > 1 %} ({{ c.ref or loop.index }}){% endif %}" aria-label="The design">
+              <canvas width="108" height="192"></canvas>
+              <i class="vtag">Design</i><b></b></button>
+            {% endfor %}
             {% for v in listing_videos %}
             <button type="button" class="pk-i vid" data-vid="{{ v.id }}" data-url="{{ v.url }}"
                     title="{{ v.name }}{% if multi %} ({{ v.ref }}){% endif %}" aria-label="Video {{ v.name }}">
@@ -514,6 +539,23 @@
           <div class="vbar">
             <span class="small" id="vLen"></span>
             <button type="button" class="ghost mini" id="vClear">Clear</button>
+          </div>
+          <div class="vlenbox">
+            <div class="row">
+              <span class="mlabel small" style="color:var(--text)">⏱ Length</span>
+              <label class="vsrc small" style="margin:0"><input type="radio" name="vlenmode" value="auto" checked> Auto</label>
+              <label class="vsrc small" style="margin:0"><input type="radio" name="vlenmode" value="set"> Exactly</label>
+              <input type="number" id="vSeconds" min="5" max="90" step="1" value="30" aria-label="Seconds"> <span class="small muted">seconds</span>
+              <span class="chips" style="margin:0">
+                <button type="button" data-s="10">10</button><button type="button" data-s="15">15</button>
+                <button type="button" data-s="30">30</button><button type="button" data-s="45">45</button>
+                <button type="button" data-s="60">60</button><button type="button" data-s="90">90</button></span>
+            </div>
+            <label class="vsrc small" style="margin:4px 0 0"><input type="checkbox" id="endCard" {{ '' if is_content else 'checked' }}>
+              Finish on the closing card (price and contact)</label>
+            <p class="muted small" style="margin:4px 0 0" id="vLenNote">Auto: about 3 s a photo, 4.5 s the design, plus each
+              video's length. Exactly: the photos and the design share the time; a video that's too short holds on its
+              last frame. Stories: 60 s at most. Reels: up to 90 s.</p>
           </div>
           {% if properties %}
           <form method="post" enctype="multipart/form-data" action="{{ url_for('social.upload_listing_video', post_id=post.id) }}" class="vup">
@@ -543,20 +585,57 @@
           <div class="music">
             <label class="mlabel" for="vMusic">♪ Music</label>
             <select id="vMusic">
-              {% for t in music_tracks %}<option value="{{ t.id }}" data-url="{{ t.url }}"
+              {% for t in music_tracks %}<option value="{{ t.id }}" data-url="{{ t.url }}" data-credit="{{ t.credit }}"
+                data-removable="{{ '1' if t.removable }}"
                 {{ 'selected' if request.args.get('music') == t.id }}>{{ t.name }}</option>{% endfor %}
               <option value="">No music</option>
             </select>
             <button type="button" class="ghost mini" id="mPlay" title="Listen">▶ Listen</button>
+            <button type="button" class="ghost mini" id="mRemove" title="Remove this track from the list" hidden>Remove</button>
             <audio id="mAudio" preload="none"></audio>
+            <div class="row">
+              <span class="small">Start the music at</span>
+              <input type="number" id="mStart" min="0" step="1" value="0" aria-label="Music start (seconds)">
+              <span class="small muted">seconds into the track (skip a slow intro)</span>
+            </div>
             <label class="vsrc small"><input type="checkbox" id="keepSound"> Keep the videos' own sound under the music</label>
             <p class="muted small" style="margin:2px 0 0">Cut to the video's length, fading in at the start and out at the end.</p>
+            <p class="mcredit" id="mCredit" hidden></p>
             <form method="post" enctype="multipart/form-data" action="{{ url_for('social.upload_music', post_id=post.id) }}" class="vup">
-              <label class="pk-add">+ Add your own music (MP3)
+              <label class="pk-add">+ Upload music (MP3, WAV, M4A)
                 <input type="file" name="music" accept="audio/*,.mp3,.m4a,.wav,.ogg" hidden
                        onchange="this.form.querySelector('.upw').hidden=false; this.form.submit()"></label>
               <span class="muted small upw" hidden>Uploading…</span>
             </form>
+            <a href="#" class="pk-add" id="mLinkOpen">+ Add from a link (e.g. Artlist)</a>
+            <a href="#" class="pk-add" id="mLibOpen">♫ Free music library</a>
+            <div id="mLink" hidden style="margin-top:6px">
+              <div class="row">
+                <input type="url" id="mLinkUrl" placeholder="https://… link of the MP3 / WAV file" style="flex:1;min-width:220px">
+                <input type="text" id="mLinkName" placeholder="Name (optional)" style="width:150px">
+                <button type="button" class="ghost mini" id="mLinkAdd">Add</button>
+              </div>
+              <p class="muted small" style="margin:2px 0 0">In Artlist, copy the track's download link and paste it here.
+                Only use music you have the rights to.</p>
+              <div class="small" id="mLinkMsg"></div>
+            </div>
+            <div class="vlib" id="mLib" hidden>
+              <div class="row">
+                <input type="text" id="libQ" placeholder="calm piano, upbeat corporate, oud, luxury…">
+                <button type="button" class="ghost mini" id="libGo">Search</button>
+              </div>
+              <div class="chips" id="libChips">
+                <button type="button">corporate</button><button type="button">upbeat</button><button type="button">inspiring</button>
+                <button type="button">piano</button><button type="button">ambient</button><button type="button">acoustic</button>
+                <button type="button">lounge</button><button type="button">cinematic</button><button type="button">oriental</button>
+              </div>
+              <p class="muted small" style="margin:0">Free for business videos: CC0 / Public Domain need nothing; CC BY tracks
+                need a credit, which is added to the end of the reel's caption for you (video stories have no caption, so
+                use a CC0 track there). From Openverse (Jamendo, Freesound, ccMixter).</p>
+              <div class="small" id="libMsg"></div>
+              <div class="lres" id="libRes"></div>
+              <button type="button" class="ghost mini" id="libMore" hidden>More results</button>
+            </div>
           </div>
           <div class="vprev">
             <figure><canvas id="vFrame"></canvas><figcaption>During the video</figcaption></figure>
@@ -818,7 +897,7 @@ async function redraw() {
   canvases = out;
   holder.innerHTML = '';
   out.forEach(cv => holder.appendChild(cv));
-  storyStale = videoStale = true;
+  storyStale = videoStale = designStale = true;
   if (TAB === 'story') redrawStories();
   if (TAB === 'video') redrawVideoPreview();
 }
@@ -924,7 +1003,10 @@ let VIDEO = {{ latest_video | tojson }};       // the last video made for this p
 // The reel's pieces, in play order: { url, vid } for a video, { url } for a photo.
 // Starts with the listing videos, then the photos approved in Step 1.
 const VMAX = 20;
+const IS_CONTENT = {{ 'true' if is_content else 'false' }};
 let VITEMS = [];
+// Tips, market news and other posts without a listing start from the design.
+if (IS_CONTENT) VITEMS.push({ url: 'design:0', design: 0 });
 document.querySelectorAll('#vk .pk-i.vid').forEach(b => VITEMS.push({ url: b.dataset.url, vid: +b.dataset.vid }));
 Object.values(CHOSEN).forEach(list => (list || []).forEach(u => { if (!VITEMS.some(x => x.url === u)) VITEMS.push({ url: u }); }));
 VITEMS = VITEMS.slice(0, VMAX);
@@ -932,7 +1014,7 @@ VITEMS = VITEMS.slice(0, VMAX);
 let VTOUCHED = false;
 function syncVitems() {
   if (VTOUCHED) return;
-  const vids = VITEMS.filter(x => x.vid);
+  const vids = VITEMS.filter(x => x.vid || x.design !== undefined);
   const photos = [];
   Object.values(CHOSEN).forEach(list => (list || []).forEach(u => { if (!photos.includes(u)) photos.push(u); }));
   VITEMS = vids.concat(photos.map(u => ({ url: u }))).slice(0, VMAX);
@@ -985,6 +1067,49 @@ async function redrawStories() {
   box.innerHTML = ''; out.forEach(cv => box.appendChild(cv));
 }
 
+// The design as a reel piece: the 9:16 story picture of each card, drawn
+// here and sent with the request. Thumbnails in the picker follow it.
+let DESIGNS = [], designSeq = 0, designStale = true;
+async function drawDesigns() {
+  if (!designStale && DESIGNS.length) return DESIGNS;
+  const seq = ++designSeq, out = [];
+  for (const c of CARDS) out.push(await PostCards.draw(Object.assign({}, c, { photos: CHOSEN[c.key] || [] }), null, 'story'));
+  if (seq !== designSeq) return DESIGNS;
+  DESIGNS = out; designStale = false;
+  document.querySelectorAll('#vk .pk-i.des').forEach(b => {
+    const cv = DESIGNS[+b.dataset.design], t = b.querySelector('canvas');
+    if (cv && t) { const x = t.getContext('2d'); x.clearRect(0, 0, t.width, t.height); x.drawImage(cv, 0, 0, t.width, t.height); }
+  });
+  return DESIGNS;
+}
+
+// Length: Auto, or exactly N seconds (5-90). Remembered on this browser.
+const vSecs = document.getElementById('vSeconds');
+function lenMode() { return (document.querySelector('input[name=vlenmode]:checked') || {}).value || 'auto'; }
+function targetSeconds() {
+  if (lenMode() !== 'set' || !vSecs) return null;
+  const n = Math.round(+vSecs.value);
+  return n >= 5 && n <= 90 ? n : null;
+}
+function endCardOn() { const b = document.getElementById('endCard'); return !b || b.checked; }
+try {
+  const m = localStorage.getItem('pcrm.vlenmode'), n = localStorage.getItem('pcrm.vseconds');
+  if (m === 'set') document.querySelector('input[name=vlenmode][value=set]').checked = true;
+  if (n && vSecs) vSecs.value = n;
+} catch (e) {}
+function lenChanged() {
+  try { localStorage.setItem('pcrm.vlenmode', lenMode()); if (vSecs) localStorage.setItem('pcrm.vseconds', vSecs.value); } catch (e) {}
+  const end = document.getElementById('vEnd');
+  if (end) end.closest('figure').hidden = !endCardOn();
+  showVLen();
+}
+document.querySelectorAll('input[name=vlenmode]').forEach(r => r.addEventListener('change', lenChanged));
+vSecs?.addEventListener('input', () => { document.querySelector('input[name=vlenmode][value=set]').checked = true; lenChanged(); });
+document.querySelectorAll('.vlenbox .chips button').forEach(b => b.addEventListener('click', () => {
+  vSecs.value = b.dataset.s; document.querySelector('input[name=vlenmode][value=set]').checked = true; lenChanged();
+}));
+document.getElementById('endCard')?.addEventListener('change', lenChanged);
+
 // Music: remembered on this browser; a new upload arrives pre-selected.
 const mSel = document.getElementById('vMusic'), mAudio = document.getElementById('mAudio');
 try {
@@ -993,7 +1118,106 @@ try {
       [...mSel.options].some(o => o.value === saved)) mSel.value = saved;
   if (localStorage.getItem('pcrm.keepSound') === '1') document.getElementById('keepSound').checked = true;
 } catch (e) {}
-mSel?.addEventListener('change', () => { try { localStorage.setItem('pcrm.music', mSel.value); } catch (e) {} mAudio.pause(); setPlay(false); });
+function musicInfo() {
+  const o = mSel && mSel.selectedOptions[0];
+  const credit = document.getElementById('mCredit'), rm = document.getElementById('mRemove');
+  if (rm) rm.hidden = !(o && o.dataset.removable);
+  if (credit) {
+    credit.hidden = !(o && o.dataset.credit);
+    credit.textContent = o && o.dataset.credit ? 'Added to the end of the reel\'s caption: ' + o.dataset.credit : '';
+  }
+}
+mSel?.addEventListener('change', () => { try { localStorage.setItem('pcrm.music', mSel.value); } catch (e) {} mAudio.pause(); setPlay(false); musicInfo(); });
+function addTrackOption(t) {
+  const o = document.createElement('option');
+  o.value = t.id; o.dataset.url = t.url; o.dataset.credit = t.credit || ''; o.dataset.removable = t.removable ? '1' : '';
+  o.textContent = t.name;
+  const none = [...mSel.options].find(x => !x.value);
+  mSel.insertBefore(o, none || null);
+  mSel.value = t.id; mSel.dispatchEvent(new Event('change'));
+}
+async function postJSON(url, body) {
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                               credentials: 'same-origin', body: JSON.stringify(body) });
+  try { return await r.json(); } catch (e) { return { ok: false, error: 'The server answered with an error (' + r.status + ').' }; }
+}
+document.getElementById('mRemove')?.addEventListener('click', async () => {
+  const o = mSel.selectedOptions[0];
+  if (!o || !o.dataset.removable || !confirm('Remove "' + o.textContent + '" from the music list? Videos already made keep their sound.')) return;
+  const d = await postJSON('{{ url_for("social.music_remove") }}', { id: o.value });
+  if (!d.ok) { alert(d.error); return; }
+  o.remove(); mSel.dispatchEvent(new Event('change'));
+});
+document.getElementById('mStart')?.addEventListener('change', e => { if (+e.target.value < 0) e.target.value = 0; });
+
+// Add from a link (e.g. an Artlist download link).
+document.getElementById('mLinkOpen')?.addEventListener('click', e => { e.preventDefault(); const b = document.getElementById('mLink'); b.hidden = !b.hidden; });
+document.getElementById('mLinkAdd')?.addEventListener('click', async () => {
+  const btn = document.getElementById('mLinkAdd'), msg = document.getElementById('mLinkMsg');
+  const url = document.getElementById('mLinkUrl').value.trim();
+  if (!url) { msg.textContent = 'Paste the link first.'; return; }
+  btn.disabled = true; msg.textContent = 'Downloading… (large WAV files take up to a minute)';
+  try {
+    const d = await postJSON('{{ url_for("social.music_link_add") }}', { url, name: document.getElementById('mLinkName').value });
+    if (!d.ok) { msg.innerHTML = '<span style="color:#f0a59d">' + esc(d.error) + '</span>'; return; }
+    addTrackOption(d.track);
+    msg.innerHTML = '<span style="color:#8fd1a6">✓ Added (' + d.seconds + ' s) and selected.</span>';
+    document.getElementById('mLinkUrl').value = ''; document.getElementById('mLinkName').value = '';
+  } catch (e) { msg.textContent = 'Could not reach the server. Try again.'; }
+  finally { btn.disabled = false; }
+});
+
+// Free music library (Openverse): search, listen, add.
+let LIB_Q = '', LIB_PAGE = 1;
+document.getElementById('mLibOpen')?.addEventListener('click', e => {
+  e.preventDefault(); const b = document.getElementById('mLib'); b.hidden = !b.hidden;
+  if (!b.hidden) document.getElementById('libQ').focus();
+});
+function fmtSec(s) { return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+async function libSearch(q, page) {
+  const msg = document.getElementById('libMsg'), res = document.getElementById('libRes'), more = document.getElementById('libMore');
+  LIB_Q = q; LIB_PAGE = page;
+  if (page === 1) res.innerHTML = '';
+  more.hidden = true; msg.textContent = 'Searching…';
+  try {
+    const r = await fetch('{{ url_for("social.music_search") }}?q=' + encodeURIComponent(q) + '&page=' + page, { credentials: 'same-origin' });
+    const d = await r.json();
+    if (!d.ok) { msg.innerHTML = '<span style="color:#f0a59d">' + esc(d.error) + '</span>'; return; }
+    msg.textContent = d.results.length || page > 1 ? '' : 'Nothing long enough came up. Try other words.';
+    res.insertAdjacentHTML('beforeend', d.results.map(t =>
+      '<div class="tr" data-id="' + esc(t.id) + '" data-preview="' + esc(t.preview || '') + '">' +
+      '<button type="button" class="ghost mini lplay">▶</button>' +
+      '<div class="t"><b title="' + esc(t.title) + '">' + esc(t.title) + '</b>' +
+      '<span class="muted">' + esc(t.creator) + ' · ' + fmtSec(t.seconds) + ' · ' + esc(t.source) + '</span> ' +
+      '<span class="lic' + (t.needs_credit ? '' : ' free') + '" title="' + (t.needs_credit ? 'Credit added to the reel caption' : 'No credit needed') + '">' + esc(t.license) + '</span>' +
+      (t.page ? ' <a href="' + esc(t.page) + '" target="_blank" rel="noopener" class="muted small">source</a>' : '') + '</div>' +
+      '<button type="button" class="ghost mini ladd">+ Add</button></div>').join(''));
+    more.hidden = !d.more;
+  } catch (e) { msg.textContent = 'Could not reach the server. Try again.'; }
+}
+document.getElementById('libGo')?.addEventListener('click', () => { const q = document.getElementById('libQ').value.trim(); if (q) libSearch(q, 1); });
+document.getElementById('libQ')?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); document.getElementById('libGo').click(); } });
+document.getElementById('libChips')?.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  document.getElementById('libQ').value = b.textContent; libSearch(b.textContent, 1);
+});
+document.getElementById('libMore')?.addEventListener('click', () => libSearch(LIB_Q, LIB_PAGE + 1));
+document.getElementById('libRes')?.addEventListener('click', async e => {
+  const row = e.target.closest('.tr'); if (!row) return;
+  if (e.target.closest('.lplay')) {
+    const b = e.target.closest('.lplay');
+    if (!mAudio.paused && mAudio.dataset.src === row.dataset.preview) { mAudio.pause(); b.textContent = '▶'; return; }
+    document.querySelectorAll('#libRes .lplay').forEach(x => x.textContent = '▶'); setPlay(false);
+    mAudio.src = row.dataset.preview; mAudio.dataset.src = row.dataset.preview;
+    mAudio.play().then(() => b.textContent = '❚❚').catch(() => { b.textContent = '▶'; alert('This preview can\'t be played here. Add it and listen from the list.'); });
+    return;
+  }
+  const add = e.target.closest('.ladd'); if (!add) return;
+  add.disabled = true; add.textContent = 'Adding…';
+  const d = await postJSON('{{ url_for("social.music_library_add") }}', { id: row.dataset.id }).catch(() => ({ ok: false, error: 'Could not reach the server.' }));
+  if (!d.ok) { add.disabled = false; add.textContent = '+ Add'; alert(d.error); return; }
+  add.textContent = '✓ Added'; addTrackOption(d.track);
+});
 document.getElementById('keepSound')?.addEventListener('change', e => { try { localStorage.setItem('pcrm.keepSound', e.target.checked ? '1' : '0'); } catch (x) {} });
 function setPlay(on) { const b = document.getElementById('mPlay'); if (b) b.textContent = on ? '❚❚ Stop' : '▶ Listen'; }
 document.getElementById('mPlay')?.addEventListener('click', () => {
@@ -1003,45 +1227,74 @@ document.getElementById('mPlay')?.addEventListener('click', () => {
   if (mAudio.dataset.src !== o.dataset.url) { mAudio.src = o.dataset.url; mAudio.dataset.src = o.dataset.url; }
   mAudio.play().then(() => setPlay(true)).catch(() => setPlay(false));
 });
-mAudio?.addEventListener('ended', () => setPlay(false));
+mAudio?.addEventListener('ended', () => { setPlay(false); document.querySelectorAll('#libRes .lplay').forEach(x => x.textContent = '▶'); });
+musicInfo();
 
 function videoSource() {
   if (!VITEMS.length) return null;
-  const first = VITEMS[0];
-  return { items: VITEMS.map(x => x.vid ? { video_id: x.vid } : { photo: x.url }),
+  const first = VITEMS[0], isDes = x => x.design !== undefined;
+  return { items: VITEMS.map(x => isDes(x) ? { design: x.design } : x.vid ? { video_id: x.vid } : { photo: x.url }),
            music: mSel ? mSel.value : '', keep_sound: !!document.getElementById('keepSound')?.checked,
-           url: first.vid ? first.url : null, photo: first.vid ? null : first.url };
+           seconds: targetSeconds(), end_card: endCardOn(),
+           music_start: Math.max(0, +(document.getElementById('mStart') || {}).value || 0),
+           design: isDes(first) ? first.design : null,
+           url: first.vid ? first.url : null, photo: (first.vid || isDes(first)) ? null : first.url };
 }
 
-// Same timing as social_video.plan(): about 3 s a photo plus each video's
-// length, never under 10 s, never over 59 s (videos are shortened first).
-const VT = { photo: 3.2, minPhoto: 2.0, maxPhoto: 6.5, minClip: 3.0, end: 3.5, min: 10, max: 59 };
+// Same timing as social_video.plan(): Auto is about 3.2 s a photo, 4.5 s a
+// design, plus each video's length, never under 10 s, never over 59 s
+// (videos are shortened first). Exactly: the stills share what the videos
+// leave; a lone short video holds on its last frame.
+const VT = { photo: 3.2, design: 1.4, minPhoto: 2.0, maxPhoto: 6.5, minStill: 1.2, minClip: 3.0, end: 3.5, min: 10, max: 59 };
+function shrink(vids, room) {
+  const floor = vids.map(v => Math.min(v, VT.minClip)), fs = floor.reduce((a, b) => a + b, 0);
+  if (fs > room) { const k = fs ? room / fs : 0; return floor.map(f => Math.max(f * k, 1)); }
+  const long = vids.reduce((a, v, i) => a + v - floor[i], 0);
+  const k = long ? Math.min(1, (room - fs) / long) : 1;
+  return vids.map((v, i) => floor[i] + (v - floor[i]) * k);
+}
 function vLength() {
-  const n = VITEMS.filter(x => !x.vid).length;
+  const sum = a => a.reduce((x, y) => x + y, 0);
+  const wsum = sum(VITEMS.filter(x => !x.vid).map(x => x.design !== undefined ? VT.design : 1));
   let vids = VITEMS.filter(x => x.vid).map(x => Math.max(VLEN[x.vid] || 0, 1));
   const unknown = VITEMS.some(x => x.vid && !VLEN[x.vid]);
-  const budget = VT.max - VT.end;
-  let pd = VT.photo;
-  if (n * pd + vids.reduce((a, b) => a + b, 0) > budget) {
-    const floor = vids.reduce((a, v) => a + Math.min(v, VT.minClip), 0);
-    if (n * pd + floor > budget && n) pd = Math.max(VT.minPhoto, (budget - floor) / n);
-    const long = vids.reduce((a, v) => a + v - Math.min(v, VT.minClip), 0);
-    const scale = long ? Math.min(1, Math.max(budget - n * pd - floor, 0) / long) : 1;
-    vids = vids.map(v => Math.min(v, VT.minClip) + (v - Math.min(v, VT.minClip)) * scale);
+  const T = targetSeconds(), endOn = endCardOn();
+  let end = endOn ? VT.end : 0, unit = VT.photo, error = '';
+  if (T) {
+    if (endOn) end = Math.min(VT.end, Math.max(2, T * 0.25));
+    const budget = T - end;
+    if (wsum) {
+      if ((budget - sum(vids)) / wsum < VT.minPhoto && vids.length) vids = shrink(vids, Math.max(budget - VT.minPhoto * wsum, vids.length));
+      unit = (budget - sum(vids)) / wsum;
+      if (unit < VT.minStill) error = VITEMS.length + ' pieces don\'t fit in ' + T + ' seconds: pick fewer photos, or make it longer.';
+    } else if (sum(vids) > budget) vids = shrink(vids, budget);
+    return { total: T, unknown, error, end };
   }
-  let total = n * pd + vids.reduce((a, b) => a + b, 0) + VT.end;
-  if (total < VT.min && n) { pd = Math.min(VT.maxPhoto, pd + (VT.min - total) / n); total = n * pd + vids.reduce((a, b) => a + b, 0) + VT.end; }
-  return { total: Math.max(total, VT.min), unknown };
+  const budget = VT.max - end;
+  if (wsum * unit + sum(vids) > budget) {
+    const floor = vids.reduce((a, v) => a + Math.min(v, VT.minClip), 0);
+    if (wsum * unit + floor > budget && wsum) unit = Math.max(VT.minPhoto, (budget - floor) / wsum);
+    vids = shrink(vids, Math.max(budget - wsum * unit, floor));
+  }
+  let total = wsum * unit + sum(vids) + end;
+  if (total < VT.min && wsum) { unit = Math.min(VT.maxPhoto, unit + (VT.min - total) / wsum); total = wsum * unit + sum(vids) + end; }
+  if (total < VT.min && endOn) total = VT.min;
+  return { total, unknown, error, end };
 }
 function showVLen() {
   const el = document.getElementById('vLen'); if (!el) return;
   if (!VITEMS.length) { el.textContent = 'Nothing picked yet.'; return; }
-  const v = VITEMS.filter(x => x.vid).length, p = VITEMS.length - v, L = vLength();
+  const v = VITEMS.filter(x => x.vid).length, d = VITEMS.filter(x => x.design !== undefined).length,
+        p = VITEMS.length - v - d, L = vLength();
   const parts = [];
+  if (d) parts.push(d > 1 ? d + ' designs' : 'the design');
   if (v) parts.push(v + (v > 1 ? ' videos' : ' video'));
   if (p) parts.push(p + (p > 1 ? ' photos' : ' photo'));
-  el.textContent = parts.join(' + ') + ' · about ' + Math.round(L.total) + ' seconds with the closing card' +
-    (L.total >= VT.max - 0.5 ? ' (the most a story allows, so the videos are shortened)' : '');
+  if (L.error) { el.innerHTML = '<span style="color:#f0a59d">' + esc(L.error) + '</span>'; return; }
+  el.textContent = parts.join(' + ') + ' · ' + (targetSeconds() ? '' : 'about ') + Math.round(L.total) + ' seconds' +
+    (L.end ? ' with the closing card' : '') +
+    (!targetSeconds() && L.total >= VT.max - 0.5 ? ' (the most a story allows, so the videos are shortened)' : '') +
+    (L.total > 60.5 ? ' · too long for a story; fine as a reel' : '');
 }
 
 // Video lengths, read from the small previews.
@@ -1065,7 +1318,8 @@ document.getElementById('vk')?.addEventListener('click', e => {
   const i = VITEMS.findIndex(x => x.url === b.dataset.url);
   VTOUCHED = true;
   if (i >= 0) VITEMS.splice(i, 1);
-  else if (VITEMS.length < VMAX) VITEMS.push(b.dataset.vid ? { url: b.dataset.url, vid: +b.dataset.vid } : { url: b.dataset.url });
+  else if (VITEMS.length < VMAX) VITEMS.push(b.dataset.design !== undefined ? { url: b.dataset.url, design: +b.dataset.design }
+                                            : b.dataset.vid ? { url: b.dataset.url, vid: +b.dataset.vid } : { url: b.dataset.url });
   else { alert('Up to ' + VMAX + ' videos and photos in one reel.'); return; }
   paintVk(); redrawVideoPreview();
 });
@@ -1088,8 +1342,10 @@ async function redrawVideoPreview() {
   const seq = ++vSeq, c0 = CARDS[0], src = videoSource();
   const ov = await PostCards.draw(c0, null, 'overlay');
   const end = await PostCards.draw(Object.assign({}, c0, { photos: CHOSEN[c0.key] || [] }), null, 'story');
-  let bg = null;
-  if (src && src.url) bg = await loadVideoFrame(src.url);
+  let bg = null, plain = null;
+  const designs = await drawDesigns();
+  if (src && src.design !== null && src.design !== undefined) plain = designs[src.design];
+  else if (src && src.url) bg = await loadVideoFrame(src.url);
   else if (src && src.photo) {
     bg = await new Promise(r => { const im = new Image(); im.onload = () => r(im); im.onerror = () => r(null); im.src = src.photo; });
   }
@@ -1104,7 +1360,8 @@ async function redrawVideoPreview() {
     const sc = Math.max(1080 / w, 1920 / h);
     x.drawImage(bg, (1080 - w * sc) / 2, (1920 - h * sc) / 2, w * sc, h * sc);
   }
-  x.drawImage(ov, 0, 0);
+  if (plain) x.drawImage(plain, 0, 0, 1080, 1920);   // the design has its own header
+  else x.drawImage(ov, 0, 0);
   const e = document.getElementById('vEnd');
   e.width = 1080; e.height = 1920; e.getContext('2d').drawImage(end, 0, 0);
 }
@@ -1147,12 +1404,21 @@ document.getElementById('makeVideo')?.addEventListener('click', async () => {
   const btn = document.getElementById('makeVideo');
   if (NEEDS_PHOTOS && !PHOTOS_OK) { alert('Approve the photos first (Step 1).'); return; }
   const src = videoSource();
-  if (!src) { alert('Click the videos and photos to use, in order.'); return; }
+  if (!src) { alert('Click the design, videos and photos to use, in order.'); return; }
+  const L = vLength();
+  if (L.error) { alert(L.error); return; }
+  if (lenMode() === 'set' && !targetSeconds()) { alert('Choose a length from 5 to 90 seconds.'); return; }
   if (videoStale || !OVERLAY) await redrawVideoPreview();
   btn.disabled = true;
   try {
     const fd = new FormData();
-    fd.append('source', JSON.stringify({ items: src.items, music: src.music, keep_sound: src.keep_sound }));
+    fd.append('source', JSON.stringify({ items: src.items, music: src.music, keep_sound: src.keep_sound,
+                                         seconds: src.seconds, end_card: src.end_card, music_start: src.music_start }));
+    const used = [...new Set(src.items.filter(i => i.design !== undefined).map(i => i.design))];
+    if (used.length) {
+      const designs = await drawDesigns();
+      for (const n of used) fd.append('design_' + n, await blob(designs[n], 'image/png'), 'design-' + n + '.png');
+    }
     fd.append('overlay', await blob(OVERLAY, 'image/png'), 'overlay.png');
     fd.append('endcard', await blob(ENDCARD, 'image/jpeg', 0.93), 'end.jpg');
     const r = await fetch('{{ url_for("social.make_video", post_id=post.id) }}', { method: 'POST', body: fd, credentials: 'same-origin' });
@@ -1262,8 +1528,9 @@ document.getElementById('valbtn').addEventListener('click', async () => {
 paintPicker();
 updatePostBtn();
 paintVk();
+lenChanged();
 showVideo(VIDEO); pollVideo();
-PostCards.ready('{{ url_for("static", filename="") }}').then(() => { redraw(); showTab({{ tab | tojson }}); });
+PostCards.ready('{{ url_for("static", filename="") }}').then(() => { redraw(); showTab({{ tab | tojson }}); drawDesigns(); });
 </script>
 </body>
 </html>

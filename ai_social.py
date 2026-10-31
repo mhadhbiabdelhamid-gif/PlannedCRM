@@ -687,7 +687,8 @@ def _format_context(row, options):
         queue_items=items, listing_videos=videos,
         queue_platform_names=sq.QUEUE_PLATFORMS, tiktok_on=tt.connected(),
         tiktok_user=cfg("tiktok_username"), tiktok_terms=(tt.MUSIC_TERMS, tt.BRAND_TERMS),
-        can_video=bool(videos or any(options.values())),
+        # Always: the design itself can be the reel (tips, market news...).
+        can_video=True,
         video_tool=sv.available(),
         music_tracks=sv.music_tracks(current_app.static_folder,
                                      current_app.config["UPLOAD_FOLDER"]),
@@ -1127,3 +1128,4 @@ def discard(post_id):
 import social_cards  # noqa: E402,F401
 import social_queue  # noqa: E402,F401
 import social_tiktok  # noqa: E402,F401
+import social_music  # noqa: E402,F401

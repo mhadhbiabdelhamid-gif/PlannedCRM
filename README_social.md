@@ -99,7 +99,21 @@ On a post's page, **Step 2 · The design** has three tabs:
   uploads (kept in `uploads/music/`), cut to the video's length with a 1 s
   fade-in and 2.5 s fade-out; it replaces the videos' own sound unless "keep
   the videos' own sound" is ticked. Picture posts and picture stories can't
-  carry music through Meta's API, so music goes on reels and video stories. Made on
+  carry music through Meta's API, so music goes on reels and video stories.
+  Every post has the Video tab: **the design itself** is a piece too (the
+  9:16 story picture, shown whole and slowly zooming in), so a tip or a
+  market post becomes a reel; those start with the design and without the
+  closing card. **Length**: Auto (as above) or **Exactly** 5-90 s: photos
+  and designs share the time the videos leave, a video that's too short
+  holds on its last frame, and validating a video story over 60 s is
+  refused. Music can **start N seconds into the track**. Tracks are added by
+  upload, **from a link** (e.g. an Artlist download link; the server fetches
+  it, public https addresses only, 60 MB max) or from the **free music
+  library** (`social_music.py`): Openverse search (Jamendo, Freesound,
+  ccMixter), music only, licences CC0 / Public Domain / CC BY (BY-SA is left
+  out: it would bind the reel to the same licence). CC BY needs a credit: it
+  is saved next to the track (`<file>.json`) and added to the end of the
+  reel's caption on validation. Tracks the team added can be removed. Made on
   the server by `social_video.py` with ffmpeg from the `imageio-ffmpeg`
   package (no separate install). One video at a time; it uses ~250 MB while
   it runs. On a smaller server set `REEL_SIZE=720x1280`.
